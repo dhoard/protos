@@ -29,7 +29,11 @@ import static com.guillermomolina.protos.documentation.ProtosDocumentationModel.
 import static com.guillermomolina.protos.documentation.ProtosDocumentationModel.SymbolIdentity;
 
 import com.guillermomolina.protos.parser.ProtosParser;
+import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceIntrinsic;
+import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
+import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
@@ -390,10 +394,39 @@ public final class ProtosStandardLibraryDocumentationExtractor {
             if (unwrapped instanceof SurfaceSlotCreation creation
                     && creation.target() instanceof SurfaceName) {
                 slots.add(new TopLevelSlot(creation, expression.span()));
+            } else {
+                String removed = directlyRemovedModuleSlot(unwrapped);
+                if (removed != null) {
+                    slots.removeIf(slot ->
+                            ((SurfaceName) slot.creation().target())
+                                    .name().equals(removed));
+                }
             }
         }
         slots.sort(Comparator.comparingInt(slot -> slot.expressionSpan().startOffset()));
         return List.copyOf(slots);
+    }
+
+    /**
+     * A direct top-level context.removeSlot("name") removes that binding
+     * from the module's published surface. A call nested inside a Closure,
+     * conditional or another expression is not an unconditional removal.
+     * Process expressions in source order so a later creation is retained.
+     */
+    private static String directlyRemovedModuleSlot(SurfaceExpression expression) {
+        if (!(expression instanceof SurfaceCall call)
+                || !(unwrapGroups(call.receiver()) instanceof SurfaceMember member)
+                || !member.name().equals("removeSlot")
+                || !(unwrapGroups(member.receiver()) instanceof SurfaceIntrinsic intrinsic)
+                || intrinsic.kind() != SurfaceIntrinsic.Kind.CONTEXT
+                || call.arguments().size() != 1
+                || call.arguments().get(0).spread()
+                || !(unwrapGroups(call.arguments().get(0).expression())
+                        instanceof SurfaceLiteral literal)
+                || literal.kind() != SurfaceLiteral.Kind.STRING) {
+            return null;
+        }
+        return literal.value();
     }
 
     private static SurfaceExpression unwrapGroups(SurfaceExpression expression) {

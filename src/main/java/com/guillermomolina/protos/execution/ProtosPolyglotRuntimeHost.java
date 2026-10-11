@@ -42,6 +42,8 @@ import org.graalvm.polyglot.Engine;
  */
 public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private final Engine engine;
+    /** PERF032: fixed at construction; every Context hosted here inherits it from the Engine. */
+    private final ProtosExecutionMode executionMode;
     private final ProtosGraalDapReadinessAdapter debugReadiness;
     private final ProtosForeignProviderRegistry foreignProviders;
     /** Class loader of external provider plugins, or null when none were configured. */
@@ -64,10 +66,33 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
 
     private ProtosPolyglotRuntimeHost(
             Engine engine,
+            ProtosExecutionMode executionMode,
+            ProtosGraalDapReadinessAdapter debugReadiness,
+            ProtosForeignProviderRegistry foreignProviders) {
+        this(engine, executionMode, debugReadiness, foreignProviders, null);
+    }
+
+    private ProtosPolyglotRuntimeHost(
+            Engine engine,
+            ProtosGraalDapReadinessAdapter debugReadiness,
+            ProtosForeignProviderRegistry foreignProviders,
+            URLClassLoader foreignProviderLoader) {
+        this(
+                engine,
+                ProtosExecutionMode.NORMAL,
+                debugReadiness,
+                foreignProviders,
+                foreignProviderLoader);
+    }
+
+    private ProtosPolyglotRuntimeHost(
+            Engine engine,
+            ProtosExecutionMode executionMode,
             ProtosGraalDapReadinessAdapter debugReadiness,
             ProtosForeignProviderRegistry foreignProviders,
             URLClassLoader foreignProviderLoader) {
         this.engine = Objects.requireNonNull(engine, "engine");
+        this.executionMode = Objects.requireNonNull(executionMode, "executionMode");
         this.debugReadiness = debugReadiness;
         this.foreignProviders = Objects.requireNonNull(foreignProviders, "foreignProviders");
         this.foreignProviderLoader = foreignProviderLoader;
@@ -138,11 +163,39 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     }
 
     /**
+     * Test-only hook: opens a host in the supplied immutable execution mode without starting DAP,
+     * so a DEBUG host can be observed through the in-process Truffle debugger.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    static ProtosPolyglotRuntimeHost openForTesting(ProtosExecutionMode executionMode) {
+        return new ProtosPolyglotRuntimeHost(
+                executionModeEngine(Engine.newBuilder(ProtosLanguage.ID), executionMode).build(),
+                executionMode,
+                null,
+                ProtosForeignProviderRegistry.EMPTY);
+    }
+
+    /**
+     * Selects the execution mode of every Context created on the Engine being built. NORMAL is the
+     * option default and is left implicit.
+     */
+    private static Engine.Builder executionModeEngine(
+            Engine.Builder builder, ProtosExecutionMode executionMode) {
+        if (executionMode == ProtosExecutionMode.DEBUG) {
+            builder.allowExperimentalOptions(true).option(ProtosLanguage.ID + ".Debug", "true");
+        }
+        return builder;
+    }
+
+    /**
      * Opens one PLAT018 debug invocation using the real GraalVM DAP instrument.
      *
      * <p>The debugger binds only IPv4 loopback and asks the operating system for an ephemeral
      * port. Graal-specific startup text is captured by a version-bounded adapter rather than
      * becoming public launcher protocol. Normal {@link #open()} hosts do not enable DAP.
+     *
+     * <p>PERF032: the host runs in the immutable DEBUG execution mode, so every call transports
+     * activation provenance from the first one and a late DAP client needs no reconstruction.
      */
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     public static ProtosPolyglotRuntimeHost openDebug(OutputStream diagnostics) {
@@ -150,7 +203,9 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         ProtosGraalDapReadinessAdapter readiness =
                 new ProtosGraalDapReadinessAdapter(diagnostics);
         Engine engine =
-                Engine.newBuilder(ProtosLanguage.ID)
+                executionModeEngine(
+                                Engine.newBuilder(ProtosLanguage.ID),
+                                ProtosExecutionMode.DEBUG)
                         .option("dap", "127.0.0.1:0")
                         .option("dap.Suspend", "false")
                         .option("dap.WaitAttached", "true")
@@ -158,7 +213,23 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                         .err(diagnostics)
                         .build();
         return new ProtosPolyglotRuntimeHost(
-                engine, readiness, ProtosForeignProviderRegistry.EMPTY);
+                engine,
+                ProtosExecutionMode.DEBUG,
+                readiness,
+                ProtosForeignProviderRegistry.EMPTY);
+    }
+
+    /**
+     * PERF032: whether this host was opened in the immutable DEBUG execution mode. Only {@link
+     * #openDebug} selects it; every other factory opens a NORMAL host, which does not support
+     * debugging scopes and never starts DAP.
+     */
+    public boolean isDebugMode() {
+        return executionMode == ProtosExecutionMode.DEBUG;
+    }
+
+    ProtosExecutionMode executionMode() {
+        return executionMode;
     }
 
     /**

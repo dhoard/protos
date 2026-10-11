@@ -19,12 +19,14 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
+import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.bytecode.TagTreeNode;
+import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.ArityException;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
@@ -137,11 +139,140 @@ final class ProtosPerf033CanonicalCallableInteropTest {
                                         assertSame(adapter.target, call.bodyTarget());
                                         return call.targetArguments();
                                     });
-            assertSame(adapter.closure, arguments[0], "no rich callee activation materialized");
-            assertNull(ProtosFrameArguments.compactTask(arguments), "no Task provenance");
+            // PERF032: a NORMAL-mode session enters the eligible literal root headerless.
+            assertEquals(
+                    0,
+                    arguments.length,
+                    "headerless literal call must not transport closure or caller");
+            assertEquals(
+                    0,
+                    rootDomain(session).liveTaskCount(),
+                    "literal call must not create a ProtosTask");
         }
         System.out.println("RICH_CALLEE_ACTIVATION_MATERIALIZED=NO");
         System.out.println("PROTOS_TASK_CREATED=NO");
+    }
+
+    private static ProtosBytecodeRootNode.OrdinarySourceCall prepareNoArguments(
+            ProtosHostExecutableClosure adapter) {
+        try {
+            return adapter.prepare(new Object[0], null);
+        } catch (ArityException unexpected) {
+            throw new AssertionError(
+                    "Call0 unexpectedly rejected zero arguments",
+                    unexpected);
+        }
+    }
+
+    @Test
+    void debugModeTaggedLiteralUsesObservableCompactFrameAndExactScope() throws Exception {
+        Path file = directory.resolve("perf033-debug.protos");
+        Files.writeString(file, SOURCE, StandardCharsets.UTF_8);
+        try (ProtosStandaloneHostedSession session =
+                ProtosStandaloneHostedSession.openForTesting(
+                        CORE, file, ProtosExecutionMode.DEBUG)) {
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED, session.initialOutcome().state());
+            ProtosHostExecutableClosure adapter =
+                    session.prepareTopLevel("run").hostExecutableForTesting();
+
+            session.processContextForTesting()
+                    .callForRuntime(
+                            () -> {
+                                assertTrue(
+                                        adapter.target.getRootNode()
+                                                instanceof ProtosSemanticBytecodeRootNode);
+                                ProtosSemanticBytecodeRootNode root =
+                                        (ProtosSemanticBytecodeRootNode)
+                                                adapter.target.getRootNode();
+
+                                // DEBUG mode carries provenance before any tag tree exists.
+                                assertEquals(
+                                        2,
+                                        prepareNoArguments(adapter).targetArguments().length,
+                                        "DEBUG literal call carries the compact header");
+
+                                // Simulates the Bytecode DSL tooling reparse.
+                                root.getRootNodes().ensureComplete();
+
+                                assertNotNull(
+                                        root.getBytecodeNode().getTagTree(),
+                                        "instrumented source must expose a tag tree");
+                                assertTrue(
+                                        root.getBytecodeNode().getTagTree()
+                                                instanceof TagTreeNode);
+
+                                TagTreeNode location =
+                                        (TagTreeNode) root.getBytecodeNode().getTagTree();
+
+                                ProtosBytecodeRootNode.OrdinarySourceCall prepared =
+                                        prepareNoArguments(adapter);
+                                Object[] arguments = prepared.targetArguments();
+
+                                assertEquals(
+                                        2,
+                                        arguments.length,
+                                        "DEBUG root must retain the compact header");
+                                assertSame(adapter.closure, arguments[0]);
+                                assertSame(adapter.caller, arguments[1]);
+
+                                VirtualFrame frame =
+                                        Truffle.getRuntime()
+                                                .createVirtualFrame(
+                                                        arguments,
+                                                        root.getFrameDescriptor());
+
+                                assertTrue(
+                                        ProtosBytecodeTagTreeNodeExports.hasScope(
+                                                location, frame));
+
+                                try {
+                                    Object first =
+                                            ProtosBytecodeTagTreeNodeExports.getScope(
+                                                    location, frame, true);
+                                    Object second =
+                                            ProtosBytecodeTagTreeNodeExports.getScope(
+                                                    location, frame, true);
+
+                                    assertTrue(InteropLibrary.getUncached().isScope(first));
+                                    assertTrue(InteropLibrary.getUncached().isScope(second));
+
+                                    Object published = arguments[0];
+                                    assertSame(
+                                            ProtosFrameArguments.activation(frame),
+                                            published,
+                                            "one exact activation is published");
+                                    assertSame(
+                                            published,
+                                            ProtosFrameArguments.activation(arguments),
+                                            "repeated observation reuses the activation");
+                                } catch (UnsupportedMessageException unexpected) {
+                                    throw new AssertionError(unexpected);
+                                }
+
+                                Object result =
+                                        prepared.finish(
+                                                ProtosBytecodeRootNode.EnterClosureCall
+                                                        .ordinaryIndirect(
+                                                                prepared,
+                                                                IndirectCallNode.create()));
+
+                                try {
+                                    assertEquals(
+                                            1,
+                                            InteropLibrary.getUncached().asInt(result));
+                                } catch (UnsupportedMessageException unexpected) {
+                                    throw new AssertionError(unexpected);
+                                }
+
+                                assertEquals(0, rootDomain(session).liveTaskCount());
+                                return null;
+                            });
+        }
+
+        System.out.println("PERF032_TAGGED_LITERAL_SCOPE=PASS");
+        System.out.println("PERF032_TAGGED_LITERAL_ACTIVATION_IDENTITY=PASS");
+        System.out.println("PERF032_TAGGED_LITERAL_TASK=NONE");
     }
 
     @Test

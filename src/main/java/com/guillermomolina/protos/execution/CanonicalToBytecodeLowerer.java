@@ -958,6 +958,17 @@ final class CanonicalToBytecodeLowerer {
         result.recordProvablyNonSuspendingBody(
                 provesNonSuspendingBody(
                         activationDefinition, currentRootAnalysis));
+        // PERF032: prove the exact parameterless literal-one body eligible for
+        // the NORMAL-mode headerless entry. Never infer this capability merely
+        // from non-suspension.
+        result.recordHeaderlessEntryBody(
+                activationDefinition != null
+                        && activationDefinition.parameters().isEmpty()
+                        && sequence.expressions().size() == 1
+                        && sequence.expressions().get(0)
+                                instanceof CanonicalLiteral literal
+                        && literal.kind() == CanonicalLiteral.Kind.NUMBER
+                        && "1".equals(literal.value()));
         /*
          * A reparse replays the group onto the same root identities, whose
          * rejection targets are attached by the create() that first built

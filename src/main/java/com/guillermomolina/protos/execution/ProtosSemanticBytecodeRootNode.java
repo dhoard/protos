@@ -220,6 +220,20 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         return provablyNonSuspendingBody;
     }
 
+    /*
+     * PERF032: the body never consults its activation, so a NORMAL-mode host entry may omit the
+     * frame header. Not a general source-call ABI contract; the execution mode decides its use.
+     */
+    private boolean headerlessEntryBody;
+
+    final void recordHeaderlessEntryBody(boolean proven) {
+        this.headerlessEntryBody = proven;
+    }
+
+    final boolean headerlessEntryBody() {
+        return headerlessEntryBody;
+    }
+
     final void recordFrameNativeBindings(
             LocalRangeAccessor frameBackedLocals,
             ProtosFrameLexicalLayout frameBackedLayout) {

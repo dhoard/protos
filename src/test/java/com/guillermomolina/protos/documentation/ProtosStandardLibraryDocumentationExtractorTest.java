@@ -129,6 +129,69 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     }
 
     @Test
+    void directlyRemovedPrivateModuleSlotIsNotPublished() throws Exception {
+        writeModule(
+                "collections/Private",
+                """
+                //! Private helper fixture.
+                _helper: 1
+                /// Published Closure using the captured helper.
+                published: () => { _helper }
+                context.removeSlot("_helper")
+                """);
+
+        ProtosStandardLibraryDocumentationExtractor.Extraction extraction =
+                ProtosStandardLibraryDocumentationExtractor.extract(temp, REVISION);
+
+        assertEquals(1, extraction.artifact().symbols().size());
+        assertEquals("published",
+                extraction.artifact().symbols().get(0).identity().slotName());
+        assertEquals(List.of(), extraction.coverage().missingSymbolDocumentation());
+    }
+
+    @Test
+    void nestedRemovalDoesNotHideTopLevelSlot() throws Exception {
+        writeModule(
+                "collections/NestedRemoval",
+                """
+                //! Nested removal fixture.
+                /// Documented helper.
+                helper: 1
+                /// Deferred removal, not executed at module initialization.
+                deferred: () => { context.removeSlot("helper") }
+                """);
+
+        ProtosStandardLibraryDocumentationExtractor.Extraction extraction =
+                ProtosStandardLibraryDocumentationExtractor.extract(temp, REVISION);
+
+        assertEquals(2, extraction.artifact().symbols().size());
+        assertEquals(List.of(), extraction.coverage().missingSymbolDocumentation());
+    }
+
+    @Test
+    void recreationAfterDirectRemovalIsPublished() throws Exception {
+        writeModule(
+                "collections/Recreated",
+                """
+                //! Recreated binding fixture.
+                helper: 1
+                context.removeSlot("helper")
+                /// The final public binding.
+                helper: 2
+                """);
+
+        ProtosStandardLibraryDocumentationExtractor.Extraction extraction =
+                ProtosStandardLibraryDocumentationExtractor.extract(temp, REVISION);
+
+        assertEquals(1, extraction.artifact().symbols().size());
+        assertEquals("helper",
+                extraction.artifact().symbols().get(0).identity().slotName());
+        assertEquals("The final public binding.",
+                extraction.artifact().symbols().get(0).documentation());
+        assertEquals(List.of(), extraction.coverage().missingSymbolDocumentation());
+    }
+
+    @Test
     void groupedTopLevelSlotCanReceiveDocumentation() throws Exception {
         writeModule(
                 "collections/Grouped",

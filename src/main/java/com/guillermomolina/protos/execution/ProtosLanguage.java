@@ -64,6 +64,21 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
             stability = OptionStability.STABLE)
     static final OptionKey<String> CORE_ROOT = new OptionKey<>("");
 
+    /*
+     * PERF032: selects the immutable DEBUG execution mode of the Context (or, on an Engine, of
+     * every Context it creates). It does not start DAP or any other debugger front end.
+     */
+    @Option(
+            name = "Debug",
+            help =
+                    "Run this Context in DEBUG execution mode: every call transports activation"
+                            + " provenance so debugger scopes are exact from the first call. The"
+                            + " default NORMAL mode does not support debugging scopes. Fixed for the"
+                            + " life of the Context.",
+            category = OptionCategory.USER,
+            stability = OptionStability.EXPERIMENTAL)
+    static final OptionKey<Boolean> DEBUG = new OptionKey<>(false);
+
     private final ProtosSourceCompiler sourceCompiler = new ProtosSourceCompiler();
 
     @Override

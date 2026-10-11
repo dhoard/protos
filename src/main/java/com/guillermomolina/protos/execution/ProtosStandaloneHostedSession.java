@@ -143,7 +143,26 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
                 in,
                 out,
                 err,
-                networkGrant);
+                networkGrant,
+                ProtosExecutionMode.NORMAL);
+    }
+
+    /**
+     * Test-only hook: the convenience form on a RuntimeHost opened in the supplied immutable
+     * execution mode, without DAP.
+     */
+    static ProtosStandaloneHostedSession openForTesting(
+            Path coreRoot, Path sourceFile, ProtosExecutionMode executionMode)
+            throws IOException {
+        return openSession(
+                Objects.requireNonNull(coreRoot, "coreRoot"),
+                Objects.requireNonNull(sourceFile, "sourceFile"),
+                List.of(),
+                InputStream.nullInputStream(),
+                OutputStream.nullOutputStream(),
+                OutputStream.nullOutputStream(),
+                NetworkGrant.NONE,
+                Objects.requireNonNull(executionMode, "executionMode"));
     }
 
     /** Convenience form: no application arguments, empty stdin, discarded stdout and stderr. */
@@ -165,7 +184,8 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
             InputStream in,
             OutputStream out,
             OutputStream err,
-            NetworkGrant networkGrant)
+            NetworkGrant networkGrant,
+            ProtosExecutionMode executionMode)
             throws IOException {
         Path sourcePath = sourceFile.toAbsolutePath().normalize();
         String characters = Files.readString(sourcePath, StandardCharsets.UTF_8);
@@ -181,7 +201,10 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
              * The RuntimeHost opens before the Process is bootstrapped: a granted Network must be
              * provisioned on the same host that will host this Process, from its exact Prelude.
              */
-            runtimeHost = ProtosPolyglotRuntimeHost.open();
+            runtimeHost =
+                    executionMode == ProtosExecutionMode.NORMAL
+                            ? ProtosPolyglotRuntimeHost.open()
+                            : ProtosPolyglotRuntimeHost.openForTesting(executionMode);
             ProtosStandaloneProcessBootstrap.Result bootstrap =
                     ProtosStandaloneHostedExecution.bootstrapProcess(
                             coreRoot,

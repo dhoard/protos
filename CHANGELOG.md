@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.336-SNAPSHOT
+
+- `PERF032` (#831): explicit NORMAL and DEBUG execution modes replace the
+  experimental `protos.perf032.headerlessLiteralOne` selector.
+  - The mode is fixed for the life of a RuntimeHost and its Contexts.
+    `ProtosPolyglotRuntimeHost.openDebug()` (and `protos debug`) selects DEBUG,
+    every other host is NORMAL, and `isDebugMode()` reports it. A standard
+    embedding selects DEBUG with the experimental `protos.Debug` Context option,
+    which starts no DAP.
+  - In NORMAL, the host entry of the proven parameterless literal-one Closure
+    uses an empty argument array. The choice is fixed when the host executable is
+    prepared and no longer consults the tag tree or any debugger state. DEBUG
+    always uses the ordinary `[closure, caller]` header, so provenance exists from
+    the first call.
+  - A debugger scope request on a NORMAL headerless frame fails explicitly instead
+    of reporting no scope. Creating a Truffle `DebuggerSession` is framework-owned
+    and is not intercepted.
+
 ## 0.3.335-SNAPSHOT
 
 - `I090` (#868): I090-A implements the D197-C public Integer hierarchy
