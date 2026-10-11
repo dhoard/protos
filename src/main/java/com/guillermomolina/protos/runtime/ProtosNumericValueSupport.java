@@ -33,7 +33,9 @@ import java.util.Objects;
  * semantic Protos numbers. A Fraction (D197-C, I090) is a frozen
  * {@link ProtosSealedValue} of a private family token held only here, whose
  * private state is its canonical numerator and denominator Integers; an
- * ordinary object delegating to {@code Fraction} is never a Fraction.
+ * ordinary object delegating to {@code Fraction} is never a Fraction. A Complex (I090-C1) is
+ * represented by {@link ProtosComplexNumericSupport}; this class only bridges it into the
+ * generic Number domain, identity and identity hash.
  *
  * <p>Ordinary copies are created only at explicit transfer boundaries.
  * This class installs no guest methods, global registry, or rich-value
@@ -55,7 +57,16 @@ public final class ProtosNumericValueSupport {
         return value instanceof ProtosFloatValue;
     }
 
+    /** Whether {@code value} is a genuine Core Number of any family, Complex included. */
     public static boolean isCurrentNumber(Object value) {
+        return isCurrentRealNumber(value) || ProtosComplexNumericSupport.isComplex(value);
+    }
+
+    /**
+     * Whether {@code value} is a genuine Core real number: an Integer, a Fraction or a Float.
+     * Real-only services (ordering, Complex components) admit exactly this domain.
+     */
+    public static boolean isCurrentRealNumber(Object value) {
         return isCurrentInteger(value) || isCurrentFloat(value) || isFraction(value);
     }
 
@@ -810,6 +821,10 @@ public final class ProtosNumericValueSupport {
         if (isFraction(left) && isFraction(right)) {
             return sameFraction(left, right);
         }
+        if (ProtosComplexNumericSupport.isComplex(left)
+                && ProtosComplexNumericSupport.isComplex(right)) {
+            return ProtosComplexNumericSupport.sameComplex(left, right);
+        }
         return false;
     }
 
@@ -831,6 +846,9 @@ public final class ProtosNumericValueSupport {
         if (isFraction(value)) {
             return tagged(37, fractionComponentHash(value));
         }
+        if (ProtosComplexNumericSupport.isComplex(value)) {
+            return tagged(41, ProtosComplexNumericSupport.componentIdentityHash(value));
+        }
         throw new IllegalArgumentException("value is not a current numeric family");
     }
 
@@ -841,7 +859,8 @@ public final class ProtosNumericValueSupport {
      * ordinary guest object delegating to its minting Prelude's BigInteger prototype, so it is
      * rematerialized with the destination's prototype and never shared across isolated domains.
      * A Fraction likewise is rematerialized by value with the destination's Fraction prototype
-     * (D197-C); no other sealed value is copied here. This method is not called on ordinary arithmetic, lookup, or numeric dispatch paths.
+     * (D197-C); no other sealed value is copied here. A Complex is deliberately absent: it
+     * crosses isolation only through the staged descriptor of {@link ProtosComplexNumericSupport}. This method is not called on ordinary arithmetic, lookup, or numeric dispatch paths.
      */
     public static Object copyCurrentNumberOrNull(Object value, ProtosPrelude destination) {
         if (value instanceof ProtosIntegerValue integer) {

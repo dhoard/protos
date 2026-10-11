@@ -138,6 +138,7 @@ class ProtosCoreBootstrapTest {
                         "BigInteger",
                         "Fraction",
                         "Float",
+                        "Complex",
                         "Error",
                         "fail",
                         "InvalidReturn",

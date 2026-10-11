@@ -323,10 +323,11 @@ SmallInteger
 BigInteger
 Fraction
 Float
+Complex
 Array
 ```
 
-Each of these seven standard behaviors requires its exact canonical standard
+Each of these eight standard behaviors requires its exact canonical standard
 owner as receiver and accepts exactly one supplied argument. The candidate
 argument may be any Protos value. A matching candidate returns canonical `true`;
 a non-matching candidate returns canonical `false`.
@@ -344,7 +345,7 @@ other than exactly one argument, follows the ordinary Error rules for invalid
 standard-behavior receivers and arity. Candidate mismatch itself is not an
 Error; it is canonical `false`.
 
-The seven recognized domains are exactly:
+The eight recognized domains are exactly:
 
 - `String.recognizes(value)` is `true` iff `value` is a semantic String value.
   An ordinary object that merely delegates to `String` or to a String value is
@@ -366,6 +367,11 @@ The seven recognized domains are exactly:
 - `Float.recognizes(value)` is `true` iff `value` is a semantic Float value.
   Recognition performs no numeric promotion or conversion; in particular an
   ordinary Integer is not a Float, and `Float.recognizes(Float)` is `false`.
+- `Complex.recognizes(value)` is `true` iff `value` is a semantic Complex value
+  as defined under **Numeric Model**. An ordinary object that merely delegates
+  to `Complex`, including a frozen one or one carrying the same slots, is not
+  recognized; Integers, Fractions, and Floats are not Complex values; and
+  `Complex.recognizes(Complex)` is `false`.
 - `Array.recognizes(value)` is `true` iff `value` owns standard Array indexed
   state. Immediate delegation parent identity is irrelevant. An ordinary object
   that merely delegates to `Array` is not recognized, while a standard Array
@@ -1192,15 +1198,17 @@ Number                         common numeric prototype; not a concrete value fa
 │   ├── SmallInteger           concrete family: Integers in the signed-64 range
 │   └── BigInteger             concrete family: Integers outside the signed-64 range
 ├── Fraction                   concrete family: exact non-integral rationals
-└── Float                      IEEE 754-2019 binary64 family
+├── Float                      IEEE 754-2019 binary64 family
+└── Complex                    concrete family: values with real and imaginary components
 ```
 
-`Number`, `Integer`, `SmallInteger`, `BigInteger`, `Fraction`, and `Float` are
-the standard prototype objects corresponding to that hierarchy and are
-published as Prelude bindings of those names. `Integer`, `Fraction`, and
-`Float` delegate immediately to `Number`; `SmallInteger` and `BigInteger`
-delegate immediately to `Integer`. In this specification an **exact real** value
-is a semantic Integer or a semantic Fraction.
+`Number`, `Integer`, `SmallInteger`, `BigInteger`, `Fraction`, `Float`, and
+`Complex` are the standard prototype objects corresponding to that hierarchy
+and are published as Prelude bindings of those names. `Integer`, `Fraction`,
+`Float`, and `Complex` delegate immediately to `Number`; `SmallInteger` and
+`BigInteger` delegate immediately to `Integer`. In this specification an
+**exact real** value is a semantic Integer or a semantic Fraction, and a
+**real** value is a semantic Integer, Fraction, or Float.
 Numeric-family membership is not conferred by delegation: an ordinary object
 that delegates to one of these prototype objects is still an ordinary object
 unless a separate normative factory or operation creates a numeric semantic
@@ -1241,10 +1249,32 @@ defines no Fraction literal and no Fraction construction or conversion factory:
 `Fraction` never becomes a Fraction. A Fraction exposes no standard selector for
 its numerator or denominator in this revision.
 
-D197-C also establishes `Complex` as a future concrete numeric family under
-`Number`. It is not part of this revision: no prototype, binding, literal, or
-operation for it is defined here, and no standard operation in this revision
-produces it.
+A semantic Complex value is an immutable number with a **real component** and
+an **imaginary component**, each a semantic real value (an Integer of either
+concrete family, a Fraction, or a Float) held exactly: an exact component is
+never rounded to binary64, and a Float component keeps its exact binary64 value,
+including the sign of a zero. A component is never itself a Complex value, and
+an ordinary object that merely delegates to `Number` or to a numeric prototype
+is never a component. A Complex value exposes neither component as a slot. Its
+immediate delegation parent is the `Complex` prototype, and the standard
+`Number` behaviors apply to it through ordinary delegation.
+
+**Complex canonical form.** A complex value whose imaginary component is the
+exact Integer zero is not a Complex value: it is its real component, of that
+component's own family. A Float zero imaginary component, `+0.0` or `-0.0`, is
+not exact and is retained, so such a value is a Complex value. A canonical
+Fraction is never zero, so no other exact imaginary component is zero.
+
+Complex values are not producible from Protos source in this revision. This
+revision defines no Complex construction factory (`Complex` has no standard
+`call` behavior), no imaginary literal, no standard selector for either
+component, no Complex arithmetic, no Complex ordering, and no principal-branch
+operation such as a complex square root; no standard operation in this revision
+produces a Complex value. A Complex value with a NaN or infinite Float component
+is not defined by this revision. Standard Integer, Fraction, and Float
+arithmetic and the standard `Integer(...)` and `Float(...)` conversions do not
+admit a Complex operand or argument. The recognition, identity, equality,
+hashing, and transfer rules of this specification apply to every Complex value.
 
 Core v0.1 defines no standard width-specific numeric semantic family, prototype, or
 prelude binding. Width- or range-specific representations may exist inside an
@@ -1309,7 +1339,13 @@ representation. Any standard transfer or encoding rule that preserves a numeric
 value operates on its semantic family and semantic value, never on a physical
 storage category; a transferred Integer delegates to the concrete-family
 prototype of its destination, and a transferred Fraction is the same canonical
-rational value delegating to the `Fraction` prototype of its destination.
+rational value delegating to the `Fraction` prototype of its destination. A
+transferred Complex value is identical (`===`) to its source: its components keep
+their semantic families, exact values, and Float signed-zero distinctions, each
+component is materialized for the destination, and the value delegates to the
+`Complex` prototype of its destination. Repeated references to one Complex value
+within one transfer remain repeated references to one destination value. No
+source prototype, Prelude, or other source-owned object crosses with it.
 
 Integer-only bit-manipulation or explicit wrapping protocols are not added by
 this section. Libraries may define such ordinary messages, but portable Core
@@ -1590,11 +1626,24 @@ Integers always share their concrete family, so the concrete family never
 splits an Integer value into distinct identities. Two Fractions are identical
 exactly when they denote the same rational value; because the canonical form is
 unique, separately produced equal Fractions are identical. A Fraction is never
-identical to an Integer or Float. Physical representation is never a semantic
-family and cannot change `===`.
+identical to an Integer or Float. Two Complex values are identical exactly when
+their real components are identical and their imaginary components are
+identical, so a Complex with imaginary component `+0.0` is not identical to one
+with `-0.0`; a Complex value is never identical to an Integer, Fraction, or
+Float, even one it equals. Physical representation is never a semantic family
+and cannot change `===`.
+
+Numeric `==` between a Complex value and another Number compares both
+components mathematically by the exact real rule above, a real value having
+imaginary component zero. Thus a Complex value equals a real value exactly when
+its imaginary component is mathematically zero, including a retained `+0.0` or
+`-0.0`, and its real component equals that real value; a Complex value with a
+nonzero imaginary component equals no real value. `==` remains symmetric.
 
 The standard numeric ordering operators `<`, `<=`, `>`, and `>=` accept any two
-semantic Number values, including distinct numeric families. They compare
+semantic real values, including distinct real numeric families. No ordering of
+Complex values is defined; a standard numeric ordering operator whose receiver
+or argument is a Complex value signals an `Error`. They compare
 without promotion or coercion:
 
 - finite values are ordered by exact mathematical value, treating each finite
@@ -1613,9 +1662,12 @@ mathematical value; it does not use mixed arithmetic's binary64 promotion.
 The existing numeric hash coherence rule is unchanged and mandatory across all
 these families: whenever numeric `a == b` is true, standard `a.hash` and
 `b.hash` are the same mathematical Integer hash value for that execution.
-Numeric family (Integer, Fraction, or Float) and internal representation must
-not split equal numeric values into different normal-Map hash classes; for
-example `(1 / 2).hash == 0.5.hash`.
+Numeric family (Integer, Fraction, Float, or Complex) and internal
+representation must not split equal numeric values into different normal-Map
+hash classes; for example `(1 / 2).hash == 0.5.hash`, and a Complex value whose
+imaginary component is mathematically zero has the normal hash of its real
+component. Whenever `a === b`, `identityHashOf(a) == identityHashOf(b)`, including
+for Complex values.
 `IdentityMap` continues to use `===` and `identityHashOf`, so distinct semantic
 numeric families remain distinct identity keys even when ordinary numeric `==`
 is true.
@@ -1643,7 +1695,8 @@ Number values are immutable value objects. Actor transfer, `P` transfer, constan
 folding, JIT specialization, unboxing, arbitrary-precision specialization, and
 other optimizations may copy, share, inline, or change physical representation
 only when semantic family, exact Integer value, exact binary64 Float value and
-special-value distinctions, exact canonical Fraction value, result/error
+special-value distinctions, exact canonical Fraction value, exact Complex
+components and their families, result/error
 behavior, equality, ordering, hashing,
 identity, dispatch, and observable evaluation order remain exactly as specified.
 

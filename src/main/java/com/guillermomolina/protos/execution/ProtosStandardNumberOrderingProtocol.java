@@ -98,8 +98,9 @@ public final class ProtosStandardNumberOrderingProtocol {
         @Override
         public Object execute(ProtosActivation activation, List<?> supplied) {
             if (supplied.size() != 1
-                    || !ProtosNumericValueSupport.isCurrentNumber(activation.receiver())
-                    || !ProtosNumericValueSupport.isCurrentNumber(supplied.get(0))) {
+                    // Real values only: no Complex order is defined (I090-C1).
+                    || !ProtosNumericValueSupport.isCurrentRealNumber(activation.receiver())
+                    || !ProtosNumericValueSupport.isCurrentRealNumber(supplied.get(0))) {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));
             }

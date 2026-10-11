@@ -24,6 +24,7 @@ _corePreludeBindings: Context {
     BigInteger: BigInteger
     Fraction: Fraction
     Float: Float
+    Complex: Complex
     Error: Error
     fail: () => {
         Error().signal()

@@ -300,6 +300,22 @@ public final class ProtosParallelRuntime {
                 Object y=ProtosNumericValueSupport.materializeFractionTransferDescriptor(v,a.prelude().orElseThrow());
                 memo.put(v,y);return y;
             }
+            if(ProtosComplexNumericSupport.isComplex(v)){
+                // I090-C1 source stage: only inert component descriptors cross, once per source identity.
+                if(memo.containsKey(v))return memo.get(v);
+                if(!(memo instanceof TransferMemo tracked)||tracked.materializing)
+                    throw new IllegalStateException("I090-C1 internal inconsistency: Complex outside a P source stage");
+                Object y=ProtosComplexNumericSupport.transferDescriptor(v);
+                tracked.semanticRecords=true;memo.put(v,y);return y;
+            }
+            if(ProtosComplexNumericSupport.isTransferDescriptor(v)){
+                // I090-C1 destination stage: one destination-Prelude Complex per descriptor identity.
+                if(!(memo instanceof TransferMemo tracked)||!tracked.materializing)
+                    throw new IllegalStateException("I090-C1 internal inconsistency: Complex descriptor outside a P destination stage");
+                if(memo.containsKey(v))return memo.get(v);
+                Object y=ProtosComplexNumericSupport.materializeTransferDescriptor(v,a.prelude().orElseThrow());
+                memo.put(v,y);return y;
+            }
             Object copiedNumber =
                     ProtosNumericValueSupport.copyCurrentNumberOrNull(v, a.prelude().orElse(null));
             if (copiedNumber != null) return copiedNumber;
@@ -327,7 +343,7 @@ public final class ProtosParallelRuntime {
                 if(memo.containsKey(v))return memo.get(v);
                 ProtosEnvironmentValue y=x.rematerializeForParallelTransfer();memo.put(v,y);return y;
             }
-            // A Core Fraction crossed above as an inert descriptor (D197-C); other sealed values stay non-parallel.
+            // A Core Fraction or Complex crossed above as an inert descriptor (D197-C, I090-C1); other sealed values stay non-parallel.
             if(v instanceof ProtosFutureValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosNetworkCapabilityValue||v instanceof ProtosTcpConnectionValue||v instanceof ProtosTcpListenerValue||v instanceof ProtosProcessStandardStreamValue||v instanceof ProtosSendOperationControl||v instanceof ProtosSealedValue||v==null)throw new NonParallel();
             if(memo.containsKey(v))return memo.get(v);
             ProtosPrelude p=a.prelude().orElseThrow();

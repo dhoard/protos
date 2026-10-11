@@ -22,9 +22,40 @@ tests: [
             (Number.parent() === Object) &&
                 (Integer.parent() === Number) &&
                 (Fraction.parent() === Number) &&
-                (Float.parent() === Number)
+                (Float.parent() === Number) &&
+                (Complex.parent() === Number)
         }
         Assertions.require(tool009LegacyCase() === true)
+    }),
+    // I090-C1: no public Complex constructor exists yet, so only rejection is observable here.
+    Test("complex recognizes only genuine values", () => {
+        Assertions.require(Complex.recognizes(Complex) === false)
+        Assertions.require(Complex.recognizes(1) === false)
+        Assertions.require(Complex.recognizes(1 / 2) === false)
+        Assertions.require(Complex.recognizes(1.0) === false)
+        Assertions.require(Complex.recognizes(Complex {}) === false)
+        forged: Complex {}
+        forged.freeze()
+        Assertions.require(Complex.recognizes(forged) === false)
+    }),
+    Test("complex recognizes receiver and arity errors", () => {
+        Assertions.signals(Error, () => { Complex.recognizes() })
+        Assertions.signals(Error, () => { Complex.recognizes(1, 2) })
+        Assertions.signals(Error, () => {
+            ComplexLike: Complex {}
+            ComplexLike.recognizes(1)
+        })
+    }),
+    Test("complex delegating objects stay nonnumeric", () => {
+        Assertions.signals(Error, () => {
+            forged: Complex {}
+            forged.freeze()
+            forged.hash()
+        })
+        Assertions.signals(Error, () => {
+            forged: Complex {}
+            forged < 1
+        })
     }),
     Test("hash equality coherence", () => {
         tool009LegacyCase: () => {

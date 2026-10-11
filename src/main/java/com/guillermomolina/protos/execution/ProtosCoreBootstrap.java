@@ -145,6 +145,9 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("Float.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("Complex.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("Error.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -251,6 +254,8 @@ public final class ProtosCoreBootstrap {
                         bootstrapContext, "_coreFractionKernel", ProtosObjectValue.rootObject());
         ProtosObjectValue floatPrototype =
                 requirePrototype(bootstrapContext, "Float", numberPrototype);
+        ProtosObjectValue complexPrototype =
+                requirePrototype(bootstrapContext, "Complex", numberPrototype);
         ProtosStandardNumberEqualityProtocol.install(numberPrototype);
         ProtosStandardNumberOrderingProtocol.install(numberPrototype);
         ProtosStandardHashSupport.installNumberHash(numberPrototype);
@@ -259,6 +264,7 @@ public final class ProtosCoreBootstrap {
                 smallIntegerPrototype, bigIntegerPrototype);
         ProtosStandardFractionProtocol.install(fractionPrototype, numberPrototype, fractionKernel);
         ProtosStandardFloatProtocol.install(floatPrototype);
+        ProtosStandardComplexProtocol.install(complexPrototype, numberPrototype);
         ProtosStandardNumericConversionProtocol.install(integerPrototype, floatPrototype);
 
         Object errorBinding =

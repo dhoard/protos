@@ -80,6 +80,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardFutureProtocol.java", 2),
                     Map.entry("execution/ProtosStandardFloatProtocol.java", 2),
                     Map.entry("execution/ProtosStandardFractionProtocol.java", 5),
+                    Map.entry("execution/ProtosStandardComplexProtocol.java", 1),
                     Map.entry("execution/ProtosStandardBooleanProtocol.java", 1),
                     Map.entry("execution/ProtosStandardNumberEqualityProtocol.java", 1),
                     Map.entry("execution/ProtosParallelRuntime.java", 1),
@@ -151,8 +152,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
-        assertEquals(35, actualCore.size());
-        assertEquals(136, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(36, actualCore.size());
+        assertEquals(137, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -244,6 +245,10 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 prelude.floatPrototype(),
                 Set.of("call", "+", "-", "*", "/", "recognizes"));
         assertSourceBacked(prelude.floatPrototype(), "negated");
+
+        // D197-C (I090-C1): Complex owns only its trusted recognizer.
+        assertNativeSelectors(
+                "Complex", prelude.complexPrototype(), Set.of("recognizes"));
 
         for (String removed :
                 Set.of(

@@ -227,6 +227,20 @@ public final class ProtosActorValueTransfer {
                         ProtosNumericValueSupport.materializeFractionTransferDescriptor(
                                 value, prelude));
             }
+            if (ProtosComplexNumericSupport.isComplex(value)) {
+                // I090-C1 source stage: only inert component descriptors cross; the destination
+                // Prelude rebuilds the components and binds its Complex prototype, once per identity.
+                if (materializing) {
+                    throw nonTransferable();
+                }
+                semanticRecords = true;
+                return remember(value, ProtosComplexNumericSupport.transferDescriptor(value));
+            }
+            if (materializing && ProtosComplexNumericSupport.isTransferDescriptor(value)) {
+                return remember(
+                        value,
+                        ProtosComplexNumericSupport.materializeTransferDescriptor(value, prelude));
+            }
             Object copiedNumber =
                     ProtosNumericValueSupport.copyCurrentNumberOrNull(value, prelude);
             if (copiedNumber != null) {
@@ -280,8 +294,8 @@ public final class ProtosActorValueTransfer {
                     || value instanceof ProtosTcpConnectionValue
                     || value instanceof ProtosTcpListenerValue
                     // LIB020-A sealed families are not portable; copying would drop the family.
-                    // A Core Fraction never reaches here: it crossed above as an inert
-                    // descriptor (D197-C).
+                    // A Core Fraction or Complex never reaches here: each crossed above as an
+                    // inert descriptor (D197-C, I090-C1).
                     || value instanceof ProtosSealedValue) {
                 throw nonTransferable();
             }

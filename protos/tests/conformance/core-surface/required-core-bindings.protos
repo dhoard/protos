@@ -27,6 +27,7 @@ tests: [
             BigInteger
             Fraction
             Float
+            Complex
             Error
             InvalidReturn
             SlotNotFound

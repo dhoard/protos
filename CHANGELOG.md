@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.338-SNAPSHOT
+
+- `I090` (#868): I090-C1 introduces the D197-C canonical Core `Complex`
+  numeric family with exact real and imaginary components.
+  - Add `Complex.protos` as a concrete `Number` child and a Prelude binding;
+    `ProtosStandardComplexProtocol` installs only the trusted, exact-owner
+    `Complex.recognizes` method. No public constructor, literal, component
+    selector, arithmetic, or ordering is added.
+  - `ProtosComplexNumericSupport` mints frozen sealed values authenticated by
+    a private family token, keeping Integer, Fraction, and Float components
+    in their original semantic families. An exact Integer-zero imaginary
+    component collapses to the real value; Float signed zero remains Complex.
+  - Extend standard numeric equality, normal hashing, family-sensitive
+    identity and identity hashing to Complex. Mathematical equality stays exact
+    across real numeric families, a mathematically zero imaginary component
+    hashes like the real value, and numeric ordering rejects Complex with a
+    standard Protos Error.
+  - Actor and isolated `P` transfers carry only inert component descriptors,
+    preserve aliases and Float signed-zero bits, and rematerialize BigInteger,
+    Fraction, and Complex with the destination Prelude. Ordinary primitive
+    Integer/Float paths retain their existing representation.
+  - Extend Core conformance, architecture audits and JUnit regression coverage,
+    including real Map/IdentityMap operations and Actor/P transfer boundaries.
+
 ## 0.3.337-SNAPSHOT
 
 - `I090` (#868): I090-B implements the D197-C `Fraction` family and exact

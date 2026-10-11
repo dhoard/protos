@@ -32,8 +32,9 @@ import java.util.Objects;
  *
  * <p>Sealed values are not semantically portable: isolation transfer and isolated-parallel
  * transfer reject them instead of copying them into ordinary objects that would silently lose
- * their family. The single exception is the Core Fraction family (D197-C, I090), whose values the
- * explicit numeric-copy boundary of {@link ProtosNumericValueSupport} rematerializes by value.
+ * their family. The exceptions are the Core Fraction and Complex families (D197-C, I090), whose
+ * values cross only as inert descriptors that the destination rematerializes by value
+ * ({@link ProtosNumericValueSupport}, {@link ProtosComplexNumericSupport}).
  */
 public final class ProtosSealedValue extends ProtosObjectValue {
     private final Object family;

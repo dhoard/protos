@@ -41,6 +41,7 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "BigInteger.protos",
                     "Fraction.protos",
                     "Float.protos",
+                    "Complex.protos",
                     "Error.protos",
                     "InvalidReturn.protos",
                     "Array.protos",

@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
+import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -25,11 +26,14 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.execution.ProtosStandardNumberOrderingProtocol.Comparison;
 
 /**
- * Current Integer/Fraction/Float mathematical equality, ordering and normal hash.
+ * Current Integer/Fraction/Float/Complex mathematical equality and normal hash, and real
+ * ordering.
  *
  * <p>D197-C (I090): exact real values (Integer, Fraction) and finite binary64 values are
- * compared as exact mathematical rationals; a Fraction is never rounded to Float here. Complex
- * is not admitted. D013 ordinary overridable dispatch remains owned by the protocols; this
+ * compared as exact mathematical rationals; a Fraction is never rounded to Float here. A Complex
+ * (I090-C1) equals another Number exactly when both components are mathematically equal, a real
+ * value having a zero imaginary part; its components are compared by the same real relation.
+ * Ordering admits real values only; no Complex order is defined. D013 ordinary overridable dispatch remains owned by the protocols; this
  * trusted relation never sends a message to an operand.
  */
 final class ProtosCurrentNumericRelations {
@@ -39,6 +43,13 @@ final class ProtosCurrentNumericRelations {
         if (left instanceof ProtosIntegerValue leftInteger
                 && right instanceof ProtosIntegerValue rightInteger) {
             return leftInteger.longValue() == rightInteger.longValue();
+        }
+
+        boolean leftComplex = ProtosComplexNumericSupport.isComplex(left);
+        boolean rightComplex = ProtosComplexNumericSupport.isComplex(right);
+        if (leftComplex || rightComplex) {
+            return numericEquals(realPart(left), realPart(right))
+                    && numericEquals(imaginaryPart(left), imaginaryPart(right));
         }
 
         if (ProtosNumericValueSupport.isFraction(left)
@@ -66,14 +77,29 @@ final class ProtosCurrentNumericRelations {
                 ProtosNumericValueSupport.requireCurrentInteger(right));
     }
 
+    private static final Object EXACT_ZERO = ProtosNumericValueSupport.integer(0L);
+
+    /* Components of a Number viewed as complex; a real value has an exact zero imaginary part. */
+    private static Object realPart(Object number) {
+        return ProtosComplexNumericSupport.isComplex(number)
+                ? ProtosComplexNumericSupport.real(number)
+                : number;
+    }
+
+    private static Object imaginaryPart(Object number) {
+        return ProtosComplexNumericSupport.isComplex(number)
+                ? ProtosComplexNumericSupport.imaginary(number)
+                : EXACT_ZERO;
+    }
+
     private static boolean floatEqualsExactInteger(double floating, Object integer) {
         return compareFloatToInteger(floating, integer) == Comparison.EQUAL;
     }
 
     static Comparison compare(Object left, Object right) {
-        if (!ProtosNumericValueSupport.isCurrentNumber(left)
-                || !ProtosNumericValueSupport.isCurrentNumber(right)) {
-            throw new IllegalArgumentException("numeric comparison requires Number values");
+        if (!ProtosNumericValueSupport.isCurrentRealNumber(left)
+                || !ProtosNumericValueSupport.isCurrentRealNumber(right)) {
+            throw new IllegalArgumentException("numeric comparison requires real Number values");
         }
 
         if (left instanceof ProtosIntegerValue leftInteger
@@ -191,6 +217,24 @@ final class ProtosCurrentNumericRelations {
                 ProtosNumericValueSupport.fractionComponentHash(fraction));
     }
 
+    /*
+     * A Complex whose imaginary part is mathematically zero equals its real part, so it takes
+     * that real normal hash. Otherwise the components' normal hashes, which already agree for
+     * mathematically equal components of any family, are combined deterministically.
+     */
+    private static Object complexNormalHash(Object complex, ProtosPrelude prelude) {
+        Object real = ProtosComplexNumericSupport.real(complex);
+        Object imaginary = ProtosComplexNumericSupport.imaginary(complex);
+        Object realHash = normalHash(real, prelude);
+        if (numericEquals(imaginary, EXACT_ZERO)) {
+            return realHash;
+        }
+        Object imaginaryHash = normalHash(imaginary, prelude);
+        return ProtosNumericValueSupport.integer(
+                31L * ProtosNumericValueSupport.integerHashCode(realHash)
+                        + ProtosNumericValueSupport.integerHashCode(imaginaryHash));
+    }
+
     private static final Object NAN_NORMAL_HASH = ProtosNumericValueSupport.integer(2146959360L);
 
     /** {@code prelude} owns a hash outside the signed-64 range. */
@@ -218,6 +262,10 @@ final class ProtosCurrentNumericRelations {
 
         if (ProtosNumericValueSupport.isFraction(value)) {
             return fractionNormalHash(value);
+        }
+
+        if (ProtosComplexNumericSupport.isComplex(value)) {
+            return complexNormalHash(value, prelude);
         }
 
         throw new IllegalArgumentException(

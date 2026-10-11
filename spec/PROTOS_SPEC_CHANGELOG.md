@@ -23,6 +23,25 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.455] - 2026-10-11
+
+### I090-C1 / D197-C — Canonical Complex numeric family
+- `spec/semantics/VALUES_AND_COLLECTIONS.md`: introduce `Complex` as a
+  canonical concrete Number family and Prelude binding. Its two components
+  are genuine real semantic numbers (Integer, Fraction, or Float), preserved
+  without binary64 coercion. An exact Integer-zero imaginary component yields
+  the real value; an imaginary Float `+0.0` or `-0.0` is retained.
+- Define exact trusted `Complex.recognizes`, component-wise family-sensitive
+  `===`, exact mathematical Number `==` across Complex and real families,
+  coherent normal/identity hashes, and Error on attempted numeric ordering.
+  Actor and isolated-parallel transfer preserve numeric families, signed-zero
+  distinctions, destination ownership, and repeated references.
+- No public Complex construction, component selectors, literals, arithmetic,
+  ordering, or principal-branch operations are specified. Complex values with
+  NaN or infinite Float components remain undefined in this revision.
+- `spec/runtime/ABSTRACT_RUNTIME.md` (informative): standard recognition
+  pseudocode now covers eight canonical owners, including Complex.
+
 ## [0.1.454] - 2026-10-11
 
 ### I090-B / D197-C — Fraction and exact rational arithmetic

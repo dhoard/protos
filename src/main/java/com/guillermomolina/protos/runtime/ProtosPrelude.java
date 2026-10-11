@@ -302,6 +302,11 @@ public final class ProtosPrelude {
         return requiredOrdinaryBinding("Float");
     }
 
+    /** D197-C (I090-C1): the canonical Complex prototype; no Complex value is minted here. */
+    public ProtosObjectValue complexPrototype() {
+        return requiredOrdinaryBinding("Complex");
+    }
+
 
     public ProtosObjectValue errorPrototype() {
         return errorPrototype;
