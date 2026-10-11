@@ -306,7 +306,11 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue identityMapPrototype = requirePrototype(bootstrapContext, "IdentityMap", ProtosObjectValue.rootObject());
         ProtosStandardIdentityMapProtocol.install(identityMapPrototype);
         ProtosObjectValue pathPrototype = requirePrototype(bootstrapContext, "Path", ProtosObjectValue.rootObject());
-        ProtosStandardPathProtocol.install(pathPrototype);
+        // The private kernel stays in the bootstrap context, where the Path source closures
+        // resolve it; it is never published through the Prelude.
+        ProtosObjectValue pathKernel =
+                requirePrototype(bootstrapContext, "_corePathKernel", ProtosObjectValue.rootObject());
+        ProtosStandardPathProtocol.install(pathPrototype, pathKernel);
         ProtosObjectValue ipAddressPrototype =
                 requirePrototype(
                         bootstrapContext, "IpAddress", ProtosObjectValue.rootObject());

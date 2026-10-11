@@ -63,14 +63,14 @@ public final class ProtosFilesystemNamespaceMutationFlow {
     @FunctionalInterface
     public interface ReplaceBackend {
         Cancellation replace(
-                ProtosPathValue sourcePath,
-                ProtosPathValue targetPath,
+                ProtosPathComponents sourcePath,
+                ProtosPathComponents targetPath,
                 MutationCompletion completion);
     }
 
     @FunctionalInterface
     public interface RemoveBackend {
-        Cancellation remove(ProtosPathValue path, MutationCompletion completion);
+        Cancellation remove(ProtosPathComponents path, MutationCompletion completion);
     }
 
     @FunctionalInterface
@@ -107,9 +107,12 @@ public final class ProtosFilesystemNamespaceMutationFlow {
             return failedFuture(
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
+        ProtosPathComponents capturedSource = new ProtosPathComponents(sourcePath.components());
+        ProtosPathComponents capturedTarget = new ProtosPathComponents(targetPath.components());
         return invoke(
                 activation,
-                completion -> replaceBackend.replace(sourcePath, targetPath, completion));
+                completion ->
+                        replaceBackend.replace(capturedSource, capturedTarget, completion));
     }
 
     public ProtosFutureValue remove(ProtosActivation activation, Object pathValue) {
@@ -119,7 +122,8 @@ public final class ProtosFilesystemNamespaceMutationFlow {
             return failedFuture(
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
-        return invoke(activation, completion -> removeBackend.remove(path, completion));
+        ProtosPathComponents capturedPath = new ProtosPathComponents(path.components());
+        return invoke(activation, completion -> removeBackend.remove(capturedPath, completion));
     }
 
     private ProtosFutureValue invoke(

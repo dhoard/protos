@@ -36,6 +36,18 @@ tests: [
         Assertions.signals(Error, () => {
             Path.relative().child(1)
         })
+    }),
+    Test("child non-string object error", () => {
+        Assertions.signals(Error, () => {
+            Path.relative().child(Path.relative())
+        })
+    }),
+    Test("child keeps opaque separators in one component", () => {
+        opaque: Path.relative().child("a/b").child("c\\d").child("e:f").child("C:").child("\\\\host")
+        Assertions.require(
+            opaque == Path.relative().child("a/b").child("c\\d").child("e:f").child("C:").child("\\\\host")
+        )
+        Assertions.require(opaque != Path.relative().child("a").child("b"))
     })
 ]
 tests.freeze()

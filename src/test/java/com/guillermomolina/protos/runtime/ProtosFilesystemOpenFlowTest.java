@@ -22,7 +22,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 
 class ProtosFilesystemOpenFlowTest {
@@ -34,7 +36,7 @@ class ProtosFilesystemOpenFlowTest {
 
         assertEquals(1, x.backend.invocations.size());
         Invocation invocation = x.backend.invocations.get(0);
-        assertSame(path, invocation.path);
+        assertEquals(new ProtosPathComponents(path.components()), invocation.path);
         assertTrue(invocation.options.readAccess());
         assertFalse(invocation.options.writeAccess());
         assertEquals(
@@ -45,6 +47,8 @@ class ProtosFilesystemOpenFlowTest {
         ProtosObjectValue file = new ProtosObjectValue(ProtosObjectValue.rootObject());
         AtomicInteger releases = new AtomicInteger();
         invocation.completion.succeeded(file, releases::incrementAndGet);
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        dispatch(x);
 
         assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
         assertSame(file, future.resolvedValue().orElseThrow());
@@ -129,6 +133,30 @@ class ProtosFilesystemOpenFlowTest {
     }
 
     @Test
+    void backendReceivesOneImmutableLiteralComponentSnapshot() throws Exception {
+        Fixture x = fixture();
+        List<String> components = List.of("dir", "a/b", "c\\d", "e:f");
+        x.flow.open(x.activation, new ProtosPathValue(x.prelude.pathPrototype(), components));
+
+        assertEquals(1, x.backend.invocations.size());
+        ProtosPathComponents captured = x.backend.invocations.get(0).path;
+        assertEquals(components, captured.components());
+        assertThrows(
+                UnsupportedOperationException.class, () -> captured.components().add("x"));
+    }
+
+    @Test
+    void invalidPathWithInvalidOptionsNeverReachesBackend() throws Exception {
+        Fixture x = fixture();
+        ProtosObjectValue noAccess = options();
+        noAccess.createLocalSlot("read", ProtosBooleanValue.FALSE);
+        ProtosFutureValue future =
+                x.flow.open(x.activation, new ProtosStringValue("not a Path"), noAccess);
+        assertInvalidIoArgument(x.prelude, future);
+        assertTrue(x.backend.invocations.isEmpty());
+    }
+
+    @Test
     void cancellationBeforeCommitWinsAndLateAcquisitionIsReleased() throws Exception {
         Fixture x = fixture();
         ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude));
@@ -160,6 +188,7 @@ class ProtosFilesystemOpenFlowTest {
         assertEquals(1, invocation.cancelCount.get());
 
         invocation.completion.failed();
+        dispatch(x);
         assertEquals(ProtosFutureValue.State.FAILED, future.state());
         assertSame(
                 x.prelude.standardErrorPrototype("IOError"),
@@ -192,9 +221,260 @@ class ProtosFilesystemOpenFlowTest {
         ProtosObjectValue secondFile = new ProtosObjectValue(ProtosObjectValue.rootObject());
         x.backend.invocations.get(1).completion.succeeded(secondFile, () -> {});
         x.backend.invocations.get(0).completion.succeeded(firstFile, () -> {});
+        dispatch(x);
 
         assertSame(firstFile, first.resolvedValue().orElseThrow());
         assertSame(secondFile, second.resolvedValue().orElseThrow());
+    }
+
+    @Test
+    void synchronousAcquisitionBuildsTheFileInsideTheOriginalCallWithoutQueueing()
+            throws Exception {
+        Fixture x = fixture();
+        ProtosObjectValue file = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        List<Thread> builders = new CopyOnWriteArrayList<>();
+        AtomicInteger releases = new AtomicInteger();
+        ProtosFilesystemOpenFlow flow =
+                flow(
+                        x,
+                        (path, options, completion) -> {
+                            completion.acquired(
+                                    recordingFile(builders, file), releases::incrementAndGet);
+                            return () -> {};
+                        });
+
+        ProtosFutureValue future = flow.open(x.activation, path(x.prelude));
+
+        assertSame(file, future.resolvedValue().orElseThrow());
+        assertEquals(List.of(Thread.currentThread()), builders);
+        assertEquals(0, x.activation.executionDomain().runnableCount());
+        assertEquals(0, releases.get());
+    }
+
+    @Test
+    void hostThreadAcquisitionHandsOverCustodyAndBuildsTheFileOnlyInTheOwner()
+            throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude));
+        Invocation invocation = x.backend.invocations.get(0);
+        ProtosObjectValue file = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        List<Thread> builders = new CopyOnWriteArrayList<>();
+        AtomicInteger releases = new AtomicInteger();
+
+        onHostThread(
+                () ->
+                        invocation.completion.acquired(
+                                recordingFile(builders, file), releases::incrementAndGet));
+
+        assertTrue(builders.isEmpty(), "the host callback must not build a guest File");
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertEquals(1, x.activation.executionDomain().runnableCount());
+
+        dispatch(x);
+
+        assertEquals(List.of(Thread.currentThread()), builders);
+        assertSame(file, future.resolvedValue().orElseThrow());
+        assertEquals(0, releases.get());
+    }
+
+    @Test
+    void hostThreadFailureBuildsTheIoErrorOnlyInTheOwner() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude));
+        Invocation invocation = x.backend.invocations.get(0);
+
+        onHostThread(invocation.completion::failed);
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+
+        dispatch(x);
+
+        assertEquals(ProtosFutureValue.State.FAILED, future.state());
+        assertSame(
+                x.prelude.standardErrorPrototype("IOError"),
+                future.failedError().orElseThrow().parent().orElseThrow());
+    }
+
+    @Test
+    void hostThreadAcquisitionAfterCancellationReleasesWithoutBuildingOrQueueing()
+            throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude));
+        Invocation invocation = x.backend.invocations.get(0);
+        assertTrue(future.cancelRequest());
+        List<Thread> builders = new CopyOnWriteArrayList<>();
+        AtomicInteger releases = new AtomicInteger();
+
+        onHostThread(
+                () ->
+                        invocation.completion.acquired(
+                                recordingFile(
+                                        builders,
+                                        new ProtosObjectValue(ProtosObjectValue.rootObject())),
+                                releases::incrementAndGet));
+
+        assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+        assertTrue(builders.isEmpty());
+        assertEquals(1, releases.get());
+        assertEquals(0, x.activation.executionDomain().runnableCount());
+    }
+
+    @Test
+    void duplicateHostAcquisitionPublishesOneFileAndReleasesTheOtherExactlyOnce()
+            throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude));
+        Invocation invocation = x.backend.invocations.get(0);
+        ProtosObjectValue first = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue second = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        List<Thread> firstBuilders = new CopyOnWriteArrayList<>();
+        List<Thread> secondBuilders = new CopyOnWriteArrayList<>();
+        AtomicInteger firstReleases = new AtomicInteger();
+        AtomicInteger secondReleases = new AtomicInteger();
+
+        onHostThread(
+                () ->
+                        invocation.completion.acquired(
+                                recordingFile(firstBuilders, first),
+                                firstReleases::incrementAndGet));
+        onHostThread(
+                () ->
+                        invocation.completion.acquired(
+                                recordingFile(secondBuilders, second),
+                                secondReleases::incrementAndGet));
+        dispatch(x);
+
+        assertSame(first, future.resolvedValue().orElseThrow());
+        assertEquals(1, firstBuilders.size());
+        assertTrue(secondBuilders.isEmpty(), "a rejected delivery builds no File");
+        assertEquals(0, firstReleases.get());
+        assertEquals(1, secondReleases.get());
+    }
+
+    @Test
+    void lateHostAcquisitionAfterTerminalFailureIsReleasedWithoutBuilding() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude));
+        Invocation invocation = x.backend.invocations.get(0);
+        onHostThread(invocation.completion::failed);
+        dispatch(x);
+        assertEquals(ProtosFutureValue.State.FAILED, future.state());
+        List<Thread> builders = new CopyOnWriteArrayList<>();
+        AtomicInteger releases = new AtomicInteger();
+
+        onHostThread(
+                () ->
+                        invocation.completion.acquired(
+                                recordingFile(
+                                        builders,
+                                        new ProtosObjectValue(ProtosObjectValue.rootObject())),
+                                releases::incrementAndGet));
+        dispatch(x);
+
+        assertEquals(ProtosFutureValue.State.FAILED, future.state());
+        assertTrue(builders.isEmpty());
+        assertEquals(1, releases.get());
+    }
+
+    @Test
+    void fileConstructionFailureInTheOwnerFailsWithIoErrorAndReleasesOnce() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.open(x.activation, path(x.prelude));
+        Invocation invocation = x.backend.invocations.get(0);
+        AtomicInteger releases = new AtomicInteger();
+
+        onHostThread(
+                () ->
+                        invocation.completion.acquired(
+                                () -> {
+                                    throw new IllegalArgumentException("invalid backend result");
+                                },
+                                releases::incrementAndGet));
+        assertEquals(0, releases.get());
+        dispatch(x);
+
+        assertEquals(ProtosFutureValue.State.FAILED, future.state());
+        assertSame(
+                x.prelude.standardErrorPrototype("IOError"),
+                future.failedError().orElseThrow().parent().orElseThrow());
+        assertEquals(1, releases.get());
+    }
+
+    @Test
+    void actorTerminationBeforeDeliveryReleasesQueuedAndLaterCustodyExactlyOnce()
+            throws Exception {
+        Fixture x = actorFixture();
+        ProtosFutureValue queued = x.flow.open(x.activation, path(x.prelude));
+        ProtosFutureValue late = x.flow.open(x.activation, path(x.prelude));
+        List<Thread> builders = new CopyOnWriteArrayList<>();
+        AtomicInteger queuedReleases = new AtomicInteger();
+        AtomicInteger lateReleases = new AtomicInteger();
+
+        onHostThread(
+                () ->
+                        x.backend.invocations.get(0).completion.acquired(
+                                recordingFile(
+                                        builders,
+                                        new ProtosObjectValue(ProtosObjectValue.rootObject())),
+                                queuedReleases::incrementAndGet));
+        assertEquals(1, x.activation.executionDomain().runnableCount());
+
+        assertTrue(x.actor.beginTermination());
+
+        assertEquals(1, queuedReleases.get());
+        assertEquals(0, x.activation.executionDomain().runnableCount());
+        assertEquals(ProtosFutureValue.State.CANCELLED, late.state());
+
+        onHostThread(
+                () ->
+                        x.backend.invocations.get(1).completion.acquired(
+                                recordingFile(
+                                        builders,
+                                        new ProtosObjectValue(ProtosObjectValue.rootObject())),
+                                lateReleases::incrementAndGet));
+        dispatch(x);
+
+        assertTrue(builders.isEmpty(), "no File is built for a terminating owner");
+        assertTrue(queued.resolvedValue().isEmpty());
+        assertEquals(1, queuedReleases.get());
+        assertEquals(1, lateReleases.get());
+    }
+
+    private static Supplier<ProtosObjectValue> recordingFile(
+            List<Thread> builders, ProtosObjectValue file) {
+        return () -> {
+            builders.add(Thread.currentThread());
+            return file;
+        };
+    }
+
+    /** Runs one backend callback on a distinct host thread and joins it deterministically. */
+    private static void onHostThread(Runnable callback) throws InterruptedException {
+        Throwable[] failure = new Throwable[1];
+        Thread host =
+                new Thread(
+                        () -> {
+                            try {
+                                callback.run();
+                            } catch (Throwable t) {
+                                failure[0] = t;
+                            }
+                        },
+                        "filesystem-host-callback");
+        host.start();
+        host.join();
+        assertNull(failure[0], "host callback failed");
+    }
+
+    private static void dispatch(Fixture x) {
+        while (x.activation.executionDomain().dispatchOne()) {
+            // Owner-domain delivery of host completions.
+        }
+    }
+
+    private static ProtosFilesystemOpenFlow flow(
+            Fixture x, ProtosFilesystemOpenFlow.Backend backend) {
+        return new ProtosFilesystemOpenFlow(
+                new ProtosObjectValue(ProtosObjectValue.rootObject()), x.activation, backend);
     }
 
     private static void assertInvalidIoArgument(
@@ -224,14 +504,35 @@ class ProtosFilesystemOpenFlowTest {
         RecordingBackend backend = new RecordingBackend();
         ProtosFilesystemOpenFlow flow =
                 new ProtosFilesystemOpenFlow(filesystem, activation, backend);
-        return new Fixture(prelude, activation, backend, flow);
+        return new Fixture(prelude, activation, backend, flow, null);
+    }
+
+    /** A flow whose owning domain belongs to a real Actor, so termination cuts over. */
+    private static Fixture actorFixture() throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(java.nio.file.Path.of("protos", "lib", "core"));
+        ProtosActor actor =
+                new ProtosActor(new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze());
+        ProtosActivation activation =
+                prelude.newModuleActivation(
+                        new ProtosActorModuleState(),
+                        null,
+                        prelude.newExecutionContext(),
+                        actor.executionDomain());
+        RecordingBackend backend = new RecordingBackend();
+        ProtosFilesystemOpenFlow flow =
+                new ProtosFilesystemOpenFlow(
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()), activation, backend);
+        return new Fixture(prelude, activation, backend, flow, actor);
     }
 
     private record Fixture(
             ProtosPrelude prelude,
             ProtosActivation activation,
             RecordingBackend backend,
-            ProtosFilesystemOpenFlow flow) {}
+            ProtosFilesystemOpenFlow flow,
+            ProtosActor actor) {}
 
     private static final class RecordingBackend
             implements ProtosFilesystemOpenFlow.Backend {
@@ -239,7 +540,7 @@ class ProtosFilesystemOpenFlowTest {
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosFilesystemOpenFlow.OpenCompletion completion) {
             Invocation invocation = new Invocation(path, options, completion);
@@ -249,13 +550,13 @@ class ProtosFilesystemOpenFlowTest {
     }
 
     private static final class Invocation {
-        private final ProtosPathValue path;
+        private final ProtosPathComponents path;
         private final ProtosFilesystemOpenOptions options;
         private final ProtosFilesystemOpenFlow.OpenCompletion completion;
         private final AtomicInteger cancelCount = new AtomicInteger();
 
         private Invocation(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosFilesystemOpenFlow.OpenCompletion completion) {
             this.path = path;

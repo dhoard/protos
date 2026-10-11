@@ -288,7 +288,22 @@ public final class ProtosParallelRuntime {
                     ProtosNumericValueSupport.copyCurrentNumberOrNull(v, a.prelude().orElse(null));
             if (copiedNumber != null) return copiedNumber;
             if(v instanceof ProtosStringValue x)return x.copyForRuntime();
-            if(v instanceof ProtosPathValue x)return new ProtosPathValue(a.prelude().orElseThrow().pathPrototype(),x.components());
+            if(v instanceof ProtosPathValue x){
+                // I094 source stage: only the inert components cross, once per source identity.
+                if(memo.containsKey(v))return memo.get(v);
+                if(!(memo instanceof TransferMemo tracked)||tracked.materializing)
+                    throw new IllegalStateException("I094 internal inconsistency: Path outside a P source stage");
+                ProtosPathComponents y=new ProtosPathComponents(x.components());
+                tracked.semanticRecords=true;memo.put(v,y);return y;
+            }
+            if(v instanceof ProtosPathComponents x){
+                // I094 destination stage: one destination-Prelude Path per descriptor identity.
+                if(!(memo instanceof TransferMemo tracked)||!tracked.materializing)
+                    throw new IllegalStateException("I094 internal inconsistency: Path descriptor outside a P destination stage");
+                if(memo.containsKey(v))return memo.get(v);
+                ProtosPathValue y=new ProtosPathValue(a.prelude().orElseThrow().pathPrototype(),x.components());
+                memo.put(v,y);return y;
+            }
             if(v instanceof ProtosEncodingValue x){
                 memo.put(v,x);return x.transferForParallelRuntime();
             }

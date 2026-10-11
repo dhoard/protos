@@ -28,7 +28,7 @@ import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.ProtosPathValue;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.IOException;
@@ -104,27 +104,27 @@ public final class ProtosStandardFilesystemProtocol {
     @FunctionalInterface
     public interface Backend {
         ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 OpenCompletion completion);
 
         default ProtosFilesystemNamespaceMutationFlow.Cancellation replace(
-                ProtosPathValue sourcePath,
-                ProtosPathValue targetPath,
+                ProtosPathComponents sourcePath,
+                ProtosPathComponents targetPath,
                 ProtosFilesystemNamespaceMutationFlow.MutationCompletion completion) {
             completion.failed();
             return () -> {};
         }
 
         default ProtosFilesystemNamespaceMutationFlow.Cancellation remove(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemNamespaceMutationFlow.MutationCompletion completion) {
             completion.failed();
             return () -> {};
         }
 
         default ProtosFilesystemTreeObservationFlow.Cancellation entries(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
             completion.failed();
             return () -> {};
@@ -341,7 +341,7 @@ public final class ProtosStandardFilesystemProtocol {
         return new Backend() {
             @Override
             public ProtosFilesystemOpenFlow.Cancellation open(
-                    ProtosPathValue path,
+                    ProtosPathComponents path,
                     ProtosFilesystemOpenOptions options,
                     OpenCompletion completion) {
                 if (!readOnlyExisting(options)) {
@@ -353,7 +353,7 @@ public final class ProtosStandardFilesystemProtocol {
 
             @Override
             public ProtosFilesystemTreeObservationFlow.Cancellation entries(
-                    ProtosPathValue path,
+                    ProtosPathComponents path,
                     ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
                 return capturedBackend.entries(path, completion);
             }
@@ -387,14 +387,18 @@ public final class ProtosStandardFilesystemProtocol {
                         "backend File capability shape does not match captured open authority");
             }
 
-            ProtosObjectValue file =
-                    ProtosStandardFileProtocol.create(
-                            bytesPrototype, constructionActivation, resource, capabilities);
-            completion.succeeded(file, releaseIfUntransferred);
         } catch (RuntimeException invalidBackendDescriptor) {
             releaseSafely(releaseIfUntransferred);
             completion.failed();
+            return;
         }
+        // I094: only inert backend custody crosses here; the guest File is constructed by the
+        // open flow inside the owning Actor execution.
+        completion.acquired(
+                () ->
+                        ProtosStandardFileProtocol.create(
+                                bytesPrototype, constructionActivation, resource, capabilities),
+                releaseIfUntransferred);
     }
 
     private static void releaseSafely(Runnable release) {

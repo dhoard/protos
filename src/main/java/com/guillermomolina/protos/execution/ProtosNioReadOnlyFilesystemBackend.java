@@ -19,7 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
-import com.guillermomolina.protos.runtime.ProtosPathValue;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
@@ -85,7 +85,7 @@ public final class ProtosNioReadOnlyFilesystemBackend
 
     @Override
     public ProtosFilesystemOpenFlow.Cancellation open(
-            ProtosPathValue path,
+            ProtosPathComponents path,
             ProtosFilesystemOpenOptions options,
             ProtosStandardFilesystemProtocol.OpenCompletion completion) {
         Objects.requireNonNull(path, "path");
@@ -130,7 +130,7 @@ public final class ProtosNioReadOnlyFilesystemBackend
         }
     }
 
-    private String permittedDirectChild(ProtosPathValue path) {
+    private String permittedDirectChild(ProtosPathComponents path) {
         if (path.components().size() != 1) {
             return null;
         }

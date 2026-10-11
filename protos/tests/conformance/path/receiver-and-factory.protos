@@ -27,6 +27,26 @@ tests: [
         Assertions.signals(Error, () => {
             Path.child("x")
         })
+    }),
+    Test("delegated path equality receiver error", () => {
+        Assertions.signals(Error, () => {
+            Fake: Path {}
+            Fake == Path.relative()
+        })
+    }),
+    Test("factory equality and hash receiver error", () => {
+        Assertions.signals(Error, () => {
+            Path == Path.relative()
+        })
+        Assertions.signals(Error, () => {
+            Path.hash()
+        })
+    }),
+    Test("delegated factory mints a canonical path", () => {
+        Factory: Path {}
+        minted: Factory.relative().child("x")
+        Assertions.require(minted == Path.relative().child("x"))
+        Assertions.require(minted.hash() == Path.relative().child("x").hash())
     })
 ]
 tests.freeze()

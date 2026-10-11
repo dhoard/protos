@@ -27,8 +27,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.ProtosPathValue;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -203,14 +202,14 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
     }
 
     private static List<ProtosFilesystemTreeObservationFlow.Entry> entries(
-            ProtosStandardFilesystemProtocol.Backend backend, ProtosPathValue path) {
+            ProtosStandardFilesystemProtocol.Backend backend, ProtosPathComponents path) {
         List<ProtosFilesystemTreeObservationFlow.Entry> result = entriesOrNull(backend, path);
         assertNotNull(result);
         return result;
     }
 
     private static List<ProtosFilesystemTreeObservationFlow.Entry> entriesOrNull(
-            ProtosStandardFilesystemProtocol.Backend backend, ProtosPathValue path) {
+            ProtosStandardFilesystemProtocol.Backend backend, ProtosPathComponents path) {
         AtomicReference<List<ProtosFilesystemTreeObservationFlow.Entry>> result =
                 new AtomicReference<>();
         AtomicBoolean failed = new AtomicBoolean();
@@ -248,7 +247,7 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
     }
 
     private static boolean openSucceeded(
-            ProtosStandardFilesystemProtocol.Backend backend, ProtosPathValue path) {
+            ProtosStandardFilesystemProtocol.Backend backend, ProtosPathComponents path) {
         AtomicBoolean succeeded = new AtomicBoolean();
         AtomicBoolean failed = new AtomicBoolean();
         backend.open(
@@ -279,7 +278,7 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
     }
 
     private static byte[] read(
-            ProtosStandardFilesystemProtocol.Backend backend, ProtosPathValue path) {
+            ProtosStandardFilesystemProtocol.Backend backend, ProtosPathComponents path) {
         AtomicReference<ProtosFileFlow.Resource> resource = new AtomicReference<>();
         AtomicReference<Runnable> release = new AtomicReference<>();
         AtomicBoolean failed = new AtomicBoolean();
@@ -339,7 +338,7 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
     }
 
     private static byte[] readAll(
-            ProtosStandardFilesystemProtocol.Backend backend, ProtosPathValue path) {
+            ProtosStandardFilesystemProtocol.Backend backend, ProtosPathComponents path) {
         AtomicReference<ProtosFileFlow.Resource> resource = new AtomicReference<>();
         AtomicReference<Runnable> release = new AtomicReference<>();
         AtomicBoolean failed = new AtomicBoolean();
@@ -405,9 +404,8 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
         return bytes.toByteArray();
     }
 
-    private static ProtosPathValue relative(String... names) {
-        return new ProtosPathValue(
-                ProtosObjectValue.rootObject(), java.util.List.of(names));
+    private static ProtosPathComponents relative(String... names) {
+        return new ProtosPathComponents(java.util.List.of(names));
     }
 
     private record CaptureResult(

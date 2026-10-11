@@ -1112,7 +1112,7 @@ fixture.activation());
 
         @Override
         public com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow.Cancellation open(
-                com.guillermomolina.protos.runtime.ProtosPathValue path,
+                com.guillermomolina.protos.runtime.ProtosPathComponents path,
                 com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             String name = portableName(path);
@@ -1138,7 +1138,7 @@ fixture.activation());
         }
 
         private static String portableName(
-                com.guillermomolina.protos.runtime.ProtosPathValue path) {
+                com.guillermomolina.protos.runtime.ProtosPathComponents path) {
             if (path.components().isEmpty()) {
                 return null;
             }

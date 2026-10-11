@@ -21,7 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosFilesystemNamespaceMutationFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
-import com.guillermomolina.protos.runtime.ProtosPathValue;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;
 import com.oracle.truffle.api.TruffleFile;
 import com.oracle.truffle.api.TruffleLanguage;
 import java.io.IOException;
@@ -138,7 +138,7 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
 
     @Override
     public ProtosFilesystemOpenFlow.Cancellation open(
-            ProtosPathValue path,
+            ProtosPathComponents path,
             ProtosFilesystemOpenOptions options,
             ProtosStandardFilesystemProtocol.OpenCompletion completion) {
         Objects.requireNonNull(path, "path");
@@ -247,8 +247,8 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
 
     @Override
     public ProtosFilesystemNamespaceMutationFlow.Cancellation replace(
-            ProtosPathValue sourcePath,
-            ProtosPathValue targetPath,
+            ProtosPathComponents sourcePath,
+            ProtosPathComponents targetPath,
             ProtosFilesystemNamespaceMutationFlow.MutationCompletion completion) {
         Objects.requireNonNull(sourcePath, "sourcePath");
         Objects.requireNonNull(targetPath, "targetPath");
@@ -266,7 +266,7 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
 
     @Override
     public ProtosFilesystemNamespaceMutationFlow.Cancellation remove(
-            ProtosPathValue path,
+            ProtosPathComponents path,
             ProtosFilesystemNamespaceMutationFlow.MutationCompletion completion) {
         Objects.requireNonNull(path, "path");
         Objects.requireNonNull(completion, "completion");
@@ -282,7 +282,7 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
 
     @Override
     public ProtosFilesystemTreeObservationFlow.Cancellation entries(
-            ProtosPathValue path,
+            ProtosPathComponents path,
             ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
         Objects.requireNonNull(path, "path");
         Objects.requireNonNull(completion, "completion");
@@ -352,7 +352,7 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
      * Resolves a namespace-mutation Path. The empty Path denotes the base itself, which has no
      * final entry component to replace or remove, so it is rejected.
      */
-    private TruffleFile resolveEntryOrNull(ProtosPathValue path) {
+    private TruffleFile resolveEntryOrNull(ProtosPathComponents path) {
         return path.components().isEmpty() ? null : resolveOrNull(path);
     }
 
@@ -361,7 +361,7 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
      * {@code null} when the provider cannot represent a component as one child name. Resolution
      * is purely lexical: it performs no I/O, so nothing is checked here and later used elsewhere.
      */
-    private TruffleFile resolveOrNull(ProtosPathValue path) {
+    private TruffleFile resolveOrNull(ProtosPathComponents path) {
         TruffleFile current = base;
         try {
             for (String component : path.components()) {

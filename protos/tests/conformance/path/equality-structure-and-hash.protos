@@ -85,6 +85,24 @@ tests: [
         Assertions.signals(Error, () => {
             Path.relative().parentComponent()
         })
+    }),
+    Test("equality against another type is false", () => {
+        Assertions.require((Path.relative().child("a") == "a") == false)
+        Assertions.require((Path.relative() == Path) == false)
+    }),
+    Test("empty path hash is one", () => {
+        Assertions.require(Path.relative().hash() == 1)
+    }),
+    Test("hash is the 32-bit component sequence hash", () => {
+        Assertions.require(Path.relative().child("a").hash() == 128)
+        Assertions.require(Path.relative().child("a").child("b").hash() == 4066)
+    }),
+    Test("hash wraps to a negative signed 32-bit value", () => {
+        Assertions.require(Path.relative().child("zzzzzzzz").hash() == 0 - 1910022881)
+    }),
+    Test("hash stays within signed 32 bits after overflow", () => {
+        h: Path.relative().child("zzzzzzzz").child("zzzzzzzz").child("zzzzzzzz").hash()
+        Assertions.require((h >= 0 - 2147483648) && (h < 2147483648))
     })
 ]
 tests.freeze()

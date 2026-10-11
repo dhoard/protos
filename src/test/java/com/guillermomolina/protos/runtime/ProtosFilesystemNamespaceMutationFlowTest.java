@@ -62,6 +62,25 @@ final class ProtosFilesystemNamespaceMutationFlowTest {
     }
 
     @Test
+    void replaceAndRemovePassOnlyCapturedComponentSnapshotsInOrder() throws Exception {
+        Fixture x = fixture();
+        x.flow.replace(
+                x.activation,
+                new ProtosPathValue(x.prelude.pathPrototype(), List.of("dir", "a/b")),
+                path(x.prelude, "c\\d"));
+        x.flow.remove(x.activation, path(x.prelude, "e:f"));
+
+        assertEquals(
+                List.of(
+                        new ProtosPathComponents(List.of("dir", "a/b")),
+                        new ProtosPathComponents(List.of("c\\d"))),
+                x.backend.invocations.remove().paths);
+        assertEquals(
+                List.of(new ProtosPathComponents(List.of("e:f"))),
+                x.backend.invocations.remove().paths);
+    }
+
+    @Test
     void preCommitCancellationPreventsNamespaceEffectAndReachesBackendHook() throws Exception {
         Fixture x = fixture();
         ProtosFutureValue future =
@@ -242,31 +261,34 @@ final class ProtosFilesystemNamespaceMutationFlowTest {
         private final ArrayDeque<Invocation> invocations = new ArrayDeque<>();
 
         private ProtosFilesystemNamespaceMutationFlow.Cancellation replace(
-                ProtosPathValue sourcePath,
-                ProtosPathValue targetPath,
+                ProtosPathComponents sourcePath,
+                ProtosPathComponents targetPath,
                 ProtosFilesystemNamespaceMutationFlow.MutationCompletion completion) {
             replaceCalls.incrementAndGet();
-            Invocation invocation = new Invocation(completion);
+            Invocation invocation = new Invocation(List.of(sourcePath, targetPath), completion);
             invocations.add(invocation);
             return invocation.cancellations::incrementAndGet;
         }
 
         private ProtosFilesystemNamespaceMutationFlow.Cancellation remove(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemNamespaceMutationFlow.MutationCompletion completion) {
             removeCalls.incrementAndGet();
-            Invocation invocation = new Invocation(completion);
+            Invocation invocation = new Invocation(List.of(path), completion);
             invocations.add(invocation);
             return invocation.cancellations::incrementAndGet;
         }
     }
 
     private static final class Invocation {
+        private final List<ProtosPathComponents> paths;
         private final ProtosFilesystemNamespaceMutationFlow.MutationCompletion completion;
         private final AtomicInteger cancellations = new AtomicInteger();
 
         private Invocation(
+                List<ProtosPathComponents> paths,
                 ProtosFilesystemNamespaceMutationFlow.MutationCompletion completion) {
+            this.paths = paths;
             this.completion = completion;
         }
     }

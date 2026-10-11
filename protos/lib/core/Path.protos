@@ -13,4 +13,75 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Path: {}
+// The canonical Path prototype (D169). Construction, child validation,
+// structural equality and hash are ordinary source closures. They reach the
+// immutable component carrier only through the private bootstrap kernel
+// below, which the runtime fills with exactly mint, componentCount and
+// componentAt; the kernel never owns Path semantics.
+Path: {
+    relative: () => {
+        _corePathKernel.mint(this)
+    }
+
+    child: (name) => {
+        (_corePathKernel.componentCount(this) < 0).ifTrue(() => {
+            Error().signal()
+        })
+        String.recognizes(name).ifFalse(() => {
+            Error().signal()
+        })
+        ((name == "") || (name == ".") || (name == "..")).ifTrue(() => {
+            Error().signal()
+        })
+
+        _corePathKernel.mint(this, name)
+    }
+
+    // Installed by the runtime as `==`; a slot target cannot spell an operator.
+    _corePathEquals: (other) => {
+        size: _corePathKernel.componentCount(this)
+        (size < 0).ifTrue(() => {
+            Error().signal()
+        })
+
+        result: _corePathKernel.componentCount(other) == size
+        index: 0
+        (() => result && (index < size)).whileTrue() {
+            mine: _corePathKernel.componentAt(this, index)
+            theirs: _corePathKernel.componentAt(other, index)
+            (mine == theirs).ifFalse(() => {
+                result = false
+            })
+            index = index + 1
+        }
+        result
+    }
+
+    // The 32-bit signed polynomial hash of the ordered component Strings:
+    // h = 31 * h + component.hash(), starting at 1. Integer.mod keeps the
+    // dividend's sign, so a negative remainder is lifted into 0..2^32-1.
+    hash: () => {
+        size: _corePathKernel.componentCount(this)
+        (size < 0).ifTrue(() => {
+            Error().signal()
+        })
+
+        h: 1
+        index: 0
+        (() => index < size).whileTrue() {
+            h = (31 * h + _corePathKernel.componentAt(this, index).hash()).mod(4294967296)
+            (h < 0).ifTrue(() => {
+                h = h + 4294967296
+            })
+            index = index + 1
+        }
+        (h >= 2147483648).ifTrue(() => {
+            h = h - 4294967296
+        })
+        h
+    }
+}
+
+// Private bootstrap kernel; filled and frozen by the runtime. It is neither a
+// Path slot nor a Prelude binding.
+_corePathKernel: {}

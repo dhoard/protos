@@ -20,7 +20,7 @@ import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
-import com.guillermomolina.protos.runtime.ProtosPathValue;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
@@ -79,7 +79,7 @@ public final class ProtosNioReadOnlyTreeFilesystemBackend
 
     @Override
     public ProtosFilesystemOpenFlow.Cancellation open(
-            ProtosPathValue path,
+            ProtosPathComponents path,
             ProtosFilesystemOpenOptions options,
             ProtosStandardFilesystemProtocol.OpenCompletion completion) {
         Objects.requireNonNull(path, "path");
@@ -134,7 +134,7 @@ public final class ProtosNioReadOnlyTreeFilesystemBackend
 
     @Override
     public ProtosFilesystemTreeObservationFlow.Cancellation entries(
-            ProtosPathValue path,
+            ProtosPathComponents path,
             ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
         Objects.requireNonNull(path, "path");
         Objects.requireNonNull(completion, "completion");
@@ -347,7 +347,7 @@ public final class ProtosNioReadOnlyTreeFilesystemBackend
         return name;
     }
 
-    private List<String> permittedDirectoryComponents(ProtosPathValue path) {
+    private List<String> permittedDirectoryComponents(ProtosPathComponents path) {
         ArrayList<String> result = new ArrayList<>(path.components().size());
         for (String name : path.components()) {
             if (!portableNativeComponent(name)) {
@@ -399,7 +399,7 @@ public final class ProtosNioReadOnlyTreeFilesystemBackend
         }
     }
 
-    private List<String> permittedRelativeComponents(ProtosPathValue path) {
+    private List<String> permittedRelativeComponents(ProtosPathComponents path) {
         if (path.components().isEmpty()) {
             return null;
         }

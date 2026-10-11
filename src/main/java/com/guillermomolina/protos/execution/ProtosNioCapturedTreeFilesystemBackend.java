@@ -20,7 +20,7 @@ import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
-import com.guillermomolina.protos.runtime.ProtosPathValue;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;
 import java.io.IOException;
 import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
@@ -301,7 +301,7 @@ final class ProtosNioCapturedTreeFilesystemBackend
 
     @Override
     public ProtosFilesystemOpenFlow.Cancellation open(
-            ProtosPathValue path,
+            ProtosPathComponents path,
             ProtosFilesystemOpenOptions options,
             ProtosStandardFilesystemProtocol.OpenCompletion completion) {
         Objects.requireNonNull(path, "path");
@@ -339,7 +339,7 @@ final class ProtosNioCapturedTreeFilesystemBackend
 
     @Override
     public ProtosFilesystemTreeObservationFlow.Cancellation entries(
-            ProtosPathValue path,
+            ProtosPathComponents path,
             ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
         Objects.requireNonNull(path, "path");
         Objects.requireNonNull(completion, "completion");
@@ -361,7 +361,7 @@ final class ProtosNioCapturedTreeFilesystemBackend
         return () -> {};
     }
 
-    private DirectoryNode resolveDirectory(ProtosPathValue path) {
+    private DirectoryNode resolveDirectory(ProtosPathComponents path) {
         List<String> components = normalRelativeComponents(path, true);
         if (components == null) {
             return null;
@@ -431,7 +431,7 @@ final class ProtosNioCapturedTreeFilesystemBackend
         return buffer.array();
     }
 
-    private EntryNode resolveEntry(ProtosPathValue path) {
+    private EntryNode resolveEntry(ProtosPathComponents path) {
         List<String> components = normalRelativeComponents(path, false);
         if (components == null) {
             return null;
@@ -459,7 +459,7 @@ final class ProtosNioCapturedTreeFilesystemBackend
     }
 
     private static List<String> normalRelativeComponents(
-            ProtosPathValue path, boolean allowEmpty) {
+            ProtosPathComponents path, boolean allowEmpty) {
         if (!allowEmpty && path.components().isEmpty()) {
             return null;
         }

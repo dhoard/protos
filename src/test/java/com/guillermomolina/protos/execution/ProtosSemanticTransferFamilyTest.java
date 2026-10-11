@@ -408,6 +408,71 @@ final class ProtosSemanticTransferFamilyTest {
     }
 
     @Test
+    void pPathCapturesAsInertDescriptorsAndMaterializesWithTheDestinationPrelude()
+            throws Exception {
+        ProtosPrelude destinationPrelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosPathValue shared = new ProtosPathValue(prelude.pathPrototype(), List.of("a", "b"));
+        ProtosPathValue twin = new ProtosPathValue(prelude.pathPrototype(), List.of("a", "b"));
+        ProtosArrayValue array = prelude.newArray(List.of(shared, twin));
+        ProtosMapValue map = prelude.newMap();
+        ProtosNumericHashKey hash = ProtosNumericHashKey.fromIdentity(shared);
+        map.append(shared, hash, twin);
+        boolean[] records = new boolean[1];
+
+        List<Object> detached =
+                ProtosParallelRuntime.captureValuesForTesting(
+                        List.of(shared, shared, twin, array, map),
+                        prelude.newModuleActivation(),
+                        records);
+
+        assertTrue(records[0], "a Path forces the destination materialization stage");
+        ProtosPathComponents descriptor =
+                assertInstanceOf(ProtosPathComponents.class, detached.get(0));
+        assertSame(descriptor, detached.get(1), "the memo keeps one descriptor per source Path");
+        assertNotSame(descriptor, detached.get(2));
+        assertEquals(List.of("a", "b"), descriptor.components());
+        assertThrows(UnsupportedOperationException.class, () -> descriptor.components().add("c"));
+        ProtosArrayValue detachedArray = assertInstanceOf(ProtosArrayValue.class, detached.get(3));
+        assertSame(descriptor, detachedArray.indexedAt(0));
+
+        List<Object> delivered =
+                ProtosParallelRuntime.materializeValuesForTesting(
+                        detached, destinationPrelude.newModuleActivation());
+
+        ProtosPathValue copied = assertInstanceOf(ProtosPathValue.class, delivered.get(0));
+        ProtosPathValue copiedTwin = assertInstanceOf(ProtosPathValue.class, delivered.get(2));
+        assertNotSame(shared, copied);
+        assertSame(copied, delivered.get(1));
+        assertNotSame(copied, copiedTwin);
+        assertEquals(List.of("a", "b"), copiedTwin.components());
+        assertSame(
+                destinationPrelude.pathPrototype(),
+                copied.representedDelegationParent(destinationPrelude));
+        ProtosArrayValue copiedArray = assertInstanceOf(ProtosArrayValue.class, delivered.get(3));
+        assertSame(copied, copiedArray.indexedAt(0));
+        assertSame(copiedTwin, copiedArray.indexedAt(1));
+        ProtosMapValue.Entry entry =
+                assertInstanceOf(ProtosMapValue.class, delivered.get(4)).keyedSnapshot().get(0);
+        assertSame(copied, entry.key());
+        assertSame(copiedTwin, entry.value());
+        assertEquals(hash, entry.recordedHash());
+    }
+
+    @Test
+    void pTransferWithoutPathOrRecordsKeepsTheSingleStage() {
+        ProtosArrayValue array =
+                prelude.newArray(List.of(new ProtosStringValue("a"), new ProtosIntegerValue(1L)));
+        boolean[] records = new boolean[1];
+
+        List<Object> detached =
+                ProtosParallelRuntime.captureValuesForTesting(
+                        List.of(array), prelude.newModuleActivation(), records);
+
+        assertFalse(records[0]);
+        assertInstanceOf(ProtosArrayValue.class, detached.get(0));
+    }
+
+    @Test
     void transferRecordIsAnInertInternalNodeWithoutGuestSurface() {
         Class<ProtosSemanticTransferRecord> record = ProtosSemanticTransferRecord.class;
         assertFalse(ProtosObjectValue.class.isAssignableFrom(record), "a record is not a guest value");

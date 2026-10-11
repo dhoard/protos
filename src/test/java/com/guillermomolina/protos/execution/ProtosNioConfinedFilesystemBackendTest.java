@@ -22,8 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosFilesystemNamespaceMutationFlow;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.ProtosPathValue;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -230,6 +229,24 @@ final class ProtosNioConfinedFilesystemBackendTest {
     }
 
     @Test
+    void inertDescriptorIsStillConfinedToOneAllowedDirectChild() throws Exception {
+        Path directory = Files.createDirectory(authorityRoot.resolve("source"));
+        Path child = Files.writeString(directory.resolve("child"), "x", StandardCharsets.UTF_8);
+
+        try (ProtosNioConfinedFilesystemBackend backend = backend(Set.of("source"))) {
+            assumeSecure(backend);
+            Completion nested = new Completion();
+            backend.remove(new ProtosPathComponents(List.of("source", "child")), nested);
+            Completion separator = new Completion();
+            backend.remove(path("source/child"), separator);
+
+            assertTrue(nested.failed);
+            assertTrue(separator.failed);
+            assertEquals("x", Files.readString(child, StandardCharsets.UTF_8));
+        }
+    }
+
+    @Test
     void unsupportedSecureDirectoryProviderFailsClosed() throws Exception {
         Path entry = Files.writeString(authorityRoot.resolve("entry"), "x", StandardCharsets.UTF_8);
         try (ProtosNioConfinedFilesystemBackend backend = backend(Set.of("entry"))) {
@@ -256,9 +273,8 @@ final class ProtosNioConfinedFilesystemBackendTest {
                 "host provider has no SecureDirectoryStream");
     }
 
-    private static ProtosPathValue path(String name) {
-        return new ProtosPathValue(
-                ProtosObjectValue.rootObject(), List.of(name));
+    private static ProtosPathComponents path(String name) {
+        return new ProtosPathComponents(List.of(name));
     }
 
     private static final class Completion

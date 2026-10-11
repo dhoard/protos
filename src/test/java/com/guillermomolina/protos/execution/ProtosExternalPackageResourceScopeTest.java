@@ -570,7 +570,7 @@ final class ProtosExternalPackageResourceScopeTest {
             implements ProtosStandardFilesystemProtocol.CapturedBackend {
         @Override
         public com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow.Cancellation open(
-                com.guillermomolina.protos.runtime.ProtosPathValue path,
+                com.guillermomolina.protos.runtime.ProtosPathComponents path,
                 com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             completion.failed();
@@ -579,7 +579,7 @@ final class ProtosExternalPackageResourceScopeTest {
 
         @Override
         public ProtosFilesystemTreeObservationFlow.Cancellation entries(
-                com.guillermomolina.protos.runtime.ProtosPathValue path,
+                com.guillermomolina.protos.runtime.ProtosPathComponents path,
                 ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
             completion.failed();
             return () -> {};

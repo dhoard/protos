@@ -54,7 +54,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardHashSupport.java", 3),
                     Map.entry("execution/ProtosStandardFileProtocol.java", 10),
                     Map.entry("execution/ProtosStandardFilesystemProtocol.java", 1),
-                    Map.entry("execution/ProtosStandardPathProtocol.java", 4),
+                    Map.entry("execution/ProtosStandardPathProtocol.java", 3),
                     Map.entry("execution/ProtosStandardIpAddressProtocol.java", 1),
                     Map.entry("execution/ProtosStandardIpEndpointProtocol.java", 1),
                     Map.entry("execution/ProtosStandardNetworkProtocol.java", 2),
@@ -151,7 +151,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(34, actualCore.size());
-        assertEquals(132, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(131, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -270,10 +270,16 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "IdentityMap",
                 prelude.identityMapPrototype(),
                 Set.of("call", "at", "atIfAbsent", "atPut", "containsKey", "remove", "size", "each"));
-        assertNativeSelectors(
-                "Path",
-                prelude.pathPrototype(),
-                Set.of("relative", "child", "==", "hash"));
+        // I094-A1: Path behavior is source-backed; only the private kernel is native.
+        assertNativeSelectors("Path", prelude.pathPrototype(), Set.of());
+        assertEquals(
+                Set.of("relative", "child", "==", "hash"),
+                prelude.pathPrototype().localSlotsSnapshot().keySet(),
+                "unexpected standard Path prototype surface");
+        assertSourceBacked(prelude.pathPrototype(), "relative");
+        assertSourceBacked(prelude.pathPrototype(), "child");
+        assertSourceBacked(prelude.pathPrototype(), "==");
+        assertSourceBacked(prelude.pathPrototype(), "hash");
         ProtosObjectValue ipAddressPrototype = prelude.ipAddressPrototypeForRuntime();
         assertTrue(ipAddressPrototype.isFrozen(), "standard IpAddress prototype must be frozen");
         assertTrue(

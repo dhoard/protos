@@ -19,6 +19,7 @@ package com.guillermomolina.protos.runtime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
 
 /**
  * I024-A host-neutral asynchronous substrate for Filesystem {@code entries} observation.
@@ -61,7 +62,7 @@ public final class ProtosFilesystemTreeObservationFlow {
 
     @FunctionalInterface
     public interface EntriesBackend {
-        Cancellation entries(ProtosPathValue path, EntriesCompletion completion);
+        Cancellation entries(ProtosPathComponents path, EntriesCompletion completion);
     }
 
     /**
@@ -101,46 +102,62 @@ public final class ProtosFilesystemTreeObservationFlow {
             return failedFuture(
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
+        ProtosPathComponents capturedPath = new ProtosPathComponents(path.components());
 
         Invocation invocation = begin(activation);
         if (invocation.terminal()) {
             return invocation.future();
         }
 
+        invocation.enterBackendCall();
         try {
             invocation.install(
                     entriesBackend.entries(
-                            path,
+                            capturedPath,
                             new EntriesCompletion() {
                                 @Override
                                 public void succeeded(List<Entry> entries) {
+                                    // The host callback captures only the inert snapshot.
                                     List<Entry> snapshot;
-                                    ProtosObjectValue value;
                                     try {
                                         snapshot = snapshotEntries(entries);
-                                        if (invocation.terminal()) {
-                                            return;
-                                        }
-                                        value =
-                                                Objects.requireNonNull(
-                                                        materializer.entries(snapshot),
-                                                        "entries materializer result");
                                     } catch (RuntimeException invalidBackendResult) {
-                                        invocation.fail();
+                                        invocation.deliver(invocation::fail);
                                         return;
                                     }
-                                    invocation.succeed(value);
+                                    if (invocation.terminal()) {
+                                        return;
+                                    }
+                                    invocation.deliver(() -> publish(invocation, snapshot));
                                 }
 
                                 @Override
                                 public void failed() {
-                                    invocation.fail();
+                                    invocation.deliver(invocation::fail);
                                 }
                             }));
         } catch (RuntimeException backendFailure) {
             invocation.fail();
+        } finally {
+            invocation.exitBackendCall();
         }
         return invocation.future();
+    }
+
+    /** Owning-domain construction of the guest entries Array, only while it can be accepted. */
+    private boolean publish(Invocation invocation, List<Entry> snapshot) {
+        if (invocation.terminal()) {
+            return false;
+        }
+        ProtosObjectValue value;
+        try {
+            value =
+                    Objects.requireNonNull(
+                            materializer.entries(snapshot), "entries materializer result");
+        } catch (RuntimeException invalidBackendResult) {
+            return invocation.fail();
+        }
+        return invocation.succeed(value);
     }
 
     private Invocation begin(ProtosActivation activation) {
@@ -158,6 +175,7 @@ public final class ProtosFilesystemTreeObservationFlow {
         private final ProtosIoLifecycle lifecycle;
         private final ProtosIoOperation operation;
         private final CancellationBridge cancellationBridge = new CancellationBridge();
+        private volatile Thread synchronousCaller;
 
         Invocation(ProtosActivation activation, ProtosIoLifecycle lifecycle) {
             this.activation = activation;
@@ -180,22 +198,45 @@ public final class ProtosFilesystemTreeObservationFlow {
             cancellationBridge.install(cancellation);
         }
 
-        void succeed(ProtosObjectValue value) {
-            Objects.requireNonNull(value, "value");
-            synchronized (lifecycle) {
-                if (!operation.terminal() && operation.commit()) {
-                    operation.resolve(value);
-                }
+        void enterBackendCall() {
+            synchronousCaller = Thread.currentThread();
+        }
+
+        void exitBackendCall() {
+            synchronousCaller = null;
+        }
+
+        /**
+         * Runs {@code action} directly only inside the owner's synchronous backend call. Any other
+         * completion is a host callback: the guest-visible outcome is built by a targeted runtime
+         * completion of this operation's Future inside the owning Actor. A terminating owner
+         * cancels the operation itself, so a rejected delivery has nothing left to publish.
+         */
+        void deliver(BooleanSupplier action) {
+            if (synchronousCaller == Thread.currentThread()) {
+                action.getAsBoolean();
+                return;
+            }
+            try {
+                domain.enqueueTargetedFutureCompletionForRuntime(operation.future(), action);
+            } catch (IllegalStateException ownerTerminating) {
+                // Termination cancellation owns the outcome; no guest value is built here.
             }
         }
 
-        void fail() {
+        boolean succeed(ProtosObjectValue value) {
+            Objects.requireNonNull(value, "value");
             synchronized (lifecycle) {
-                if (!operation.terminal()) {
-                    operation.fail(
-                            ProtosCoreErrors.newOccurrence(
-                                    activation, ProtosCoreErrors.StandardError.I_O_ERROR));
-                }
+                return !operation.terminal() && operation.commit() && operation.resolve(value);
+            }
+        }
+
+        boolean fail() {
+            synchronized (lifecycle) {
+                return !operation.terminal()
+                        && operation.fail(
+                                ProtosCoreErrors.newOccurrence(
+                                        activation, ProtosCoreErrors.StandardError.I_O_ERROR));
             }
         }
     }

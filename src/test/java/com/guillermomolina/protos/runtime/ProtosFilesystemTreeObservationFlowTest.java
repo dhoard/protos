@@ -18,6 +18,7 @@ package com.guillermomolina.protos.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -26,6 +27,7 @@ import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -42,6 +44,16 @@ final class ProtosFilesystemTreeObservationFlowTest {
     }
 
     @Test
+    void backendReceivesCapturedComponentsInsteadOfGuestPath() throws Exception {
+        Fixture x = fixture();
+        x.flow.entries(
+                x.activation,
+                new ProtosPathValue(x.prelude.pathPrototype(), List.of("root", "a/b")));
+        assertEquals(
+                new ProtosPathComponents(List.of("root", "a/b")), x.backend.lastPath);
+    }
+
+    @Test
     void entriesDefensivelySnapshotExactNamesKindsAndPreserveBackendOrder() throws Exception {
         Fixture x = fixture();
         ProtosFutureValue future = x.flow.entries(x.activation, path(x.prelude, "root"));
@@ -54,6 +66,8 @@ final class ProtosFilesystemTreeObservationFlowTest {
                                 entry("a", ProtosFilesystemTreeObservationFlow.EntryKind.REGULAR)));
         invocation.completion.succeeded(supplied);
         supplied.clear();
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        dispatch(x);
 
         assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
         assertSame(x.entriesResult, future.resolvedValue().orElseThrow());
@@ -74,6 +88,7 @@ final class ProtosFilesystemTreeObservationFlowTest {
                 List.of(
                         entry("same", ProtosFilesystemTreeObservationFlow.EntryKind.REGULAR),
                         entry("same", ProtosFilesystemTreeObservationFlow.EntryKind.DIRECTORY)));
+        dispatch(x);
         assertIoError(x, future);
         assertEquals(0, x.materializer.entriesCalls.get());
         assertThrows(
@@ -103,12 +118,231 @@ final class ProtosFilesystemTreeObservationFlowTest {
         assertFalse(first == second);
         x.backend.entriesInvocations.remove().completion.failed();
         x.backend.entriesInvocations.remove().completion.failed();
+        dispatch(x);
         assertIoError(x, first);
         assertIoError(x, second);
 
         x.backend.throwEntries = true;
         ProtosFutureValue thrown = x.flow.entries(x.activation, path(x.prelude, "three"));
         assertIoError(x, thrown);
+    }
+
+    @Test
+    void synchronousCompletionMaterializesInsideTheOriginalCallWithoutQueueing()
+            throws Exception {
+        Fixture x = fixture();
+        RecordingMaterializer materializer = new RecordingMaterializer();
+        materializer.entriesResult = x.entriesResult;
+        ProtosFilesystemTreeObservationFlow flow =
+                new ProtosFilesystemTreeObservationFlow(
+                        new ProtosFilesystemValue(),
+                        x.activation,
+                        (path, completion) -> {
+                            completion.succeeded(
+                                    List.of(
+                                            entry(
+                                                    "a",
+                                                    ProtosFilesystemTreeObservationFlow.EntryKind
+                                                            .REGULAR)));
+                            return () -> {};
+                        },
+                        materializer);
+
+        ProtosFutureValue future = flow.entries(x.activation, path(x.prelude, "root"));
+
+        assertSame(x.entriesResult, future.resolvedValue().orElseThrow());
+        assertEquals(List.of(Thread.currentThread()), materializer.threads);
+        assertEquals(0, x.activation.executionDomain().runnableCount());
+    }
+
+    @Test
+    void hostThreadCompletionHandsOverTheInertSnapshotAndBuildsTheArrayInTheOwner()
+            throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.entries(x.activation, path(x.prelude, "root"));
+        EntriesInvocation invocation = x.backend.entriesInvocations.remove();
+        List<ProtosFilesystemTreeObservationFlow.Entry> supplied =
+                List.of(
+                        entry("z", ProtosFilesystemTreeObservationFlow.EntryKind.DIRECTORY),
+                        entry("b", ProtosFilesystemTreeObservationFlow.EntryKind.LINK),
+                        entry("a", ProtosFilesystemTreeObservationFlow.EntryKind.REGULAR));
+
+        onHostThread(() -> invocation.completion.succeeded(supplied));
+
+        assertEquals(0, x.materializer.entriesCalls.get(), "no guest Array on the host thread");
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertEquals(1, x.activation.executionDomain().runnableCount());
+
+        dispatch(x);
+
+        assertSame(x.entriesResult, future.resolvedValue().orElseThrow());
+        assertEquals(List.of(Thread.currentThread()), x.materializer.threads);
+        assertEquals(supplied, x.materializer.lastEntries);
+        assertThrows(
+                UnsupportedOperationException.class,
+                () -> x.materializer.lastEntries.add(supplied.get(0)));
+    }
+
+    @Test
+    void hostThreadFailureBuildsTheIoErrorOnlyInTheOwner() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.entries(x.activation, path(x.prelude, "root"));
+        EntriesInvocation invocation = x.backend.entriesInvocations.remove();
+
+        onHostThread(invocation.completion::failed);
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+
+        dispatch(x);
+        assertIoError(x, future);
+    }
+
+    @Test
+    void hostThreadCompletionAfterCancellationIsNeitherQueuedNorMaterialized()
+            throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.entries(x.activation, path(x.prelude, "root"));
+        EntriesInvocation invocation = x.backend.entriesInvocations.remove();
+        assertTrue(future.cancelRequest());
+
+        onHostThread(
+                () ->
+                        invocation.completion.succeeded(
+                                List.of(
+                                        entry(
+                                                "late",
+                                                ProtosFilesystemTreeObservationFlow.EntryKind
+                                                        .REGULAR))));
+
+        assertEquals(0, x.activation.executionDomain().runnableCount());
+        assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+        assertEquals(0, x.materializer.entriesCalls.get());
+    }
+
+    @Test
+    void cancellationWinningBeforeOwnerDeliveryLeavesNoArray() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.entries(x.activation, path(x.prelude, "root"));
+        EntriesInvocation invocation = x.backend.entriesInvocations.remove();
+        onHostThread(
+                () ->
+                        invocation.completion.succeeded(
+                                List.of(
+                                        entry(
+                                                "a",
+                                                ProtosFilesystemTreeObservationFlow.EntryKind
+                                                        .REGULAR))));
+
+        assertTrue(future.cancelRequest());
+        dispatch(x);
+
+        assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+        assertEquals(0, x.materializer.entriesCalls.get());
+    }
+
+    @Test
+    void duplicateHostCompletionMaterializesAndPublishesOnce() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = x.flow.entries(x.activation, path(x.prelude, "root"));
+        EntriesInvocation invocation = x.backend.entriesInvocations.remove();
+        List<ProtosFilesystemTreeObservationFlow.Entry> first =
+                List.of(entry("first", ProtosFilesystemTreeObservationFlow.EntryKind.REGULAR));
+
+        onHostThread(() -> invocation.completion.succeeded(first));
+        onHostThread(
+                () ->
+                        invocation.completion.succeeded(
+                                List.of(
+                                        entry(
+                                                "second",
+                                                ProtosFilesystemTreeObservationFlow.EntryKind
+                                                        .REGULAR))));
+        dispatch(x);
+
+        assertSame(x.entriesResult, future.resolvedValue().orElseThrow());
+        assertEquals(1, x.materializer.entriesCalls.get());
+        assertEquals(first, x.materializer.lastEntries);
+    }
+
+    @Test
+    void materializerFailureInTheOwnerFailsWithIoError() throws Exception {
+        Fixture x = fixture();
+        x.materializer.failure = new IllegalStateException("materializer failure");
+        ProtosFutureValue future = x.flow.entries(x.activation, path(x.prelude, "root"));
+        EntriesInvocation invocation = x.backend.entriesInvocations.remove();
+
+        onHostThread(
+                () ->
+                        invocation.completion.succeeded(
+                                List.of(
+                                        entry(
+                                                "a",
+                                                ProtosFilesystemTreeObservationFlow.EntryKind
+                                                        .REGULAR))));
+        dispatch(x);
+
+        assertIoError(x, future);
+        assertEquals(1, x.materializer.entriesCalls.get());
+    }
+
+    @Test
+    void actorTerminationBeforeDeliveryCancelsWithoutMaterializing() throws Exception {
+        Fixture x = fixture();
+        ProtosActor actor =
+                new ProtosActor(new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze());
+        ProtosActivation activation =
+                x.prelude.newModuleActivation(
+                        new ProtosActorModuleState(),
+                        null,
+                        x.prelude.newExecutionContext(),
+                        actor.executionDomain());
+        ProtosFilesystemTreeObservationFlow flow =
+                new ProtosFilesystemTreeObservationFlow(
+                        new ProtosFilesystemValue(), activation, x.backend::entries, x.materializer);
+        ProtosFutureValue future = flow.entries(activation, path(x.prelude, "root"));
+        EntriesInvocation invocation = x.backend.entriesInvocations.remove();
+        onHostThread(
+                () ->
+                        invocation.completion.succeeded(
+                                List.of(
+                                        entry(
+                                                "a",
+                                                ProtosFilesystemTreeObservationFlow.EntryKind
+                                                        .REGULAR))));
+        assertEquals(1, activation.executionDomain().runnableCount());
+
+        assertTrue(actor.beginTermination());
+        onHostThread(invocation.completion::failed);
+        while (activation.executionDomain().dispatchOne()) {
+            // Nothing may remain to deliver.
+        }
+
+        assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+        assertEquals(0, x.materializer.entriesCalls.get());
+        assertEquals(0, activation.executionDomain().runnableCount());
+    }
+
+    /** Runs one backend callback on a distinct host thread and joins it deterministically. */
+    private static void onHostThread(Runnable callback) throws InterruptedException {
+        Throwable[] failure = new Throwable[1];
+        Thread host =
+                new Thread(
+                        () -> {
+                            try {
+                                callback.run();
+                            } catch (Throwable t) {
+                                failure[0] = t;
+                            }
+                        },
+                        "filesystem-host-callback");
+        host.start();
+        host.join();
+        assertNull(failure[0], "host callback failed");
+    }
+
+    private static void dispatch(Fixture x) {
+        while (x.activation.executionDomain().dispatchOne()) {
+            // Owner-domain delivery of host completions.
+        }
     }
 
     private static Fixture fixture() throws Exception {
@@ -172,11 +406,13 @@ final class ProtosFilesystemTreeObservationFlowTest {
         private final AtomicInteger entriesCalls = new AtomicInteger();
         private final ArrayDeque<EntriesInvocation> entriesInvocations = new ArrayDeque<>();
         private boolean throwEntries;
+        private ProtosPathComponents lastPath;
 
         ProtosFilesystemTreeObservationFlow.Cancellation entries(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
             entriesCalls.incrementAndGet();
+            lastPath = path;
             if (throwEntries) {
                 throw new IllegalStateException("simulated backend failure");
             }
@@ -189,13 +425,19 @@ final class ProtosFilesystemTreeObservationFlowTest {
     private static final class RecordingMaterializer
             implements ProtosFilesystemTreeObservationFlow.ResultMaterializer {
         private final AtomicInteger entriesCalls = new AtomicInteger();
-        private List<ProtosFilesystemTreeObservationFlow.Entry> lastEntries;
-        private ProtosObjectValue entriesResult;
+        private final List<Thread> threads = new CopyOnWriteArrayList<>();
+        private volatile List<ProtosFilesystemTreeObservationFlow.Entry> lastEntries;
+        private volatile ProtosObjectValue entriesResult;
+        private volatile RuntimeException failure;
 
         @Override
         public ProtosObjectValue entries(List<ProtosFilesystemTreeObservationFlow.Entry> entries) {
             entriesCalls.incrementAndGet();
+            threads.add(Thread.currentThread());
             lastEntries = entries;
+            if (failure != null) {
+                throw failure;
+            }
             return entriesResult;
         }
     }

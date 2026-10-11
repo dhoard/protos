@@ -77,6 +77,7 @@ class ProtosFilesystemIntegratedConformanceTest {
         assertEquals(ProtosFutureValue.State.PENDING, future.state());
 
         invocation.completion.failed();
+        dispatch(x);
 
         assertEquals(ProtosFutureValue.State.FAILED, future.state());
         assertSame(
@@ -143,11 +144,13 @@ class ProtosFilesystemIntegratedConformanceTest {
 
         secondInvocation.completion.succeeded(
                 new ByteReadResource(2), readOnlyCapabilities(), () -> {});
+        dispatch(x);
         assertEquals(ProtosFutureValue.State.PENDING, first.state());
         assertEquals(ProtosFutureValue.State.RESOLVED, second.state());
 
         firstInvocation.completion.succeeded(
                 new ByteReadResource(1), readOnlyCapabilities(), () -> {});
+        dispatch(x);
 
         assertEquals(ProtosFutureValue.State.RESOLVED, first.state());
         assertNotSame(
@@ -197,6 +200,7 @@ class ProtosFilesystemIntegratedConformanceTest {
                 richerResource,
                 readOnlyCapabilities(),
                 () -> {});
+        dispatch(x);
 
         ProtosObjectValue file =
                 (ProtosObjectValue) future.resolvedValue().orElseThrow();
@@ -210,6 +214,13 @@ class ProtosFilesystemIntegratedConformanceTest {
         assertFalse(file.hasLocalSlot("truncate"));
         assertFalse(file.hasLocalSlot("sync"));
         assertFalse(file.hasLocalSlot("flush"));
+    }
+
+    /** I094: a completion outside the original backend call is delivered by the owner. */
+    private static void dispatch(Fixture x) {
+        while (x.activation.executionDomain().dispatchOne()) {
+            // Owner-domain delivery.
+        }
     }
 
     private static ProtosFutureValue open(Fixture x, ProtosPathValue path) {
@@ -251,7 +262,7 @@ class ProtosFilesystemIntegratedConformanceTest {
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             Invocation invocation = new Invocation(path, options, completion);
@@ -261,13 +272,13 @@ class ProtosFilesystemIntegratedConformanceTest {
     }
 
     private static final class Invocation {
-        private final ProtosPathValue path;
+        private final ProtosPathComponents path;
         private final ProtosFilesystemOpenOptions options;
         private final ProtosStandardFilesystemProtocol.OpenCompletion completion;
         private final AtomicInteger cancellations = new AtomicInteger();
 
         private Invocation(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             this.path = path;
@@ -322,7 +333,7 @@ class ProtosFilesystemIntegratedConformanceTest {
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             ByteReadResource selected = current;
@@ -338,7 +349,7 @@ class ProtosFilesystemIntegratedConformanceTest {
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             attempts.incrementAndGet();

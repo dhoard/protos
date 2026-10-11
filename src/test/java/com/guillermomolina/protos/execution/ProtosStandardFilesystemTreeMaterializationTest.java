@@ -32,6 +32,7 @@ import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -165,6 +166,10 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
     }
 
     private static ProtosArrayValue resolvedArray(ProtosFutureValue future) {
+        // I094: a completion outside the original backend call is delivered by the owner.
+        while (future.domain().dispatchOne()) {
+            // Owner-domain delivery.
+        }
         assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
         return assertInstanceOf(ProtosArrayValue.class, future.resolvedValue().orElseThrow());
     }
@@ -232,7 +237,7 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             completion.failed();
@@ -241,7 +246,7 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
 
         @Override
         public ProtosFilesystemTreeObservationFlow.Cancellation entries(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
             EntriesInvocation invocation = new EntriesInvocation(completion);
             entriesInvocations.add(invocation);
@@ -277,7 +282,7 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             openCalls.incrementAndGet();
@@ -287,7 +292,7 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
 
         @Override
         public ProtosFilesystemTreeObservationFlow.Cancellation entries(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
             CapturedEntriesInvocation invocation = new CapturedEntriesInvocation(completion);
             entriesInvocations.add(invocation);

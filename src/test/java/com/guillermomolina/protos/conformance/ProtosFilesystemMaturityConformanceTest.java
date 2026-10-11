@@ -28,8 +28,7 @@ import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.ProtosPathValue;
-import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -108,7 +107,7 @@ final class ProtosFilesystemMaturityConformanceTest {
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             String name = directChild(path);
@@ -134,7 +133,7 @@ final class ProtosFilesystemMaturityConformanceTest {
             return () -> {};
         }
 
-        private static String directChild(ProtosPathValue path) {
+        private static String directChild(ProtosPathComponents path) {
             return path.components().size() == 1 ? path.components().get(0) : null;
         }
     }

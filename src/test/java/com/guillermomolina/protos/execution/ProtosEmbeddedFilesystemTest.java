@@ -31,8 +31,7 @@ import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.ProtosPathValue;
-import java.io.ByteArrayOutputStream;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.channels.SeekableByteChannel;
@@ -280,9 +279,8 @@ final class ProtosEmbeddedFilesystemTest {
         return Files.readString(file, StandardCharsets.UTF_8);
     }
 
-    private static ProtosPathValue path(String... components) {
-        return new ProtosPathValue(
-                new ProtosObjectValue(ProtosObjectValue.rootObject()), List.of(components));
+    private static ProtosPathComponents path(String... components) {
+        return new ProtosPathComponents(List.of(components));
     }
 
     private static void awaitCondition(BooleanSupplier condition, String description) {

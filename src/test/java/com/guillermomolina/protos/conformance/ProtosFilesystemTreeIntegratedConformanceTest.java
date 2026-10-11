@@ -33,7 +33,7 @@ import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.ProtosPathValue;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
 import java.net.StandardProtocolFamily;
@@ -209,7 +209,7 @@ final class ProtosFilesystemTreeIntegratedConformanceTest {
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             completion.failed();
@@ -218,7 +218,7 @@ final class ProtosFilesystemTreeIntegratedConformanceTest {
 
         @Override
         public ProtosFilesystemTreeObservationFlow.Cancellation entries(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
             entriesCompletion.set(completion);
             return entriesCancellations::incrementAndGet;

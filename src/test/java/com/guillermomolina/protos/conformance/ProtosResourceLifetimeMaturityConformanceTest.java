@@ -31,8 +31,7 @@ import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.ProtosPathValue;
-import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -128,7 +127,7 @@ activation);
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             if (!isCasePath(path)
@@ -146,7 +145,7 @@ activation);
             return () -> {};
         }
 
-        private static boolean isCasePath(ProtosPathValue path) {
+        private static boolean isCasePath(ProtosPathComponents path) {
             return path.components().equals(java.util.List.of("case.bin"));
         }
     }

@@ -20,7 +20,7 @@ import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemNamespaceMutationFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
-import com.guillermomolina.protos.runtime.ProtosPathValue;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
@@ -129,7 +129,7 @@ public final class ProtosNioConfinedFilesystemBackend
 
     @Override
     public ProtosFilesystemOpenFlow.Cancellation open(
-            ProtosPathValue path,
+            ProtosPathComponents path,
             ProtosFilesystemOpenOptions options,
             ProtosStandardFilesystemProtocol.OpenCompletion completion) {
         Objects.requireNonNull(path, "path");
@@ -178,8 +178,8 @@ public final class ProtosNioConfinedFilesystemBackend
 
     @Override
     public ProtosFilesystemNamespaceMutationFlow.Cancellation replace(
-            ProtosPathValue sourcePath,
-            ProtosPathValue targetPath,
+            ProtosPathComponents sourcePath,
+            ProtosPathComponents targetPath,
             ProtosFilesystemNamespaceMutationFlow.MutationCompletion completion) {
         Objects.requireNonNull(sourcePath, "sourcePath");
         Objects.requireNonNull(targetPath, "targetPath");
@@ -201,7 +201,7 @@ public final class ProtosNioConfinedFilesystemBackend
 
     @Override
     public ProtosFilesystemNamespaceMutationFlow.Cancellation remove(
-            ProtosPathValue path,
+            ProtosPathComponents path,
             ProtosFilesystemNamespaceMutationFlow.MutationCompletion completion) {
         Objects.requireNonNull(path, "path");
         Objects.requireNonNull(completion, "completion");
@@ -245,11 +245,11 @@ public final class ProtosNioConfinedFilesystemBackend
         }
     }
 
-    private String permittedMutableDirectChild(ProtosPathValue path) {
+    private String permittedMutableDirectChild(ProtosPathComponents path) {
         return permittedDirectChild(path, mutableDirectChildren);
     }
 
-    private static String permittedDirectChild(ProtosPathValue path, Set<String> allowedNames) {
+    private static String permittedDirectChild(ProtosPathComponents path, Set<String> allowedNames) {
         if (path.components().size() != 1) {
             return null;
         }

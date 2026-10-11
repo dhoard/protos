@@ -44,6 +44,10 @@ import java.util.Set;
  * {@link #materializeValue} before guest code observes it. Only snapshots that actually contain
  * records are wrapped in an internal {@link DetachedGraph}; an ordinary snapshot is returned
  * unwrapped and its destination materialization is an O(1) recognition check, never a second pass.
+ *
+ * <p>A Path (I094) follows the same two stages: the source stage extracts it into an inert
+ * {@link ProtosPathComponents} descriptor, and the destination stage builds one Path delegating
+ * to the destination Prelude's Path prototype per descriptor identity.
  */
 public final class ProtosActorValueTransfer {
     private ProtosActorValueTransfer() {}
@@ -217,10 +221,18 @@ public final class ProtosActorValueTransfer {
                 return remember(value, string.copyForRuntime());
             }
             if (value instanceof ProtosPathValue path) {
+                // I094 source stage: only the inert components cross; the destination Prelude's
+                // Path prototype is bound by materialization, once per source identity.
+                if (materializing) {
+                    throw nonTransferable();
+                }
+                semanticRecords = true;
+                return remember(value, new ProtosPathComponents(path.components()));
+            }
+            if (materializing && value instanceof ProtosPathComponents descriptor) {
+                // I094 destination stage: one destination Path per descriptor identity.
                 return remember(
-                        value,
-                        new ProtosPathValue(
-                                prelude.pathPrototype(), path.components()));
+                        value, new ProtosPathValue(prelude.pathPrototype(), descriptor.components()));
             }
             if (value instanceof ProtosEncodingValue encoding) {
                 return remember(value, encoding.transferForActorRuntime());
@@ -413,7 +425,8 @@ public final class ProtosActorValueTransfer {
                         return candidate == ProtosObjectValue.rootObject();
                     }
                     current = candidate.parent().orElse(null);
-                } else if (current instanceof ProtosSemanticTransferRecord) {
+                } else if (current instanceof ProtosSemanticTransferRecord
+                        || current instanceof ProtosPathComponents) {
                     current = memo.get(current);
                 } else {
                     return false;

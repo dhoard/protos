@@ -36,24 +36,183 @@ final class ProtosActorValueTransferTest {
         ProtosActivation source = prelude.newModuleActivation();
         ProtosIntegerValue integer = new ProtosIntegerValue(42);
         ProtosStringValue string = new ProtosStringValue("snapshot");
-        ProtosPathValue path =
-                new ProtosPathValue(
-                        prelude.pathPrototype(), List.of("a", "b"));
 
         List<Object> result =
                 ProtosActorValueTransfer.snapshotArguments(
-                        List.of(integer, string, ProtosBooleanValue.TRUE, ProtosNullValue.INSTANCE, path),
+                        List.of(integer, string, ProtosBooleanValue.TRUE, ProtosNullValue.INSTANCE),
                         source);
 
+        // I094: a transfer without Path or other semantic records keeps the unwrapped fast path.
+        assertFalse(ProtosActorValueTransfer.requiresMaterialization(result));
+        assertSame(
+                result,
+                ProtosActorValueTransfer.materializeArguments(result, prelude.newModuleActivation()));
         assertNotSame(integer, result.get(0));
         assertTrue(ProtosIdentity.identical(integer, result.get(0)));
         assertNotSame(string, result.get(1));
         assertTrue(ProtosIdentity.identical(string, result.get(1)));
         assertSame(ProtosBooleanValue.TRUE, result.get(2));
         assertSame(ProtosNullValue.INSTANCE, result.get(3));
-        ProtosPathValue copiedPath = assertInstanceOf(ProtosPathValue.class, result.get(4));
-        assertNotSame(path, copiedPath);
-        assertTrue(path.structurallyEquals(copiedPath));
+    }
+
+    @Test
+    void pathSnapshotIsInertAndMaterializesWithTheDestinationPreludePrototype() throws Exception {
+        ProtosPrelude sourcePrelude = core();
+        ProtosPrelude destinationPrelude = core();
+        ProtosActivation source = sourcePrelude.newModuleActivation();
+        ProtosPathValue path = new ProtosPathValue(sourcePrelude.pathPrototype(), List.of("a", "b"));
+        ProtosPathValue twin = new ProtosPathValue(sourcePrelude.pathPrototype(), List.of("a", "b"));
+
+        List<Object> snapshot =
+                ProtosActorValueTransfer.snapshotArguments(List.of(path, path, twin), source);
+
+        assertTrue(ProtosActorValueTransfer.requiresMaterialization(snapshot));
+        assertEquals(1, snapshot.size());
+        assertFalse(snapshot.get(0) instanceof ProtosPathValue, "the snapshot carries no guest Path");
+
+        List<?> delivered =
+                ProtosActorValueTransfer.materializeArguments(
+                        snapshot, destinationPrelude.newModuleActivation());
+
+        ProtosPathValue copied = assertInstanceOf(ProtosPathValue.class, delivered.get(0));
+        ProtosPathValue copiedTwin = assertInstanceOf(ProtosPathValue.class, delivered.get(2));
+        assertNotSame(path, copied);
+        assertSame(copied, delivered.get(1), "one source Path stays one destination Path");
+        assertNotSame(copied, copiedTwin, "equal but distinct Paths stay distinct");
+        assertEquals(List.of("a", "b"), copied.components());
+        assertEquals(List.of("a", "b"), copiedTwin.components());
+        assertSame(
+                destinationPrelude.pathPrototype(),
+                copied.representedDelegationParent(destinationPrelude));
+        assertNotSame(sourcePrelude.pathPrototype(), destinationPrelude.pathPrototype());
+        assertThrows(UnsupportedOperationException.class, () -> copied.components().add("c"));
+
+        // Every delivery of one logical snapshot gets its own identities.
+        List<?> again =
+                ProtosActorValueTransfer.materializeArguments(
+                        snapshot, destinationPrelude.newModuleActivation());
+        assertNotSame(copied, again.get(0));
+        assertSame(again.get(0), again.get(1));
+    }
+
+    @Test
+    void singlePathValueSnapshotMaterializesInTheDestination() throws Exception {
+        ProtosPrelude sourcePrelude = core();
+        ProtosPrelude destinationPrelude = core();
+        ProtosPathValue path = new ProtosPathValue(sourcePrelude.pathPrototype(), List.of("x"));
+
+        Object snapshot =
+                ProtosActorValueTransfer.snapshotValue(path, sourcePrelude.newModuleActivation());
+        assertFalse(snapshot instanceof ProtosPathValue);
+
+        ProtosPathValue copied =
+                assertInstanceOf(
+                        ProtosPathValue.class,
+                        ProtosActorValueTransfer.materializeValue(
+                                snapshot, destinationPrelude.newModuleActivation()));
+        assertEquals(List.of("x"), copied.components());
+        assertSame(
+                destinationPrelude.pathPrototype(),
+                copied.representedDelegationParent(destinationPrelude));
+    }
+
+    @Test
+    void pathsNestedInArrayMapIdentityMapAndObjectRematerializeWithAliases() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosPathValue shared = new ProtosPathValue(prelude.pathPrototype(), List.of("shared"));
+        ProtosPathValue twin = new ProtosPathValue(prelude.pathPrototype(), List.of("shared"));
+        ProtosArrayValue array = prelude.newArray(List.of(shared, twin, shared));
+        ProtosMapValue map = prelude.newMap();
+        ProtosNumericHashKey mapHash = ProtosNumericHashKey.fromIdentity(shared);
+        map.append(shared, mapHash, shared);
+        ProtosIdentityMapValue identityMap =
+                new ProtosIdentityMapValue(prelude.identityMapPrototype());
+        identityMap.append(shared, ProtosNumericHashKey.fromIdentity(shared), twin);
+        ProtosObjectValue holder = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        holder.createLocalSlot("path", shared);
+        holder.createLocalSlot("array", array);
+        holder.createLocalSlot("map", map);
+        holder.createLocalSlot("identityMap", identityMap);
+
+        List<Object> snapshot =
+                ProtosActorValueTransfer.snapshotArguments(
+                        List.of(holder, shared), prelude.newModuleActivation());
+        assertTrue(ProtosActorValueTransfer.requiresMaterialization(snapshot));
+        List<?> delivered =
+                ProtosActorValueTransfer.materializeArguments(snapshot, prelude.newModuleActivation());
+
+        ProtosObjectValue copiedHolder = assertInstanceOf(ProtosObjectValue.class, delivered.get(0));
+        ProtosPathValue copied = assertInstanceOf(ProtosPathValue.class, delivered.get(1));
+        assertNotSame(shared, copied);
+        assertSame(copied, copiedHolder.readLocalSlot("path").orElseThrow());
+
+        ProtosArrayValue copiedArray =
+                assertInstanceOf(ProtosArrayValue.class, copiedHolder.readLocalSlot("array").orElseThrow());
+        assertSame(copied, copiedArray.indexedAt(0));
+        assertSame(copied, copiedArray.indexedAt(2));
+        ProtosPathValue copiedTwin = assertInstanceOf(ProtosPathValue.class, copiedArray.indexedAt(1));
+        assertNotSame(copied, copiedTwin);
+        assertNotSame(twin, copiedTwin);
+
+        ProtosMapValue.Entry mapEntry =
+                assertInstanceOf(ProtosMapValue.class, copiedHolder.readLocalSlot("map").orElseThrow())
+                        .keyedSnapshot()
+                        .get(0);
+        assertSame(copied, mapEntry.key());
+        assertSame(copied, mapEntry.value());
+        assertEquals(mapHash, mapEntry.recordedHash(), "Path structural hash is recorded, not rebuilt");
+
+        ProtosIdentityMapValue.Entry identityEntry =
+                assertInstanceOf(
+                                ProtosIdentityMapValue.class,
+                                copiedHolder.readLocalSlot("identityMap").orElseThrow())
+                        .keyedSnapshot()
+                        .get(0);
+        assertSame(copied, identityEntry.key());
+        assertSame(copiedTwin, identityEntry.value());
+        for (Object value : List.of(copied, copiedTwin)) {
+            assertSame(
+                    prelude.pathPrototype(),
+                    ((ProtosPathValue) value).representedDelegationParent(prelude));
+        }
+    }
+
+    @Test
+    void pathReplyIsMaterializedInTheRequesterDomainBeforeResolution() throws Exception {
+        ProtosPrelude workerPrelude = core();
+        ProtosPrelude requesterPrelude = core();
+        ProtosActivation requester = requesterPrelude.newModuleActivation();
+        ProtosPathValue path = new ProtosPathValue(workerPrelude.pathPrototype(), List.of("reply"));
+        Object replySnapshot =
+                ProtosActorValueTransfer.snapshotValue(path, workerPrelude.newModuleActivation());
+        ProtosFutureValue future =
+                new ProtosFutureValue(requesterPrelude.futurePrototype(), requester.executionDomain());
+
+        ProtosActorValueTransfer.resolveRequesterFuture(future, replySnapshot, requester);
+
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertEquals(1, requester.executionDomain().runnableCount());
+        while (requester.executionDomain().dispatchOne()) {
+            // Requester-domain materialization.
+        }
+
+        ProtosPathValue reply =
+                assertInstanceOf(ProtosPathValue.class, future.resolvedValue().orElseThrow());
+        assertNotSame(path, reply);
+        assertEquals(List.of("reply"), reply.components());
+        assertSame(
+                requesterPrelude.pathPrototype(),
+                reply.representedDelegationParent(requesterPrelude));
+    }
+
+    @Test
+    void pathComponentsDescriptorOwnsAnImmutableCopy() {
+        ArrayList<String> components = new ArrayList<>(List.of("a", "b"));
+        ProtosPathComponents descriptor = new ProtosPathComponents(components);
+        components.add("c");
+
+        assertEquals(List.of("a", "b"), descriptor.components());
+        assertThrows(UnsupportedOperationException.class, () -> descriptor.components().add("d"));
     }
 
     @Test

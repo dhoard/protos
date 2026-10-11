@@ -74,6 +74,7 @@ class ProtosStandardFilesystemProtocolTest {
                                 x.activation);
 
         Invocation invocation = x.backend.invocations.remove();
+        assertEquals(new ProtosPathComponents(List.of("data.bin")), invocation.path);
         assertTrue(invocation.options.readAccess());
         assertFalse(invocation.options.writeAccess());
         assertEquals(
@@ -87,6 +88,7 @@ class ProtosStandardFilesystemProtocolTest {
                 new ProtosFileFlow.Capabilities(
                         true, false, false, false, false, false),
                 releases::incrementAndGet);
+        dispatch(x);
 
         assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
         ProtosObjectValue file =
@@ -123,6 +125,7 @@ class ProtosStandardFilesystemProtocolTest {
                 new ProtosFileFlow.Capabilities(
                         false, true, true, false, false, false),
                 () -> {});
+        dispatch(x);
 
         ProtosObjectValue file =
                 (ProtosObjectValue) future.resolvedValue().orElseThrow();
@@ -230,12 +233,120 @@ class ProtosStandardFilesystemProtocolTest {
                 new ProtosFileFlow.Capabilities(
                         false, true, false, false, false, false),
                 releases::incrementAndGet);
+        assertEquals(1, releases.get());
+        dispatch(x);
 
         assertEquals(1, releases.get());
         assertEquals(ProtosFutureValue.State.FAILED, future.state());
         assertSame(
                 x.prelude.bindings().readLocalSlot("IOError").orElseThrow(),
                 future.failedError().orElseThrow().parent().orElseThrow());
+    }
+
+    @Test
+    void hostThreadOpenCompletionMaterializesTheFileOnlyInTheOwningDomain() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future =
+                (ProtosFutureValue)
+                        ProtosInvocation.invokeMessage(
+                                x.filesystem,
+                                "open",
+                                List.of(path(x.prelude, "data.bin")),
+                                x.activation);
+        Invocation invocation = x.backend.invocations.remove();
+        AtomicInteger releases = new AtomicInteger();
+
+        onHostThread(
+                () ->
+                        invocation.completion.succeeded(
+                                new ReadResource(),
+                                new ProtosFileFlow.Capabilities(
+                                        true, false, false, false, false, false),
+                                releases::incrementAndGet));
+
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertEquals(1, x.activation.executionDomain().runnableCount());
+
+        dispatch(x);
+
+        ProtosObjectValue file = (ProtosObjectValue) future.resolvedValue().orElseThrow();
+        assertTrue(file instanceof ProtosFileValue);
+        assertTrue(file.hasLocalSlot("read"));
+        assertEquals(0, releases.get());
+    }
+
+    @Test
+    void hostThreadEntriesCompletionMaterializesTheOrderedDescriptorArrayInTheOwner()
+            throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future =
+                (ProtosFutureValue)
+                        ProtosInvocation.invokeMessage(
+                                x.filesystem,
+                                "entries",
+                                List.of(path(x.prelude, "root")),
+                                x.activation);
+        ProtosFilesystemTreeObservationFlow.EntriesCompletion completion =
+                x.backend.entriesCompletions.remove();
+
+        onHostThread(
+                () ->
+                        completion.succeeded(
+                                List.of(
+                                        new ProtosFilesystemTreeObservationFlow.Entry(
+                                                "z",
+                                                ProtosFilesystemTreeObservationFlow.EntryKind
+                                                        .DIRECTORY),
+                                        new ProtosFilesystemTreeObservationFlow.Entry(
+                                                "a",
+                                                ProtosFilesystemTreeObservationFlow.EntryKind
+                                                        .REGULAR))));
+
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        dispatch(x);
+
+        ProtosArrayValue entries = (ProtosArrayValue) future.resolvedValue().orElseThrow();
+        assertSame(x.prelude.arrayPrototype(), entries.parent().orElseThrow());
+        List<Object> descriptors = entries.indexedSnapshot();
+        assertEquals(2, descriptors.size());
+        assertDescriptor(descriptors.get(0), "z", "directory");
+        assertDescriptor(descriptors.get(1), "a", "regular");
+    }
+
+    private static void assertDescriptor(Object value, String name, String kind) {
+        ProtosObjectValue descriptor = (ProtosObjectValue) value;
+        assertTrue(descriptor.isFrozen());
+        assertEquals(Set.of("name", "kind"), descriptor.localSlotsSnapshot().keySet());
+        assertEquals(
+                name,
+                ((ProtosStringValue) descriptor.readLocalSlot("name").orElseThrow()).value());
+        assertEquals(
+                kind,
+                ((ProtosStringValue) descriptor.readLocalSlot("kind").orElseThrow()).value());
+    }
+
+    /** Runs one backend callback on a distinct host thread and joins it deterministically. */
+    private static void onHostThread(Runnable callback) throws InterruptedException {
+        Throwable[] failure = new Throwable[1];
+        Thread host =
+                new Thread(
+                        () -> {
+                            try {
+                                callback.run();
+                            } catch (Throwable t) {
+                                failure[0] = t;
+                            }
+                        },
+                        "filesystem-host-callback");
+        host.start();
+        host.join();
+        assertNull(failure[0], "host callback failed");
+    }
+
+    private static void dispatch(Fixture x) {
+        while (x.activation.executionDomain().dispatchOne()) {
+            // Owner-domain delivery of backend completions outside the original call.
+        }
     }
 
     private static void assertIoError(Fixture x, ProtosFutureValue future) {
@@ -270,26 +381,36 @@ class ProtosStandardFilesystemProtocolTest {
     private static final class RecordingBackend
             implements ProtosStandardFilesystemProtocol.Backend {
         private final ArrayDeque<Invocation> invocations = new ArrayDeque<>();
+        private final ArrayDeque<ProtosFilesystemTreeObservationFlow.EntriesCompletion>
+                entriesCompletions = new ArrayDeque<>();
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             Invocation invocation = new Invocation(path, options, completion);
             invocations.add(invocation);
             return invocation.cancellations::incrementAndGet;
         }
+
+        @Override
+        public ProtosFilesystemTreeObservationFlow.Cancellation entries(
+                ProtosPathComponents path,
+                ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
+            entriesCompletions.add(completion);
+            return () -> {};
+        }
     }
 
     private static final class Invocation {
-        private final ProtosPathValue path;
+        private final ProtosPathComponents path;
         private final ProtosFilesystemOpenOptions options;
         private final ProtosStandardFilesystemProtocol.OpenCompletion completion;
         private final AtomicInteger cancellations = new AtomicInteger();
 
         private Invocation(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             this.path = path;

@@ -42,8 +42,7 @@ import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
-import com.guillermomolina.protos.runtime.ProtosPathValue;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPathComponents;import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
@@ -768,7 +767,7 @@ activation);
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions capturedOptions,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             openCount.incrementAndGet();
@@ -949,7 +948,7 @@ activation);
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             if (isWriteAllBytesOpen(options)) {
@@ -1256,7 +1255,7 @@ activation);
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
+                ProtosPathComponents path,
                 ProtosFilesystemOpenOptions capturedOptions,
                 ProtosStandardFilesystemProtocol.OpenCompletion openCompletion) {
             openCount.incrementAndGet();

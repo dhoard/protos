@@ -157,6 +157,51 @@ final class ProtosSemanticTransferMaterializationTest {
     }
 
     @Test
+    void pathRequestReplyAndPResultRematerializeWithAliasesInTheCallerDomain(@TempDir Path dir)
+            throws Exception {
+        GuestFamily family = new GuestFamily();
+        try (ProtosHostedExecutionTestFixture hosted = open(family, dir)) {
+            ProtosActivation root = hosted.activation();
+            ProtosPrelude prelude = root.prelude().orElseThrow();
+            ProtosPathValue path = new ProtosPathValue(prelude.pathPrototype(), List.of("a", "b"));
+            ProtosPathValue twin = new ProtosPathValue(prelude.pathPrototype(), List.of("a", "b"));
+            root.context().createLocalSlot("path", path);
+            root.context().createLocalSlot("twin", twin);
+            root.context().createLocalSlot("paths", prelude.newArray(List.of(path, path, twin)));
+            hosted.evaluatePersistent(
+                    "<i094-a3>", "worker: Actor.spawn(\"plat051-holder\", \"holder\", 0)");
+
+            ProtosPathValue reply =
+                    assertInstanceOf(
+                            ProtosPathValue.class, await(hosted, "worker.request(\"echo\", path)"));
+            assertNotSame(path, reply);
+            assertEquals(List.of("a", "b"), reply.components());
+            assertSame(prelude.pathPrototype(), reply.representedDelegationParent(prelude));
+
+            assertAliasedPaths(
+                    path,
+                    twin,
+                    await(hosted, "worker.request(\"echo\", [path, path, twin])"));
+            assertAliasedPaths(
+                    path,
+                    twin,
+                    await(hosted, "((items) => { items }).parallel(paths)"));
+            assertEquals(0, family.materialized.get(), "Paths need no semantic family");
+        }
+    }
+
+    private static void assertAliasedPaths(ProtosPathValue path, ProtosPathValue twin, Object value) {
+        List<Object> elements = assertInstanceOf(ProtosArrayValue.class, value).indexedSnapshot();
+        ProtosPathValue first = assertInstanceOf(ProtosPathValue.class, elements.get(0));
+        ProtosPathValue third = assertInstanceOf(ProtosPathValue.class, elements.get(2));
+        assertNotSame(path, first);
+        assertNotSame(twin, third);
+        assertSame(first, elements.get(1), "one Path stays one Path across the round trip");
+        assertNotSame(first, third, "equal but distinct Paths stay distinct");
+        assertEquals(first.components(), third.components());
+    }
+
+    @Test
     void ordinaryHostedTransferPaysNoMaterializationOrStandardModuleLoad(@TempDir Path dir)
             throws Exception {
         GuestFamily family = new GuestFamily();
@@ -212,8 +257,26 @@ final class ProtosSemanticTransferMaterializationTest {
         assertEquals(
                 ProtosFutureValue.State.RESOLVED,
                 future.state(),
-                () -> source + " failed with " + future.failedError().map(Object::toString).orElse("?"));
+                () ->
+                        source
+                                + " failed with "
+                                + future.failedError()
+                                        .map(error -> describeError(hosted, error))
+                                        .orElse("?"));
         return future.resolvedValue().orElseThrow();
+    }
+
+    /** Names the standard error prototype and local slots of a failure for diagnostics. */
+    private static String describeError(ProtosHostedExecutionTestFixture hosted, ProtosObjectValue error) {
+        Object parent = error.parent().orElse(null);
+        String kind = "?";
+        for (Map.Entry<String, Object> binding :
+                hosted.activation().prelude().orElseThrow().bindings().localSlotsSnapshot().entrySet()) {
+            if (binding.getValue() == parent) {
+                kind = binding.getKey();
+            }
+        }
+        return kind + " " + error.localSlotsSnapshot();
     }
 
     private static String string(Object value) {

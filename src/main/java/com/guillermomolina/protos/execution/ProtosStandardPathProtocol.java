@@ -1,19 +1,153 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.execution;
+
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
-import com.guillermomolina.protos.runtime.*;  import java.util.*;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPathValue;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * Bootstrap bridge for the source-backed Core Path prototype (D169).
+ *
+ * <p>{@code relative}, {@code child}, {@code ==} and {@code hash} are source closures of
+ * {@code lib/core/Path.protos}. The runtime only fills the private {@code _corePathKernel} with
+ * three physical primitives over the immutable {@link ProtosPathValue} carrier: {@code mint}
+ * builds a carrier, {@code componentCount} and {@code componentAt} read it. None of them
+ * dispatches guest behavior.
+ */
 public final class ProtosStandardPathProtocol {
- private ProtosStandardPathProtocol(){}
- public static void install(ProtosObjectValue p){
-  for(String s:List.of("relative","child","==","hash"))if(p.hasLocalSlot(s))throw new IllegalStateException("Core Path already defines "+s);
-  p.createLocalSlot("relative",ProtosClosureValue.nativeClosure((a,x)->{factory(a,x,p);return new ProtosPathValue(p,List.of());}));
-  p.createLocalSlot("child",ProtosClosureValue.nativeClosure((a,x)->{var q=path(a);arity(a,x,1);if(!(x.get(0) instanceof ProtosStringValue s))throw err(a);String n=s.value();if(n.isEmpty()||n.equals(".")||n.equals(".."))throw err(a);return q.child(n);}));
-  p.createLocalSlot("==",ProtosClosureValue.nativeClosure((a,x)->{var q=path(a);arity(a,x,1);return x.get(0) instanceof ProtosPathValue z&&q.structurallyEquals(z)?ProtosBooleanValue.TRUE:ProtosBooleanValue.FALSE;}));
-  p.createLocalSlot("hash",ProtosClosureValue.nativeClosure((a,x)->{var q=path(a);arity(a,x,0);return ProtosNumericValueSupport.integer(q.structuralHash());}));
- }
- private static void factory(ProtosActivation a,List<?>x,ProtosObjectValue p){arity(a,x,0);if(!(a.receiver() instanceof ProtosObjectValue q)||!delegates(q,p))throw err(a);}
- private static ProtosPathValue path(ProtosActivation a){if(!(a.receiver() instanceof ProtosPathValue p))throw err(a);return p;}
- private static void arity(ProtosActivation a,List<?>x,int n){if(x.size()!=n)throw err(a);}
- private static boolean delegates(ProtosObjectValue r,ProtosObjectValue p){Object c=r;while(c instanceof ProtosObjectValue o){if(o==p)return true;c=o.parent().orElse(null);}return false;}
- private static ProtosSignalException err(ProtosActivation a){return new ProtosSignalException(ProtosCoreErrors.newError(a));}
+    private static final Set<String> SOURCE_SELECTORS =
+            Set.of("relative", "child", "_corePathEquals", "hash");
+
+    private ProtosStandardPathProtocol() {}
+
+    public static void install(ProtosObjectValue prototype, ProtosObjectValue kernel) {
+        Objects.requireNonNull(prototype, "prototype");
+        Objects.requireNonNull(kernel, "kernel");
+        if (prototype.parent().orElse(null) != ProtosObjectValue.rootObject()) {
+            throw new IllegalStateException(
+                    "standard Path prototype must delegate directly to Object");
+        }
+        if (!prototype.isOpen()
+                || !prototype.localSlotsSnapshot().keySet().equals(SOURCE_SELECTORS)) {
+            throw new IllegalStateException(
+                    "standard Path prototype must be an open source object with exactly "
+                            + "relative, child, _corePathEquals and hash");
+        }
+        for (String selector : SOURCE_SELECTORS) {
+            Object value = prototype.readLocalSlot(selector).orElseThrow();
+            if (!(value instanceof ProtosClosureValue closure)
+                    || closure.definition() == null
+                    || closure.executionPlan().isEmpty()
+                    || closure.nativeBody().isPresent()) {
+                throw new IllegalStateException(
+                        "standard Path " + selector + " must be a source-backed Closure");
+            }
+        }
+        // A source slot target cannot spell an operator; the same Closure moves to ==.
+        Object equality = prototype.readLocalSlot("_corePathEquals").orElseThrow();
+        prototype.removeLocalSlot("_corePathEquals");
+        prototype.createLocalSlot("==", equality);
+
+        if (!kernel.isOpen()
+                || kernel.parent().orElse(null) != ProtosObjectValue.rootObject()
+                || !kernel.localSlotsSnapshot().isEmpty()) {
+            throw new IllegalStateException(
+                    "Core _corePathKernel must be an empty open ordinary object");
+        }
+        kernel.createLocalSlot(
+                "mint",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> mint(activation, supplied, kernel, prototype)));
+        kernel.createLocalSlot(
+                "componentCount",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            requireKernel(activation, supplied, kernel, 1);
+                            return supplied.get(0) instanceof ProtosPathValue path
+                                    ? ProtosNumericValueSupport.integer(path.components().size())
+                                    : ProtosNumericValueSupport.integer(-1);
+                        }));
+        kernel.createLocalSlot(
+                "componentAt",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            requireKernel(activation, supplied, kernel, 2);
+                            if (!(supplied.get(0) instanceof ProtosPathValue path)
+                                    || !ProtosNumericValueSupport.isIntegerInIntRange(
+                                            supplied.get(1))) {
+                                throw invalid(activation);
+                            }
+                            int index = ProtosNumericValueSupport.exactInt(supplied.get(1));
+                            if (index < 0 || index >= path.components().size()) {
+                                throw invalid(activation);
+                            }
+                            return new ProtosStringValue(path.components().get(index));
+                        }));
+        kernel.freeze();
+    }
+
+    /*
+     * mint(factory) builds the empty carrier for any object delegating to the canonical
+     * prototype; mint(path, name) appends one physically valid opaque component. Both always
+     * use the canonical prototype. Semantic validation of child belongs to the source.
+     */
+    private static Object mint(
+            ProtosActivation activation,
+            List<?> supplied,
+            ProtosObjectValue kernel,
+            ProtosObjectValue prototype) {
+        if (activation.receiver() != kernel) {
+            throw invalid(activation);
+        }
+        if (supplied.size() == 1) {
+            if (!(supplied.get(0) instanceof ProtosObjectValue factory)
+                    || !delegatesTo(factory, prototype)) {
+                throw invalid(activation);
+            }
+            return new ProtosPathValue(prototype, List.of());
+        }
+        if (supplied.size() == 2
+                && supplied.get(0) instanceof ProtosPathValue path
+                && supplied.get(1) instanceof ProtosStringValue name) {
+            String component = name.value();
+            if (component.isEmpty() || component.equals(".") || component.equals("..")) {
+                throw invalid(activation);
+            }
+            ArrayList<String> extended = new ArrayList<>(path.components());
+            extended.add(component);
+            return new ProtosPathValue(prototype, extended);
+        }
+        throw invalid(activation);
+    }
+
+    private static void requireKernel(
+            ProtosActivation activation, List<?> supplied, ProtosObjectValue kernel, int arity) {
+        if (activation.receiver() != kernel || supplied.size() != arity) {
+            throw invalid(activation);
+        }
+    }
+
+    private static boolean delegatesTo(ProtosObjectValue receiver, ProtosObjectValue prototype) {
+        Object current = receiver;
+        while (current instanceof ProtosObjectValue object) {
+            if (object == prototype) {
+                return true;
+            }
+            current = object.parent().orElse(null);
+        }
+        return false;
+    }
+
+    private static ProtosSignalException invalid(ProtosActivation activation) {
+        return new ProtosSignalException(ProtosCoreErrors.newError(activation));
+    }
 }
