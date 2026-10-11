@@ -8843,7 +8843,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * flow into the unchanged {@code prepareImmediateMethodCall} path, so
          * the selected native Closure executes exactly as on the generic path.
          * The prelude is part of the key because the represented parent is that
-         * prelude's Integer prototype; the entered Context is retained for the
+         * prelude's SmallInteger or BigInteger prototype; ProtosValueLookup admits
+         * only selections identical for both concrete families, so one entry
+         * serves every Integer receiver. The entered Context is retained for the
          * same isolation rule as the other guarded sends.
          */
         public record GuardedIntegerSend(

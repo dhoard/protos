@@ -115,6 +115,49 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
         });
     }
 
+    /**
+     * D197-C: one cached guard serves both concrete Integer families, because
+     * the inherited canonical operation has the same Closure and Integer home
+     * whether lookup starts at SmallInteger or at BigInteger.
+     */
+    @Test
+    void oneGuardServesBothConcreteIntegerFamilies() throws Exception {
+        inEnteredContext(prelude -> {
+            Object big = ProtosTestIntegers.integer(HUGE, prelude);
+            PrepareSendArguments.GuardedIntegerSend fromSmall =
+                    PrepareSendArguments.createGuardedIntegerSend(integer(7), "+", prelude);
+            PrepareSendArguments.GuardedIntegerSend fromBig =
+                    PrepareSendArguments.createGuardedIntegerSend(big, "+", prelude);
+            assertNotNull(fromSmall);
+            assertNotNull(fromBig);
+            assertSame(prelude.integerPrototype(), fromSmall.methodHome());
+            assertSame(fromSmall.closure(), fromBig.closure());
+            assertSame(fromSmall.methodHome(), fromBig.methodHome());
+            assertSame(
+                    ProtosStandardIntegerProtocol.CanonicalIntegerOperation.ADD,
+                    fromBig.operation());
+
+            ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
+            ProtosActivation caller =
+                    ProtosActivation.forClosureInvocation(fromSmall.closure(), List.of(), prelude);
+            PreparedClosureCall prepared =
+                    PrepareSendArguments.guardedIntegerSend(
+                            big, "+", caller, new Object[] {integer(1)},
+                            entered, prelude, "+", entered, prelude, fromSmall);
+            assertTrue(prepared.isImmediate());
+            Object result = prepared.finish(prepared.enterImmediate());
+            assertEquals(HUGE.add(BigInteger.ONE), integerValue(result));
+            assertSame(
+                    prelude.bigIntegerPrototype(),
+                    ((com.guillermomolina.protos.runtime.ProtosObjectValue) result)
+                            .parent().orElseThrow());
+
+            // A family-local slot is never shared by a guard.
+            assertNull(PrepareSendArguments.createGuardedIntegerSend(
+                    integer(7), "recognizes", prelude));
+        });
+    }
+
     @Test
     void allCanonicalLocalIntegerOperationsCarryDirectCapability()
             throws Exception {

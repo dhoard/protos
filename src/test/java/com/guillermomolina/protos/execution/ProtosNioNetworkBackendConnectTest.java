@@ -32,6 +32,7 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
@@ -368,8 +369,11 @@ final class ProtosNioNetworkBackendConnectTest {
         assertEquals(bits, ProtosTestIntegers.exact(guest), bits.toString(16));
         assertArrayEquals(octets, ProtosNumericValueSupport.unsignedBigEndianOrNull(guest, width));
         if (bits.bitLength() > Long.SIZE - 1) {
-            assertSame(prelude.integerPrototype(),
+            assertSame(prelude.bigIntegerPrototype(),
                     ((ProtosObjectValue) guest).parent().orElseThrow());
+        } else {
+            assertSame(prelude.smallIntegerPrototype(),
+                    ProtosValueLookup.delegationParent(guest, prelude).orElseThrow());
         }
     }
 

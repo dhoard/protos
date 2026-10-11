@@ -30,18 +30,17 @@ import java.util.Objects;
  * I091 / PLAT056 Candidate C: an exact semantic Integer outside the signed-64 range, materialized
  * as a FROZEN ordinary Protos object.
  *
- * <p>The value delegates ordinarily to the Integer prototype of the Prelude that minted it, has no
- * local slots, and cannot be mutated. Its exact magnitude is the narrowly encapsulated numeric
+ * <p>The value delegates ordinarily to the {@code BigInteger} prototype of the Prelude that minted
+ * it, has no local slots, and cannot be mutated. Its exact magnitude is the narrowly encapsulated numeric
  * payload PLAT056 permits. The value performs the exact operations on its own magnitude (order,
  * equality, hash, spelling, unsigned encoding, interop projection); they are package-private and
  * reached only through {@link ProtosNumericValueSupport}, which owns dispatch between the
  * signed-64 and large representations, arithmetic and normalization, so a value within the
  * signed-64 range is never represented here.
  *
- * <p>Under the current normative specification this is an ordinary Integer, recognized by
- * {@code Integer.recognizes}; the representation is unobservable. Any guest-visible distinction
- * of a separate D197 {@code BigInteger} family belongs to its authorized implementation owner
- * (I090), which would change only the minting prototype and recognition here.
+ * <p>Under D197-C (I090) this is a member of the concrete {@code BigInteger} family, recognized by
+ * both {@code Integer.recognizes} and {@code BigInteger.recognizes}. The family is determined by
+ * the exact magnitude alone; the Java payload is unobservable.
  *
  * <p>Instances are minted per Prelude and are never shared across isolated execution domains:
  * transfer rematerializes them with the destination Prelude's prototype.
@@ -55,8 +54,8 @@ public final class ProtosLargeIntegerValue extends ProtosObjectValue {
 
     private final BigInteger value;
 
-    ProtosLargeIntegerValue(ProtosObjectValue integerPrototype, BigInteger value) {
-        super(Objects.requireNonNull(integerPrototype, "integerPrototype"));
+    ProtosLargeIntegerValue(ProtosObjectValue bigIntegerPrototype, BigInteger value) {
+        super(Objects.requireNonNull(bigIntegerPrototype, "bigIntegerPrototype"));
         this.value = Objects.requireNonNull(value, "value");
         if (value.bitLength() < Long.SIZE) {
             throw new IllegalArgumentException("a signed-64 Integer is not a large Integer");

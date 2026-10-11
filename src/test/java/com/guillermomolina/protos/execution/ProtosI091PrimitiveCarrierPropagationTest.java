@@ -143,7 +143,7 @@ final class ProtosI091PrimitiveCarrierPropagationTest {
                             + "g: make()\ng()").asBigInteger());
             assertTrue(eval(context,
                     "make: () => {\n    big: 9223372036854775807 + 1\n    () => big\n}\n"
-                            + "make()().parent() === Integer").asBoolean());
+                            + "make()().parent() === BigInteger").asBoolean());
         }
     }
 
@@ -171,7 +171,7 @@ final class ProtosI091PrimitiveCarrierPropagationTest {
         Source source = Source.create(ProtosLanguage.ID,
                 "o: { inc: x => x + 1 }\n"
                         + "big: o.inc(9223372036854775807)\n"
-                        + "(big.parent() === Integer) && (big - 1 == 9223372036854775807)");
+                        + "(big.parent() === BigInteger) && (big - 1 == 9223372036854775807)");
         try (Engine engine = Engine.newBuilder(ProtosLanguage.ID)
                         .option("protos.CoreRoot", core)
                         .option("engine.WarnInterpreterOnly", "false")

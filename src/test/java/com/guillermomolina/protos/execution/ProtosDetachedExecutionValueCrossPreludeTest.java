@@ -145,7 +145,7 @@ final class ProtosDetachedExecutionValueCrossPreludeTest {
             assertTrue(ProtosNumericValueSupport.isLargeInteger(large));
             assertTrue(large.isFrozen());
             assertNotSame(slot(graph, name), large);
-            assertSame(pair.destinationPrelude.integerPrototype(), large.parent().orElseThrow());
+            assertSame(pair.destinationPrelude.bigIntegerPrototype(), large.parent().orElseThrow());
         }
         assertSame(slot(copied, "shared"), slot(copiedInner, "shared"));
         assertNotSame(slot(copied, "shared"), slot(copiedInner, "twin"));

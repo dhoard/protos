@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -62,8 +63,24 @@ class ProtosRepresentedValueLookupTest {
                                 "call",
                                 prelude)
                         .orElseThrow();
+        assertSame(
+                prelude.smallIntegerPrototype(),
+                new ProtosIntegerValue(42).representedDelegationParent(prelude));
         assertSame(integerCall, integerSelected.value());
+        // The concrete family inherits the factory; its canonical owner stays Integer.
         assertSame(prelude.integerPrototype(), integerSelected.home());
+        assertFalse(prelude.smallIntegerPrototype().hasLocalSlot("call"));
+
+        Object large =
+                ProtosTestIntegers.integer(BigInteger.TWO.pow(64), prelude);
+        assertSame(
+                prelude.bigIntegerPrototype(),
+                ProtosValueLookup.delegationParent(large, prelude).orElseThrow());
+        ProtosSlotLookupResult largeSelected =
+                ProtosValueLookup.lookup(large, "call", prelude).orElseThrow();
+        assertSame(integerCall, largeSelected.value());
+        assertSame(prelude.integerPrototype(), largeSelected.home());
+        assertFalse(prelude.bigIntegerPrototype().hasLocalSlot("call"));
 
         ProtosSlotLookupResult floatSelected =
                 ProtosValueLookup.lookup(

@@ -35,6 +35,8 @@ import org.junit.jupiter.api.Test;
  * I091 / PLAT056 Candidate C: a semantic Integer within the signed-64 range is a long-only
  * {@link ProtosIntegerValue}; outside it, a FROZEN ordinary {@link ProtosLargeIntegerValue} owned
  * by a Prelude. Every exact result is normalized, so the representation is a function of the value.
+ * Under D197-C the long-only value delegates to the Prelude's SmallInteger and the large value to
+ * its BigInteger; both concrete prototypes delegate to Integer.
  */
 final class ProtosIntegerValueRepresentationTest {
     private static final BigInteger LONG_MAX = BigInteger.valueOf(Long.MAX_VALUE);
@@ -68,11 +70,14 @@ final class ProtosIntegerValueRepresentationTest {
     }
 
     @Test
-    void largeIntegersAreFrozenOrdinaryObjectsDelegatingToTheIntegerPrototype() {
+    void largeIntegersAreFrozenOrdinaryObjectsDelegatingToTheBigIntegerPrototype() {
         ProtosLargeIntegerValue large = assertInstanceOf(
                 ProtosLargeIntegerValue.class,
                 ProtosNumericValueSupport.integer(ABOVE_LONG, prelude));
-        assertSame(prelude.integerPrototype(), large.parent().orElseThrow());
+        assertSame(prelude.bigIntegerPrototype(), large.parent().orElseThrow());
+        assertSame(
+                prelude.integerPrototype(),
+                prelude.bigIntegerPrototype().parent().orElseThrow());
         assertTrue(large.isFrozen());
         assertTrue(large.localSlotsSnapshot().isEmpty());
         assertTrue(ProtosNumericValueSupport.isCurrentInteger(large));
@@ -184,7 +189,7 @@ final class ProtosIntegerValueRepresentationTest {
 
     @Test
     void largeConstructionRejectsEverySigned64Value() {
-        ProtosObjectValue prototype = prelude.integerPrototype();
+        ProtosObjectValue prototype = prelude.bigIntegerPrototype();
         for (BigInteger value : new BigInteger[] {BigInteger.ZERO, LONG_MAX, LONG_MIN}) {
             assertThrows(IllegalArgumentException.class,
                     () -> new ProtosLargeIntegerValue(prototype, value));
@@ -236,8 +241,8 @@ final class ProtosIntegerValueRepresentationTest {
         ProtosLargeIntegerValue copy = assertInstanceOf(
                 ProtosLargeIntegerValue.class,
                 ProtosNumericValueSupport.copyCurrentNumberOrNull(first, other));
-        assertSame(other.integerPrototype(), copy.parent().orElseThrow());
-        assertFalse(copy.parent().orElseThrow() == prelude.integerPrototype());
+        assertSame(other.bigIntegerPrototype(), copy.parent().orElseThrow());
+        assertFalse(copy.parent().orElseThrow() == prelude.bigIntegerPrototype());
         assertTrue(copy.isFrozen());
         assertEquals(value, ProtosTestIntegers.exact(copy));
         assertTrue(ProtosIdentity.identical(first, copy));
@@ -255,13 +260,15 @@ final class ProtosIntegerValueRepresentationTest {
     }
 
     private static void assertSmall(long expected, Object actual) {
-        assertEquals(expected, assertInstanceOf(ProtosIntegerValue.class, actual).longValue());
+        ProtosIntegerValue small = assertInstanceOf(ProtosIntegerValue.class, actual);
+        assertEquals(expected, small.longValue());
+        assertSame(prelude.smallIntegerPrototype(), small.representedDelegationParent(prelude));
         assertEquals(BigInteger.valueOf(expected), ProtosTestIntegers.exact(actual));
     }
 
     private static void assertLarge(BigInteger expected, Object actual) {
         ProtosLargeIntegerValue large = assertInstanceOf(ProtosLargeIntegerValue.class, actual);
-        assertSame(prelude.integerPrototype(), large.parent().orElseThrow());
+        assertSame(prelude.bigIntegerPrototype(), large.parent().orElseThrow());
         assertEquals(expected, ProtosTestIntegers.exact(large));
     }
 }

@@ -219,6 +219,11 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 Set.of("call", "+", "-", "*", "/", "div", "mod", "recognizes"));
         assertSourceBacked(prelude.integerPrototype(), "negated");
         assertSourceBacked(prelude.integerPrototype(), "%");
+        // D197-C: the concrete Integer families own only their trusted recognizers.
+        assertNativeSelectors(
+                "SmallInteger", prelude.smallIntegerPrototype(), Set.of("recognizes"));
+        assertNativeSelectors(
+                "BigInteger", prelude.bigIntegerPrototype(), Set.of("recognizes"));
 
         assertNativeSelectors(
                 "Float",

@@ -134,6 +134,8 @@ class ProtosCoreBootstrapTest {
                         "Context",
                         "Number",
                         "Integer",
+                        "SmallInteger",
+                        "BigInteger",
                         "Float",
                         "Error",
                         "fail",

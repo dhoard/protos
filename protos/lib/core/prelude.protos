@@ -20,6 +20,8 @@ _corePreludeBindings: Context {
     Capture: Capture
     Number: Number
     Integer: Integer
+    SmallInteger: SmallInteger
+    BigInteger: BigInteger
     Float: Float
     Error: Error
     fail: () => {

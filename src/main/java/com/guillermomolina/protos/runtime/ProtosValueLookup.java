@@ -327,12 +327,13 @@ public final class ProtosValueLookup {
      * {@link #lookupGuardedInteger}. Membership is by representation, not by
      * value or identity: every {@link ProtosIntegerValue} is an immutable
      * carrier with no local slots whose delegation parent is fixed by its
-     * representation contract to the owning prelude's Integer prototype.
+     * representation contract to the owning prelude's SmallInteger prototype
+     * (D197-C), which delegates to the common Integer prototype.
      */
     public static boolean isInteger(Object receiver) {
         /*
          * I091: a large Integer is a FROZEN slotless ordinary object whose parent is its minting
-         * Prelude's Integer prototype. It is never observed outside that Prelude (every
+         * Prelude's BigInteger prototype. It is never observed outside that Prelude (every
          * cross-domain path rematerializes it), so its own lookup step is as fixed as the
          * represented step of a signed-64 Integer.
          */
@@ -350,16 +351,21 @@ public final class ProtosValueLookup {
     }
 
     /**
-     * Guarded D013 selection for a semantic Integer receiver. The Integer
-     * prototype comes from the prelude's frozen bindings, so for one prelude
-     * the represented step is the same for every Integer value; the remaining
-     * selection dependencies are the ordinary objects visited from that
-     * prototype (Integer, Number, root Object). This runs the same lookup loop
-     * as {@link #lookupGuarded}; only the receiver's own represented step is
-     * exempt from invalidation. The result is valid for any Integer receiver
-     * evaluated against the same prelude, not only for {@code receiver}. Any
-     * other receiver, including any other represented value, is unsupported
-     * here and generic lookup remains authoritative.
+     * Guarded D013 selection for a semantic Integer receiver. The receiver's
+     * immediate parent must be exactly the prelude's prototype of its concrete
+     * D197-C family (SmallInteger for a signed-64 value, BigInteger otherwise);
+     * the lookup then continues ordinarily through Integer, Number and the root
+     * Object. This runs the same lookup loop as {@link #lookupGuarded}; only the
+     * receiver's own represented step is exempt from invalidation.
+     *
+     * <p>Callers share one selection across every Integer receiver evaluated
+     * against the same prelude, whatever its concrete family. That is sound
+     * only when the selection does not depend on the family: both concrete
+     * prototypes must be frozen and neither may define {@code name} locally,
+     * so the lookup from either family reaches the same slot with the same
+     * home. A family-local slot (for example {@code recognizes}) is therefore
+     * unsupported here and generic lookup remains authoritative, as it does for
+     * any other receiver, including any other represented value.
      *
      * @return a protected selection, or null when absent or unsupported
      */
@@ -389,10 +395,18 @@ public final class ProtosValueLookup {
             String name,
             ProtosPrelude prelude) {
         CompilerAsserts.neverPartOfCompilation();
-        if (!isInteger(receiver)
-                || prelude == null
-                || delegationParent(receiver, prelude).orElse(null)
-                        != prelude.integerPrototype()) {
+        if (!isInteger(receiver) || prelude == null) {
+            return null;
+        }
+        ProtosObjectValue smallIntegerPrototype = prelude.smallIntegerPrototype();
+        ProtosObjectValue bigIntegerPrototype = prelude.bigIntegerPrototype();
+        ProtosObjectValue expectedParent =
+                ProtosNumericValueSupport.isLargeInteger(receiver)
+                        ? bigIntegerPrototype
+                        : smallIntegerPrototype;
+        if (delegationParent(receiver, prelude).orElse(null) != expectedParent
+                || !isFamilyIndependent(smallIntegerPrototype, name)
+                || !isFamilyIndependent(bigIntegerPrototype, name)) {
             return null;
         }
         Assumption stability =
@@ -404,6 +418,12 @@ public final class ProtosValueLookup {
             return null;
         }
         return new GuardedLookup(selected.orElseThrow(), stability);
+    }
+
+    private static boolean isFamilyIndependent(
+            ProtosObjectValue concreteIntegerPrototype, String name) {
+        return concreteIntegerPrototype.isFrozen()
+                && !concreteIntegerPrototype.hasLocalSlot(name);
     }
 
     public static Optional<ProtosSlotLookupResult> lookup(

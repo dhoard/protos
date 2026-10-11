@@ -91,7 +91,7 @@ class ProtosForeignValueAdmissionTest {
                 assertInstanceOf(ProtosRawForeignValue.class, fixture.eval(M + "m." + raw), raw);
             }
             // A converted value is an ordinary member of its family.
-            assertSame(fixture.prelude.integerPrototype(), fixture.eval(M + "m.big.parent()"));
+            assertSame(fixture.prelude.bigIntegerPrototype(), fixture.eval(M + "m.big.parent()"));
             assertSame(ProtosBooleanValue.TRUE, fixture.eval(M + "m.text == \"héllo 😀\""));
         }
     }
@@ -267,7 +267,7 @@ class ProtosForeignValueAdmissionTest {
                     fixture.eval(M + "m.edge")).longValue());
             Object large = fixture.eval(M + "m.huge");
             assertInstanceOf(com.guillermomolina.protos.runtime.ProtosLargeIntegerValue.class, large);
-            assertSame(fixture.prelude.integerPrototype(),
+            assertSame(fixture.prelude.bigIntegerPrototype(),
                     ((ProtosObjectValue) large).parent().orElseThrow());
             assertEquals(huge, ProtosTestIntegers.exact(large));
 

@@ -202,9 +202,11 @@ function standardRecognizes(receiver, candidate, canonicalOwner, candidatePredic
     return canonicalBoolean(candidatePredicate(candidate))
 ```
 
-For the four ratified owners, `candidatePredicate` denotes respectively semantic
-String-family membership, ordinary unbounded Integer-family membership,
-semantic Float-family membership, or ownership of standard Array indexed state.
+For the six ratified owners, `candidatePredicate` denotes respectively semantic
+String-family membership, membership in the common Integer domain, membership
+in the `SmallInteger` (signed-64) or `BigInteger` (outside signed-64) concrete
+Integer family, semantic Float-family membership, or ownership of standard Array
+indexed state.
 These predicates are runtime semantic/state observations, not Protos message
 sends. They do not perform candidate lookup, `parent()` access, equality/hash
 dispatch, callback, conversion, or coercion.
@@ -218,7 +220,7 @@ delegates to `Array` does not.
 
 An implementation may represent these truths using any hidden metadata or
 representation that preserves the normative domains and does not expose
-SmallInteger/BigInteger distinctions, host numeric classes, Array storage
+physical Integer representations, host numeric classes, Array storage
 classes, or other implementation categories as additional Core recognition
 surface.
 

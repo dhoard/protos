@@ -61,8 +61,9 @@ final class ProtosNioNetworkBackend
     private final ProtosObjectValue listenEndpointPrototype;
     private final Ipv6ListenAddressProvider ipv6ListenAddressProvider;
     /*
-     * I091: owner of materialized address bits beyond the signed-64 range (IPv6); null only for
-     * backends built without an owning Prelude, which then cannot materialize such bits.
+     * I091: owner of materialized address bits beyond the signed-64 range (IPv6), the owning
+     * Prelude's BigInteger prototype (D197-C); null only for backends built without an owning
+     * Prelude, which then cannot materialize such bits.
      */
     private final ProtosObjectValue integerPrototype;
 

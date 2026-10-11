@@ -53,7 +53,11 @@ final class ProtosNioNetworkHost implements AutoCloseable {
         ProtosObjectValue endpointPrototype = owningPrelude.ipEndpointPrototypeForRuntime();
         return new ProtosNetworkCapabilityValue(
                 owningPrelude,
-                backend(addressPrototype, endpointPrototype, owningPrelude.integerPrototype()));
+                backend(
+                        addressPrototype,
+                        endpointPrototype,
+                        // D197-C: mints only IP bits beyond the signed-64 range.
+                        owningPrelude.bigIntegerPrototype()));
     }
 
     /**

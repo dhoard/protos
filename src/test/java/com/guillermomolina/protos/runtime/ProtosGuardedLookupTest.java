@@ -839,6 +839,54 @@ final class ProtosGuardedLookupTest {
     }
 
     /**
+     * D197-C: both concrete Integer families reach the inherited operations
+     * with the canonical home (Integer for arithmetic, Number for ordering),
+     * and a selection made from either family equals the generic selection for
+     * the other, so one guarded selection may serve every Integer receiver.
+     */
+    @Test
+    void concreteIntegerFamiliesShareInheritedGuardedSelections() throws IOException {
+        var prelude = corePrelude();
+        Object small = integer(10);
+        Object big = ProtosTestIntegers.integer(BigInteger.TWO.pow(70), prelude);
+        assertSame(prelude.smallIntegerPrototype(),
+                ProtosValueLookup.delegationParent(small, prelude).orElseThrow());
+        assertSame(prelude.bigIntegerPrototype(),
+                ProtosValueLookup.delegationParent(big, prelude).orElseThrow());
+        for (String selector : new String[] {"-", ">"}) {
+            ProtosObjectValue expectedHome =
+                    selector.equals("-") ? prelude.integerPrototype() : prelude.numberPrototype();
+            var fromSmall = ProtosValueLookup.lookupGuardedInteger(small, selector, prelude);
+            var fromBig = ProtosValueLookup.lookupGuardedInteger(big, selector, prelude);
+            assertNotNull(fromSmall);
+            assertNotNull(fromBig);
+            assertSame(expectedHome, fromSmall.selected().home());
+            assertSame(expectedHome, fromBig.selected().home());
+            assertSame(fromSmall.selected().value(), fromBig.selected().value());
+            for (Object receiver : new Object[] {small, big}) {
+                var generic = ProtosValueLookup.lookup(receiver, selector, prelude).orElseThrow();
+                assertSame(generic.value(), fromSmall.selected().value());
+                assertSame(generic.home(), fromSmall.selected().home());
+            }
+        }
+        // A family-local slot differs per family, so it is never shared by a guard.
+        assertNull(ProtosValueLookup.lookupGuardedInteger(small, "recognizes", prelude));
+        assertNull(ProtosValueLookup.lookupGuardedInteger(big, "recognizes", prelude));
+    }
+
+    @Test
+    void integerGuardedSelectionRejectsAnotherPreludesLargeInteger() throws IOException {
+        var prelude = corePrelude();
+        var other = corePrelude();
+        Object foreignBig = ProtosTestIntegers.integer(BigInteger.TWO.pow(70), other);
+        assertNull(ProtosValueLookup.lookupGuardedInteger(foreignBig, "-", prelude));
+        assertNotNull(ProtosValueLookup.lookupGuardedInteger(foreignBig, "-", other));
+        // A large value whose parent is not a concrete-family prototype is rejected too.
+        assertNull(ProtosValueLookup.lookupGuardedInteger(
+                ProtosTestIntegers.integer(BigInteger.TWO.pow(70)), "-", prelude));
+    }
+
+    /**
      * The published standard graph is frozen by Core bootstrap, so selection
      * dependencies on Integer/Number/root Object cannot be mutated here; the
      * ordinary-chain invalidation contract itself is covered by the
@@ -848,6 +896,8 @@ final class ProtosGuardedLookupTest {
     void integerGuardedSelectionDependsOnFrozenStandardGraph() throws IOException {
         var prelude = corePrelude();
         assertTrue(prelude.integerPrototype().isFrozen());
+        assertTrue(prelude.smallIntegerPrototype().isFrozen());
+        assertTrue(prelude.bigIntegerPrototype().isFrozen());
         assertTrue(prelude.numberPrototype().isFrozen());
         assertThrows(IllegalStateException.class,
                 () -> prelude.numberPrototype().createLocalSlot(">", new Object()));

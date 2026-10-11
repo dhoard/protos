@@ -28,6 +28,10 @@ import java.math.BigInteger;
  * I091 / PLAT056 Candidate C: a semantic Integer within the signed-64 range, represented by its
  * exact {@code long} value only.
  *
+ * <p>Under D197-C (I090) such a value belongs to the concrete {@code SmallInteger} family: its
+ * semantic delegation parent is the {@code SmallInteger} prototype of the observing Prelude, which
+ * delegates to the common {@code Integer} prototype. The Java class name is representation only.
+ *
  * <p>An exact Integer outside that range is a {@link ProtosLargeIntegerValue}, a frozen ordinary
  * guest object. The two never denote the same value: every exact result is normalized through
  * {@link ProtosNumericValueSupport}, so a value within the signed-64 range is always a
@@ -112,7 +116,8 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
 
     @Override
     public Object representedDelegationParent(ProtosPrelude prelude) {
-        return ProtosRepresentedValue.requirePrelude(prelude, "Integer").integerPrototype();
+        return ProtosRepresentedValue.requirePrelude(prelude, "SmallInteger")
+                .smallIntegerPrototype();
     }
 
     @ExportMessage

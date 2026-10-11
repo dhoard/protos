@@ -38,6 +38,12 @@ class ProtosNumericPrototypeBridgeTest {
                 prelude.numberPrototype(),
                 prelude.integerPrototype().parent().orElseThrow());
         assertSame(
+                prelude.integerPrototype(),
+                prelude.smallIntegerPrototype().parent().orElseThrow());
+        assertSame(
+                prelude.integerPrototype(),
+                prelude.bigIntegerPrototype().parent().orElseThrow());
+        assertSame(
                 prelude.numberPrototype(),
                 prelude.floatPrototype().parent().orElseThrow());
         assertSame(

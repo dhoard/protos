@@ -81,7 +81,7 @@ final class ProtosI091PrimitiveOrderingTest {
                             + "    x: 1 + 2\n"
                             + "    y: x + 1\n"
                             + "    removed: context.removeSlot(\"x\")\n"
-                            + "    (removed.parent() === Integer) && (removed == 3) && (x + y == 104)\n"
+                            + "    (removed.parent() === SmallInteger) && (removed == 3) && (x + y == 104)\n"
                             + "}\n"
                             + "f()"));
             // A captured read taken before and after the removal.
@@ -130,7 +130,7 @@ final class ProtosI091PrimitiveOrderingTest {
     void carrierAndGuestOperandsCompareAlike() {
         try (Context context = context()) {
             assertTrue(eval(context,
-                    "a: 1 + 2\n(a == 3) && (3 == a) && (a === 3) && (a.parent() === Integer)"));
+                    "a: 1 + 2\n(a == 3) && (3 == a) && (a === 3) && (a.parent() === SmallInteger)"));
             assertTrue(eval(context,
                     "a: 0.5 + 1\n(a == 1.5) && (1.5 == a) && (a.parent() === Float)"));
             assertTrue(eval(context,

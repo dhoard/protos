@@ -83,7 +83,7 @@ class ProtosStandardNumericConversionTest {
             ProtosLargeIntegerValue large = assertInstanceOf(ProtosLargeIntegerValue.class,
                     ProtosStandardNumericConversionProtocol.convert(
                             toInteger, new ProtosFloatValue(value), prelude));
-            assertSame(prelude.integerPrototype(), large.parent().orElseThrow());
+            assertSame(prelude.bigIntegerPrototype(), large.parent().orElseThrow());
             assertEquals(new java.math.BigDecimal(value).toBigIntegerExact(),
                     ProtosTestIntegers.exact(large));
         }

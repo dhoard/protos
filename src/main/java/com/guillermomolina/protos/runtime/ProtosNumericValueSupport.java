@@ -183,15 +183,16 @@ public final class ProtosNumericValueSupport {
      */
     public static Object integerFromUnsignedBigEndian(byte[] octets, ProtosPrelude prelude) {
         return integerFromUnsignedBigEndian(
-                octets, prelude == null ? null : prelude.integerPrototype());
+                octets, prelude == null ? null : prelude.bigIntegerPrototype());
     }
 
     /**
      * The guest Integer whose unsigned big-endian encoding is {@code octets}; only encodings
-     * beyond the signed-64 range need {@code integerPrototype}.
+     * beyond the signed-64 range need {@code bigIntegerPrototype}, the {@code BigInteger}
+     * prototype of the owning Prelude, which mints the large Integer.
      */
     public static Object integerFromUnsignedBigEndian(
-            byte[] octets, ProtosObjectValue integerPrototype) {
+            byte[] octets, ProtosObjectValue bigIntegerPrototype) {
         Objects.requireNonNull(octets, "octets");
         int first = 0;
         while (first < octets.length && octets[first] == 0) {
@@ -208,7 +209,7 @@ public final class ProtosNumericValueSupport {
             }
             return integer(value);
         }
-        return integerWithPrototype(unsignedBig(octets), integerPrototype);
+        return integerWithPrototype(unsignedBig(octets), bigIntegerPrototype);
     }
 
     /** The semantic Integer {@code value} admitted by {@link #isCurrentInteger}, unchanged. */
@@ -223,7 +224,8 @@ public final class ProtosNumericValueSupport {
     /*
      * I091 / PLAT056 Candidate C exact Integer service. Every exact Integer result is
      * normalized: a value within the signed-64 range is a ProtosIntegerValue, every other value
-     * a ProtosLargeIntegerValue minted with the Integer prototype of the supplied Prelude.
+     * a ProtosLargeIntegerValue minted with the BigInteger prototype of the supplied Prelude
+     * (D197-C: a signed-64 value is a SmallInteger, every other value a BigInteger).
      * Without a Prelude, an arithmetic result outside the signed-64 range answers null, so a
      * primitive fast path falls back to its ordinary path, which always supplies one.
      */
@@ -238,22 +240,23 @@ public final class ProtosNumericValueSupport {
             return integer(value.longValue());
         }
         Objects.requireNonNull(prelude, "a large Integer requires its owning Core prelude");
-        return new ProtosLargeIntegerValue(prelude.integerPrototype(), value);
+        return new ProtosLargeIntegerValue(prelude.bigIntegerPrototype(), value);
     }
 
     /*
      * The normalized semantic Integer denoting {@code value}, minting a large value with the
-     * explicit Integer prototype {@code integerPrototype}.
+     * explicit concrete large-family prototype {@code bigIntegerPrototype} (the owning Prelude's
+     * {@code BigInteger}, not the common {@code Integer}).
      */
     static Object integerWithPrototype(
-            BigInteger value, ProtosObjectValue integerPrototype) {
+            BigInteger value, ProtosObjectValue bigIntegerPrototype) {
         Objects.requireNonNull(value, "value");
         if (value.bitLength() < Long.SIZE) {
             return integer(value.longValue());
         }
         Objects.requireNonNull(
-                integerPrototype, "a large Integer requires its owning Integer prototype");
-        return new ProtosLargeIntegerValue(integerPrototype, value);
+                bigIntegerPrototype, "a large Integer requires its owning BigInteger prototype");
+        return new ProtosLargeIntegerValue(bigIntegerPrototype, value);
     }
 
     /**
@@ -634,7 +637,7 @@ public final class ProtosNumericValueSupport {
      * Explicit detached copy for today's numeric carriers only, owned by {@code destination}.
      *
      * <p>A signed-64 Integer or a Float is a context-free immutable value. A large Integer is an
-     * ordinary guest object delegating to its minting Prelude's Integer prototype, so it is
+     * ordinary guest object delegating to its minting Prelude's BigInteger prototype, so it is
      * rematerialized with the destination's prototype and never shared across isolated domains.
      * This method is not called on ordinary arithmetic, lookup, or numeric dispatch paths.
      */

@@ -48,7 +48,7 @@ tests: [
     }),
     Test("parent number string", () => {
         tool009LegacyCase: () => {
-            ((1).parent() === Integer) &&
+            ((1).parent() === SmallInteger) &&
                 ((1.0).parent() === Float) &&
                 (("x").parent() === String)
         }

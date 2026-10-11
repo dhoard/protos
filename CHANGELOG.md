@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.335-SNAPSHOT
+
+- `I090` (#868): I090-A implements the D197-C public Integer hierarchy
+  `Number → Integer → SmallInteger | BigInteger`.
+  - New Core sources `SmallInteger.protos` and `BigInteger.protos` declare empty
+    prototypes delegating to `Integer`. They are published as Prelude bindings,
+    and bootstrap validates their exact parents. Common arithmetic, `call` and the
+    canonical method home stay on `Integer`, so `SmallInteger(x)` and
+    `BigInteger(x)` signal Error.
+  - Signed-64 values delegate to `SmallInteger` and every other Integer delegates
+    to `BigInteger`. Large values (including transfers between Preludes and IP bits
+    beyond 64 bits from NIO) are minted with the owning Prelude's `BigInteger`.
+    Normalization, primitive `long` carriers and the exact arithmetic kernels are
+    unchanged.
+  - `SmallInteger.recognizes` and `BigInteger.recognizes` are trusted native
+    recognizers that use exact-owner receiver and arity checks, as
+    `Integer.recognizes` does.
+  - Guarded D013 Integer selection checks the receiver's exact concrete-family
+    parent. It admits only selections that are identical for both families, so one
+    cached guard still serves every Integer receiver while family-local slots such
+    as `recognizes` stay on generic lookup.
+  - Add `integer/family-boundaries` conformance coverage (signed-64 boundaries,
+    promotion/demotion, conversion, identity and hash, lookalikes, and one call site
+    alternating families), and update the existing Protos and JUnit expectations
+    for the new parents.
+
 ## 0.3.334-SNAPSHOT
 
 - `I093` (#873): I093-A moves IpAddress/IpEndpoint construction, equality and hash

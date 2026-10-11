@@ -2318,7 +2318,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     /**
      * I091 / PLAT056 Candidate C: an Integer literal outside the signed-64 range. Its value is an
      * ordinary guest object owned by the executing Prelude, so it is minted on evaluation with
-     * that Prelude's Integer prototype rather than embedded as a constant shared by every
+     * that Prelude's BigInteger prototype rather than embedded as a constant shared by every
      * execution domain that runs this code. Signed-64 literals remain primitive constants.
      *
      * <p>{@code value} is the literal's lowering-time exact descriptor, never a guest value. Each

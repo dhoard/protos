@@ -30,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Predicate;
 
 public final class ProtosStandardIntegerProtocol {
     private ProtosStandardIntegerProtocol() {}
@@ -38,23 +39,8 @@ public final class ProtosStandardIntegerProtocol {
         Objects.requireNonNull(integerPrototype, "integerPrototype");
         requireSourceBackedClosure(integerPrototype, "negated");
 
-        if (integerPrototype.hasLocalSlot("recognizes")) {
-            throw new IllegalStateException(
-                    "Core Integer already defines a local recognizes slot");
-        }
-        integerPrototype.createLocalSlot(
-                "recognizes",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            if (activation.receiver() != integerPrototype
-                                    || supplied.size() != 1) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
-                            }
-                            return ProtosBooleanValue.of(
-                                    ProtosNumericValueSupport.isCurrentInteger(
-                                            supplied.get(0)));
-                        }));
+        installRecognizer(
+                integerPrototype, "Integer", ProtosNumericValueSupport::isCurrentInteger);
 
         installCanonical(integerPrototype, CanonicalIntegerOperation.ADD);
         installCanonical(integerPrototype, CanonicalIntegerOperation.SUBTRACT);
@@ -63,6 +49,45 @@ public final class ProtosStandardIntegerProtocol {
         installCanonical(integerPrototype, CanonicalIntegerOperation.QUOTIENT);
         installCanonical(integerPrototype, CanonicalIntegerOperation.REMAINDER);
         installSourceBackedSelector(integerPrototype, "_coreIntegerPercent", "%");
+    }
+
+    /**
+     * D197-C (I090): installs the trusted recognizers of the two concrete Integer families.
+     * Membership is decided from the exact current representation alone (signed-64 versus large),
+     * never by delegation or by sending a message to the candidate. The concrete prototypes
+     * receive no arithmetic and no factory: they inherit the common Integer operations, whose
+     * canonical home remains the common Integer prototype.
+     */
+    public static void installConcreteRecognizers(
+            ProtosObjectValue smallIntegerPrototype,
+            ProtosObjectValue bigIntegerPrototype) {
+        Objects.requireNonNull(smallIntegerPrototype, "smallIntegerPrototype");
+        Objects.requireNonNull(bigIntegerPrototype, "bigIntegerPrototype");
+        installRecognizer(
+                smallIntegerPrototype,
+                "SmallInteger",
+                ProtosNumericValueSupport::isIntegerInLongRange);
+        installRecognizer(
+                bigIntegerPrototype, "BigInteger", ProtosNumericValueSupport::isLargeInteger);
+    }
+
+    private static void installRecognizer(
+            ProtosObjectValue prototype, String familyName, Predicate<Object> member) {
+        if (prototype.hasLocalSlot("recognizes")) {
+            throw new IllegalStateException(
+                    "Core " + familyName + " already defines a local recognizes slot");
+        }
+        prototype.createLocalSlot(
+                "recognizes",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            if (activation.receiver() != prototype
+                                    || supplied.size() != 1) {
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }
+                            return ProtosBooleanValue.of(member.test(supplied.get(0)));
+                        }));
     }
 
     /**

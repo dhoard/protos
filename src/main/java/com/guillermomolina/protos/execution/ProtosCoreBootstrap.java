@@ -133,6 +133,12 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("Integer.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("SmallInteger.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("BigInteger.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("Float.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -227,12 +233,20 @@ public final class ProtosCoreBootstrap {
                         bootstrapContext, "Number", ProtosObjectValue.rootObject());
         ProtosObjectValue integerPrototype =
                 requirePrototype(bootstrapContext, "Integer", numberPrototype);
+        ProtosObjectValue smallIntegerPrototype =
+                requirePrototype(
+                        bootstrapContext, "SmallInteger", integerPrototype);
+        ProtosObjectValue bigIntegerPrototype =
+                requirePrototype(
+                        bootstrapContext, "BigInteger", integerPrototype);
         ProtosObjectValue floatPrototype =
                 requirePrototype(bootstrapContext, "Float", numberPrototype);
         ProtosStandardNumberEqualityProtocol.install(numberPrototype);
         ProtosStandardNumberOrderingProtocol.install(numberPrototype);
         ProtosStandardHashSupport.installNumberHash(numberPrototype);
         ProtosStandardIntegerProtocol.install(integerPrototype);
+        ProtosStandardIntegerProtocol.installConcreteRecognizers(
+                smallIntegerPrototype, bigIntegerPrototype);
         ProtosStandardFloatProtocol.install(floatPrototype);
         ProtosStandardNumericConversionProtocol.install(integerPrototype, floatPrototype);
 

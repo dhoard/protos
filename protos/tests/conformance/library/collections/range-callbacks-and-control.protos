@@ -27,13 +27,13 @@ tests: Array(
 
             Ranges.each(2, 5, (value, ...rest) => {
                 Assertions.require(rest.size() == 0)
-                Assertions.require(value.parent() === Integer)
+                Assertions.require(value.parent() === SmallInteger)
                 forwardCalls = forwardCalls + 1
             })
 
             Ranges.reverseEach(2, 5, (value, ...rest) => {
                 Assertions.require(rest.size() == 0)
-                Assertions.require(value.parent() === Integer)
+                Assertions.require(value.parent() === SmallInteger)
                 reverseCalls = reverseCalls + 1
             })
 

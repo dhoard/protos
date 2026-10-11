@@ -42,7 +42,10 @@ final class ProtosNioTcpListenerBackend
     private final int ipVersion;
     private final List<ServerSocketChannel> channels;
     private final ProtosObjectValue addressPrototype;
-    /* I091: owner of accepted address bits beyond the signed-64 range; see the network backend. */
+    /*
+     * I091: owner (the Prelude's BigInteger prototype, D197-C) of accepted address bits beyond
+     * the signed-64 range; see the network backend.
+     */
     private final ProtosObjectValue integerPrototype;
     private final ProtosObjectValue endpointPrototype;
     private final AtomicBoolean physicalClosed = new AtomicBoolean();

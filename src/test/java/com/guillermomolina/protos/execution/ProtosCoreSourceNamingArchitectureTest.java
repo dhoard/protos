@@ -37,6 +37,8 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "Context.protos",
                     "Number.protos",
                     "Integer.protos",
+                    "SmallInteger.protos",
+                    "BigInteger.protos",
                     "Float.protos",
                     "Error.protos",
                     "InvalidReturn.protos",

@@ -71,7 +71,8 @@ final class ProtosEmbeddedNetworkCustody
         Objects.requireNonNull(prelude, "prelude");
         // Fails bootstrap explicitly when the Prelude does not retain the canonical families.
         this.addressPrototype = prelude.ipAddressPrototypeForRuntime();
-        this.integerPrototype = prelude.integerPrototype();
+        // D197-C: mints only IP bits beyond the signed-64 range, which are BigIntegers.
+        this.integerPrototype = prelude.bigIntegerPrototype();
         this.endpointPrototype = prelude.ipEndpointPrototypeForRuntime();
         this.hostFactory = Objects.requireNonNull(hostFactory, "hostFactory");
     }

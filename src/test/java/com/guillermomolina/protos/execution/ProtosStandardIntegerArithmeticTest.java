@@ -30,10 +30,12 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosStandardIntegerArithmeticTest {
@@ -154,7 +156,27 @@ class ProtosStandardIntegerArithmeticTest {
                                 "+",
                                 new ProtosIntegerValue(Long.MAX_VALUE),
                                 new ProtosIntegerValue(1L)));
-        assertSame(prelude.integerPrototype(), promotedAdd.parent().orElseThrow());
+        assertSame(prelude.bigIntegerPrototype(), promotedAdd.parent().orElseThrow());
+
+        // D197-C: the canonical home stays Integer; a concrete-family home is never canonical.
+        ProtosClosureValue canonicalAdd =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        prelude.integerPrototype().readLocalSlot("+").orElseThrow());
+        for (ProtosObjectValue concrete :
+                List.of(prelude.smallIntegerPrototype(), prelude.bigIntegerPrototype())) {
+            assertFalse(concrete.hasLocalSlot("+"));
+            assertNull(
+                    ProtosStandardIntegerProtocol.canonicalOperationForSelection(
+                            canonicalAdd, concrete, "+", prelude));
+        }
+        // Demotion: a large result returning into signed-64 is a long-only Integer again.
+        assertEquals(
+                Long.MAX_VALUE,
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                direct(prelude, "-", promotedAdd, new ProtosIntegerValue(1L)))
+                        .longValue());
         assertEquals(
                 BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE),
                 ProtosTestIntegers.exact(promotedAdd));

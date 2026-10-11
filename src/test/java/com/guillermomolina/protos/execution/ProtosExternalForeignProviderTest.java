@@ -243,7 +243,7 @@ class ProtosExternalForeignProviderTest {
                         spellings[index]);
             }
             assertSame(ProtosBooleanValue.TRUE, fixture.eval(
-                    DEMO + "lib.echo(9223372036854775808).parent() === Integer"));
+                    DEMO + "lib.echo(9223372036854775808).parent() === BigInteger"));
             assertEquals(1, counter(fixture, "invented.Invented", "SESSIONS"));
 
             // An independent session (another Actor) has the same exact contract.

@@ -319,11 +319,13 @@ behavior on exactly these canonical standard owners:
 ```text
 String
 Integer
+SmallInteger
+BigInteger
 Float
 Array
 ```
 
-Each of these four standard behaviors requires its exact canonical standard
+Each of these six standard behaviors requires its exact canonical standard
 owner as receiver and accepts exactly one supplied argument. The candidate
 argument may be any Protos value. A matching candidate returns canonical `true`;
 a non-matching candidate returns canonical `false`.
@@ -341,15 +343,21 @@ other than exactly one argument, follows the ordinary Error rules for invalid
 standard-behavior receivers and arity. Candidate mismatch itself is not an
 Error; it is canonical `false`.
 
-The four recognized domains are exactly:
+The six recognized domains are exactly:
 
 - `String.recognizes(value)` is `true` iff `value` is a semantic String value.
   An ordinary object that merely delegates to `String` or to a String value is
   not recognized, and `String.recognizes(String)` is `false`.
-- `Integer.recognizes(value)` is `true` iff `value` is a semantic unbounded
-  Integer value as defined by this specification. Internal SmallInteger,
-  BigInteger, machine-word, or equivalent representation choices are
-  unobservable, and `Integer.recognizes(Integer)` is `false`.
+- `Integer.recognizes(value)` is `true` iff `value` is a semantic Integer value,
+  that is, a member of either concrete Integer family defined under **Numeric
+  Model**. Machine-word, boxed, or equivalent physical representation choices
+  are unobservable, and `Integer.recognizes(Integer)` is `false`.
+- `SmallInteger.recognizes(value)` is `true` iff `value` is a semantic Integer
+  value in the signed-64 range. `SmallInteger.recognizes(SmallInteger)` and
+  `SmallInteger.recognizes(Integer)` are `false`.
+- `BigInteger.recognizes(value)` is `true` iff `value` is a semantic Integer
+  value outside the signed-64 range. `BigInteger.recognizes(BigInteger)` and
+  `BigInteger.recognizes(Integer)` are `false`.
 - `Float.recognizes(value)` is `true` iff `value` is a semantic Float value.
   Recognition performs no numeric promotion or conversion; in particular an
   ordinary Integer is not a Float, and `Float.recognizes(Float)` is `false`.
@@ -1175,16 +1183,38 @@ The Core v0.1 numeric semantic families are exactly:
 
 ```text
 Number                         common numeric prototype; not a concrete value family
-├── Integer                    unbounded exact mathematical-integer family
+├── Integer                    common exact mathematical-integer domain; not a concrete value family
+│   ├── SmallInteger           concrete family: Integers in the signed-64 range
+│   └── BigInteger             concrete family: Integers outside the signed-64 range
 └── Float                      IEEE 754-2019 binary64 family
 ```
 
-`Number`, `Integer`, and `Float` are the standard prototype objects
-corresponding to that hierarchy. `Integer` and `Float` delegate through
-`Number`. Numeric-family membership is not conferred by delegation: an ordinary
-object that delegates to one of these prototype objects is still an ordinary
-object unless a separate normative factory or operation creates a numeric
-semantic value.
+`Number`, `Integer`, `SmallInteger`, `BigInteger`, and `Float` are the standard
+prototype objects corresponding to that hierarchy and are published as Prelude
+bindings of those names. `Integer` and `Float` delegate immediately to
+`Number`; `SmallInteger` and `BigInteger` delegate immediately to `Integer`.
+Numeric-family membership is not conferred by delegation: an ordinary object
+that delegates to one of these prototype objects is still an ordinary object
+unless a separate normative factory or operation creates a numeric semantic
+value.
+
+The signed-64 range is the closed mathematical interval
+`[-9223372036854775808, 9223372036854775807]`, that is `[-2^63, 2^63 - 1]`.
+Every semantic Integer value belongs to exactly one concrete Integer family,
+determined by its exact mathematical value alone (**canonical
+normalization**): a value inside the signed-64 range is a `SmallInteger`, and
+every other value is a `BigInteger`. The immediate delegation parent of a
+semantic Integer value is the `SmallInteger` or `BigInteger` prototype of its
+concrete family, so `42.parent() === SmallInteger` and
+`9223372036854775808.parent() === BigInteger`. Behavior common to all Integers,
+including the standard Integer arithmetic, recognition, and conversion
+behaviors, is owned by `Integer` and reached through ordinary delegation;
+the concrete-family prototypes add only their own `recognizes` behavior.
+
+D197-C also establishes `Fraction` and `Complex` as future concrete numeric
+families under `Number`. They are not part of this revision: no prototype,
+binding, literal, or operation for them is defined here, and no standard
+operation in this revision produces them.
 
 Core v0.1 defines no standard width-specific numeric semantic family, prototype, or
 prelude binding. Width- or range-specific representations may exist inside an
@@ -1198,12 +1228,14 @@ Core v0.1 also defines no additional standard numeric prototypes named `Int` or
 and do not denote a portable Core numeric family unless a later normative
 revision explicitly standardizes them.
 
-In this specification, `Integer` means a value of the single unbounded
-`Integer` semantic family. Whenever a Core-standard operation's normal result or
-Future resolution is specified as an `Integer`, that result is an unbounded
-semantic Integer. Input domains that require `Integer` likewise require that
-semantic family exactly unless their normative owner explicitly states a
-different protocol.
+In this specification, `Integer` means a value of the common unbounded
+Integer domain, that is, a value of either concrete Integer family. Whenever a
+Core-standard operation's normal result or Future resolution is specified as an
+`Integer`, that result is an unbounded semantic Integer whose concrete family is
+selected by canonical normalization of its exact value. Input domains that
+require `Integer` likewise accept exactly that common domain, regardless of
+concrete family, unless their normative owner explicitly states a different
+protocol.
 
 `Integer` denotes mathematical integers with unbounded precision. Ordinary
 Integer arithmetic therefore has no semantic integer overflow. A conforming
@@ -1211,20 +1243,31 @@ implementation must grow representation as required; allocation failure or a
 runtime resource limit is not permission to wrap, saturate, truncate, or expose
 the host's integer width as a numeric result.
 
-### Internal Integer representation is not portable surface
+### Concrete Integer family versus internal representation
 
-`SmallInteger`, `BigInteger`, tagged integers, boxed integers, machine-word
-integers, limb arrays, and similar categories are implementation representations
-only. Core v0.1 defines no standard numeric semantic family, prototype object, or
-prelude binding named `SmallInteger` or `BigInteger`.
+The concrete Integer families are observable semantics; their physical
+representation is not.
 
-An implementation may change an ordinary Integer between small and large
-representations at any time, including across arithmetic, constant folding,
-Actor transfer, specialization, deoptimization, or garbage collection, provided
-the change is unobservable. In particular, internal representation must not
-change:
+Observable: `SmallInteger` and `BigInteger` are distinct public families. Which
+one a value belongs to depends only on its exact mathematical value and the
+signed-64 boundary above. `parent()` and the `recognizes` behaviors observe it.
+An arithmetic, conversion, or other standard result is normalized to its
+concrete family: a result that leaves the signed-64 range is a `BigInteger`,
+and a result that returns into it is a `SmallInteger`. There is no wraparound,
+saturation, or implicit promotion to `Float` at the boundary.
 
-- the value's semantic family or standard prototype/delegation behavior;
+Not observable: tagged integers, primitive machine words, boxed host integers,
+arbitrary-precision host payloads, limb arrays, deferred materialization,
+compilation strategy, and similar categories are implementation
+representations only. They are not part of the portable contract, and none of
+them by itself changes the concrete family of a value.
+
+An implementation may change the physical representation of an Integer at any
+time, including across arithmetic, constant folding, Actor transfer,
+specialization, deoptimization, or garbage collection, provided the change is
+unobservable. In particular, internal representation must not change:
+
+- the value's concrete family or standard prototype/delegation behavior;
 - ordinary lookup or dispatch;
 - `==`, `!=`, `===`, `!==`, `hash`, or `identityHashOf`;
 - reflection or family/prototype observations provided elsewhere by Core;
@@ -1233,8 +1276,9 @@ change:
 
 Core v0.1 introduces no serialization format for an internal integer
 representation. Any standard transfer or encoding rule that preserves a numeric
-value operates on its semantic family and semantic value, never on a
-small/big/tagged storage category.
+value operates on its semantic family and semantic value, never on a physical
+storage category; a transferred Integer delegates to the concrete-family
+prototype of its destination.
 
 Integer-only bit-manipulation or explicit wrapping protocols are not added by
 this section. Libraries may define such ordinary messages, but portable Core
@@ -1281,7 +1325,8 @@ For example:
 ```
 
 denote the values above. Literal radix is syntactic only; every integer literal
-denotes an ordinary unbounded `Integer`, not a width-selected family.
+denotes an ordinary unbounded `Integer` whose concrete family is selected by
+canonical normalization of its value, never by its radix or spelled width.
 
 ### Explicit standard numeric conversion
 
@@ -1299,7 +1344,7 @@ suspension point.
 `Integer(value)` returns the same mathematical Integer when `value` is already
 an Integer. When `value` is a Float, conversion succeeds only if the Float is
 finite and its exact binary64 value is mathematically integral; the result is
-that exact unbounded Integer. NaN, either infinity, and a finite non-integral
+that exact unbounded Integer, canonically normalized to its concrete family. NaN, either infinity, and a finite non-integral
 Float signal an `Error`. `Integer` conversion never rounds or truncates.
 
 `Float(value)` returns the same semantic Float value when `value` is already a
@@ -1309,6 +1354,11 @@ converting that exact mathematical integer using `roundTiesToEven`. Loss of
 integer precision in this explicit conversion is therefore permitted and
 normative, not an `Error`. A result beyond the finite binary64 range is the
 correspondingly signed infinity. Integer zero converts to positive `0.0`.
+
+`SmallInteger` and `BigInteger` are not conversion factories. The standard
+`Integer` conversion behavior is reachable from them by ordinary lookup, but it
+requires its exact canonical `Integer` owner as receiver, so invoking
+`SmallInteger(value)` or `BigInteger(value)` signals an `Error`.
 
 Outside the standard mixed Integer/Float arithmetic rule below, these
 conversion factories introduce no implicit numeric coercion. Standard mixed
@@ -1320,6 +1370,10 @@ does not make `Float(x)` an implicit conversion for other protocols.
 Standard numeric arithmetic uses the **original receiver and argument semantic
 families** to determine the standard operation. For binary `+`, `-`, and `*`,
 the complete Core v0.1 matrix is:
+
+In this matrix and in the division rules below, `Integer` denotes the common
+Integer domain: either concrete Integer family selects the same row, and an
+exact `Integer` result is canonically normalized to its concrete family.
 
 | receiver family | argument family | result |
 | --- | --- | --- |
@@ -1460,8 +1514,11 @@ its exact binary64 mathematical value. Therefore, for example:
 
 `===` remains non-overridable semantic identity and includes numeric semantic
 family, with the previously specified Float signed-zero and NaN special cases.
-Internal small/big integer representation is never a semantic family and cannot
-change `===`.
+Two Integers are identical exactly when they denote the same mathematical
+value. Because the `SmallInteger` and `BigInteger` ranges are disjoint, equal
+Integers always share their concrete family, so the concrete family never
+splits an Integer value into distinct identities. Physical representation is
+never a semantic family and cannot change `===`.
 
 The standard numeric ordering operators `<`, `<=`, `>`, and `>=` accept any two
 semantic Number values, including distinct numeric families. They compare
@@ -1516,7 +1573,7 @@ identity, dispatch, and observable evaluation order remain exactly as specified.
 Endianness is not a property of a numeric value. It belongs to binary encoding
 and decoding. The same semantic numeric value may be represented as bytes using
 ordinary encoding protocols such as `BigEndian` and `LittleEndian`; such
-protocols must not expose an implementation-private small/big/tagged Integer
+protocols must not expose an implementation-private physical Integer
 representation.
 
 For example:

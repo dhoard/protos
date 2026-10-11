@@ -285,6 +285,14 @@ public final class ProtosPrelude {
         return requiredOrdinaryBinding("Integer");
     }
 
+    public ProtosObjectValue smallIntegerPrototype() {
+        return requiredOrdinaryBinding("SmallInteger");
+    }
+
+    public ProtosObjectValue bigIntegerPrototype() {
+        return requiredOrdinaryBinding("BigInteger");
+    }
+
     public ProtosObjectValue floatPrototype() {
         return requiredOrdinaryBinding("Float");
     }

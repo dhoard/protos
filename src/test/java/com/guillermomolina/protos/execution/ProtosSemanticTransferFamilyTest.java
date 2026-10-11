@@ -223,7 +223,7 @@ final class ProtosSemanticTransferFamilyTest {
             ProtosObjectValue large = assertInstanceOf(ProtosObjectValue.class, copied);
             assertTrue(ProtosNumericValueSupport.isLargeInteger(large));
             assertTrue(large.isFrozen());
-            assertSame(destinationPrelude.integerPrototype(), large.parent().orElseThrow());
+            assertSame(destinationPrelude.bigIntegerPrototype(), large.parent().orElseThrow());
         }
         assertEquals(huge, ProtosTestIntegers.exact(copiedLarge));
         assertEquals(BigInteger.ONE.shiftLeft(64).negate(), ProtosTestIntegers.exact(copiedNegative));

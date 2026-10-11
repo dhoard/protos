@@ -23,6 +23,8 @@ tests: [
             Context
             Number
             Integer
+            SmallInteger
+            BigInteger
             Float
             Error
             InvalidReturn
@@ -112,13 +114,32 @@ tests: [
             Assertions.require(String.recognizes(StringLike) === false)
             Assertions.require(String.recognizes(String) === false)
 
-            // Integer: ordinary unbounded family only.
+            // Integer: the common domain of both concrete Integer families.
+            big: 1234567890123456789012345678901234567890
             Assertions.require(Integer.recognizes(1) === true)
-            Assertions.require(
-                Integer.recognizes(1234567890123456789012345678901234567890) === true
-            )
+            Assertions.require(Integer.recognizes(big) === true)
 
             Assertions.require(Integer.recognizes(Integer) === false)
+            Assertions.require(Integer.recognizes(SmallInteger) === false)
+            Assertions.require(Integer.recognizes(BigInteger) === false)
+            Assertions.require(Integer.recognizes(1.0) === false)
+
+            // SmallInteger / BigInteger: disjoint concrete families split at signed-64.
+            Assertions.require(SmallInteger.recognizes(1) === true)
+            Assertions.require(SmallInteger.recognizes(big) === false)
+            Assertions.require(BigInteger.recognizes(big) === true)
+            Assertions.require(BigInteger.recognizes(1) === false)
+
+            [Integer, SmallInteger, BigInteger].each((owner) => {
+                Assertions.require(owner.recognizes(SmallInteger) === false)
+                Assertions.require(owner.recognizes(BigInteger) === false)
+                Assertions.require(owner.recognizes(Integer) === false)
+                Assertions.require(owner.recognizes(1.0) === false)
+                Assertions.require(owner.recognizes({}) === false)
+                Assertions.require(owner.recognizes(SmallInteger {}) === false)
+                Assertions.require(owner.recognizes(BigInteger {}) === false)
+                Assertions.require(owner.recognizes(Integer {}) === false)
+            })
 
             // Float: exact semantic Float, with no numeric promotion.
             Assertions.require(Float.recognizes(1.0) === true)
@@ -155,6 +176,12 @@ tests: [
             IntegerLike: Integer {}
             Assertions.signals(Error, () => { IntegerLike.recognizes(1) })
 
+            SmallIntegerLike: SmallInteger {}
+            Assertions.signals(Error, () => { SmallIntegerLike.recognizes(1) })
+
+            BigIntegerLike: BigInteger {}
+            Assertions.signals(Error, () => { BigIntegerLike.recognizes(big) })
+
             FloatLike: Float {}
             Assertions.signals(Error, () => { FloatLike.recognizes(1.0) })
 
@@ -169,6 +196,8 @@ tests: [
 
             assertArity(String)
             assertArity(Integer)
+            assertArity(SmallInteger)
+            assertArity(BigInteger)
             assertArity(Float)
             assertArity(Array)
 
@@ -206,6 +235,8 @@ tests: [
 
             Assertions.require(String.recognizes(candidate) === false)
             Assertions.require(Integer.recognizes(candidate) === false)
+            Assertions.require(SmallInteger.recognizes(candidate) === false)
+            Assertions.require(BigInteger.recognizes(candidate) === false)
             Assertions.require(Float.recognizes(candidate) === false)
             Assertions.require(Array.recognizes(candidate) === false)
 

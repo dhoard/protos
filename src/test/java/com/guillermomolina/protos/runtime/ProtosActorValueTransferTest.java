@@ -662,11 +662,11 @@ final class ProtosActorValueTransferTest {
         assertEquals(twoTo64, ProtosTestIntegers.exact(copiedPositive));
         assertEquals(twoTo64.negate(), ProtosTestIntegers.exact(copiedNegative));
         assertEquals(huge, ProtosTestIntegers.exact(copiedShared));
-        // Rematerialized whole: frozen, slotless, and owned by the Integer prototype.
+        // Rematerialized whole: frozen, slotless, and owned by the BigInteger prototype.
         for (ProtosLargeIntegerValue copied :
                 List.of(copiedPositive, copiedNegative, copiedShared)) {
             assertTrue(copied.isFrozen());
-            assertSame(prelude.integerPrototype(), copied.parent().orElseThrow());
+            assertSame(prelude.bigIntegerPrototype(), copied.parent().orElseThrow());
             ArrayList<String> names = new ArrayList<>();
             copied.appendLocalBindingsTo(names, new ArrayList<>());
             assertTrue(names.isEmpty());

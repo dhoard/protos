@@ -66,7 +66,7 @@ final class ProtosI091IdentityRepresentationTest {
 
         assertNotSame(original, copy);
         assertSame(
-                destination.integerPrototype(),
+                destination.bigIntegerPrototype(),
                 ((ProtosObjectValue) copy).parent().orElseThrow());
         assertTrue(ProtosIdentity.identical(original, copy));
         assertEquals(ProtosIdentity.identityHash(original), ProtosIdentity.identityHash(copy));

@@ -17,16 +17,6 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
-    Test("missing biginteger binding", () => {
-        Assertions.signals(SlotNotFound, () => {
-            BigInteger
-        })
-    }),
-    Test("missing smallinteger binding", () => {
-        Assertions.signals(SlotNotFound, () => {
-            SmallInteger
-        })
-    }),
     Test("missing int8 binding", () => {
         Assertions.signals(SlotNotFound, () => {
             Int8

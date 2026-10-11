@@ -279,7 +279,7 @@ class ProtosForeignValueProjectionTest {
             }
             // A provider-returned large Integer is owned by the admitting Prelude.
             assertSame(ProtosBooleanValue.TRUE,
-                    fixture.eval(M + "m.echo(9223372036854775808).parent() === Integer"));
+                    fixture.eval(M + "m.echo(9223372036854775808).parent() === BigInteger"));
             assertSame(ProtosBooleanValue.TRUE,
                     fixture.eval(M + "m.echo(9223372036854775808) - 1 === 9223372036854775807"));
         }
@@ -333,8 +333,8 @@ class ProtosForeignValueProjectionTest {
             assertEquals(TWO_POW_63.add(BigInteger.ONE), ProtosTestIntegers.exact(
                     fixture.eval(M + "m.viaCallback((x) => x + 1)")));
             assertSame(ProtosBooleanValue.TRUE, fixture.eval(
-                    M + "m.viaCallback((x) => (x.parent() === Integer).ifTrue() { x })"
-                            + ".parent() === Integer"));
+                    M + "m.viaCallback((x) => (x.parent() === BigInteger).ifTrue() { x })"
+                            + ".parent() === BigInteger"));
             // A RAW handle keeps its exact identity next to Integer arguments.
             fixture.eval(M + "m.fn(m.other, 9223372036854775808)");
             ProtosForeignArgument raw =
@@ -363,9 +363,9 @@ class ProtosForeignValueProjectionTest {
             Object fromLeft = left.eval(M + "m.echo(9223372036854775808)");
             Object fromRight = right.eval(M + "m.echo(9223372036854775808)");
             assertNotSame(fromLeft, fromRight);
-            assertSame(left.prelude.integerPrototype(),
+            assertSame(left.prelude.bigIntegerPrototype(),
                     ((ProtosObjectValue) fromLeft).parent().orElseThrow());
-            assertSame(right.prelude.integerPrototype(),
+            assertSame(right.prelude.bigIntegerPrototype(),
                     ((ProtosObjectValue) fromRight).parent().orElseThrow());
             assertEquals(ProtosTestIntegers.exact(fromLeft), ProtosTestIntegers.exact(fromRight));
         }

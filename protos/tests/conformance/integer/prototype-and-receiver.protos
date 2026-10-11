@@ -45,7 +45,9 @@ tests: [
         tool009LegacyCase: () => {
             child: (7) {}
             numeric: child.parent()
-            numeric.parent() === Integer
+            (numeric.parent() === SmallInteger) &&
+                (SmallInteger.parent() === Integer) &&
+                (Integer.parent() === Number)
         }
         Assertions.require(tool009LegacyCase() === true)
     }),
@@ -58,15 +60,15 @@ tests: [
             child.call()
         })
     }),
-    Test("integer reflection does not depend on magnitude", () => {
+    Test("integer reflection exposes the concrete family", () => {
         small: 7
         large: 100000000000000000000
         Assertions.require(small.hasSlot("parent") === false)
         Assertions.require(large.hasSlot("parent") === false)
         Assertions.require(small.slotNames().size() == 0)
         Assertions.require(large.slotNames().size() == 0)
-        Assertions.require(small.parent() === Integer)
-        Assertions.require(large.parent() === Integer)
+        Assertions.require(small.parent() === SmallInteger)
+        Assertions.require(large.parent() === BigInteger)
         Assertions.signals(Error, () => small.slotValue("parent"))
         Assertions.signals(Error, () => large.slotValue("parent"))
         Assertions.signals(Error, () => small.removeSlot("parent"))

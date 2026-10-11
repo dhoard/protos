@@ -272,7 +272,7 @@ final class ProtosStandardIpFamilyPlacementTest {
             Object hash = guestHash(prelude, 6, bits);
             assertEquals(expectedHash(bits, 6), ProtosTestIntegers.exact(hash), bits.toString(16));
             if (expectedHash(bits, 6).bitLength() >= Long.SIZE) {
-                assertSame(prelude.integerPrototype(),
+                assertSame(prelude.bigIntegerPrototype(),
                         ((ProtosObjectValue) hash).parent().orElseThrow(), bits.toString(16));
             }
         }
@@ -310,8 +310,8 @@ final class ProtosStandardIpFamilyPlacementTest {
         BigInteger bits = BigInteger.ONE.shiftLeft(127);
         Object leftHash = guestHash(left, 6, bits);
         Object rightHash = guestHash(right, 6, bits);
-        assertSame(left.integerPrototype(), ((ProtosObjectValue) leftHash).parent().orElseThrow());
-        assertSame(right.integerPrototype(), ((ProtosObjectValue) rightHash).parent().orElseThrow());
+        assertSame(left.bigIntegerPrototype(), ((ProtosObjectValue) leftHash).parent().orElseThrow());
+        assertSame(right.bigIntegerPrototype(), ((ProtosObjectValue) rightHash).parent().orElseThrow());
         assertEquals(ProtosTestIntegers.exact(leftHash), ProtosTestIntegers.exact(rightHash));
     }
 
@@ -327,7 +327,7 @@ final class ProtosStandardIpFamilyPlacementTest {
         assertTrue(ProtosNumericValueSupport.isCurrentInteger(hash));
         assertEquals(expectedHash(bits, 6), ProtosTestIntegers.exact(hash));
         assertTrue(expectedHash(bits, 6).bitLength() >= Long.SIZE);
-        assertSame(prelude.integerPrototype(), ((ProtosObjectValue) hash).parent().orElseThrow());
+        assertSame(prelude.bigIntegerPrototype(), ((ProtosObjectValue) hash).parent().orElseThrow());
     }
 
     private static void assertCanonicalCopy(

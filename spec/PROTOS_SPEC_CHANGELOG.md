@@ -23,6 +23,26 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.453] - 2026-10-11
+
+### I090-A / D197-C — Public SmallInteger and BigInteger families
+- `spec/semantics/VALUES_AND_COLLECTIONS.md`: `Integer` is now the common
+  exact mathematical-integer domain, with concrete families `SmallInteger`
+  (the signed-64 range `[-2^63, 2^63 - 1]`) and `BigInteger` (all other
+  Integers). Both are standard prototypes and Prelude bindings delegating
+  immediately to `Integer`. Canonical normalization selects the family from
+  the exact value, so overflow promotes to `BigInteger`, a result returning
+  into signed-64 is a `SmallInteger`, and nothing wraps, saturates or
+  promotes to Float. `parent()` and `recognizes` observe the family, while
+  physical representation stays unobservable.
+- Add `SmallInteger.recognizes` and `BigInteger.recognizes` to the
+  exact standard-owner recognizers. The concrete prototypes are not
+  conversion factories. `===` and hash are unchanged because the family
+  ranges are disjoint. `Fraction` and `Complex` are recorded as future
+  D197-C families and are not defined by this revision.
+- `spec/runtime/ABSTRACT_RUNTIME.md` (informative): recognition
+  pseudocode now covers the six owners.
+
 ## [0.1.452] - 2026-10-10
 
 ### I089-A / D196 B1 — Operand-first mixed Integer/Float arithmetic

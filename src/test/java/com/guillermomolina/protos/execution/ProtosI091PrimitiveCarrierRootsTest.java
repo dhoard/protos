@@ -133,7 +133,7 @@ final class ProtosI091PrimitiveCarrierRootsTest {
                     context.eval(ProtosLanguage.ID,
                                     "0b1" + "0".repeat(99) + "1").asBigInteger());
             assertTrue(context.eval(ProtosLanguage.ID,
-                    "(18446744073709551616).parent() === Integer").asBoolean());
+                    "(18446744073709551616).parent() === BigInteger").asBoolean());
 
             Value negativeZero = context.eval(ProtosLanguage.ID, "-0.0");
             assertEquals(Double.doubleToRawLongBits(-0.0d),
@@ -159,7 +159,7 @@ final class ProtosI091PrimitiveCarrierRootsTest {
         String core = Path.of("protos", "lib", "core").toAbsolutePath().toString();
         Source source = Source.create(ProtosLanguage.ID,
                 "n: 18446744073709551616\n"
-                        + "(n.parent() === Integer).ifTrue() { n + 0.0 == 18446744073709551616.0 }");
+                        + "(n.parent() === BigInteger).ifTrue() { n + 0.0 == 18446744073709551616.0 }");
         try (Engine engine = Engine.newBuilder(ProtosLanguage.ID)
                         .option("protos.CoreRoot", core)
                         .option("engine.WarnInterpreterOnly", "false")

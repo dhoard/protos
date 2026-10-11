@@ -105,7 +105,7 @@ class ProtosStandardByteIoPositioningProtocolTest {
         assertEquals(BigInteger.valueOf(Long.MAX_VALUE),ProtosTestIntegers.exact(resolved(x.flow().seek(x.activation(),i(Long.MAX_VALUE)))));
         Object crossed=resolved(x.flow().seekBy(x.activation(),i(1)));
         assertEquals(TWO_POW_63,ProtosTestIntegers.exact(crossed));
-        assertSame(x.prelude().integerPrototype(),((ProtosObjectValue)crossed).parent().orElseThrow());
+        assertSame(x.prelude().bigIntegerPrototype(),((ProtosObjectValue)crossed).parent().orElseThrow());
         assertEquals(TWO_POW_63,position(x));
         assertEquals(BigInteger.valueOf(Long.MAX_VALUE),ProtosTestIntegers.exact(resolved(x.flow().seekBy(x.activation(),i(-1)))));
         assertEquals(TWO_POW_63.shiftLeft(1),ProtosTestIntegers.exact(resolved(x.flow().seek(x.activation(),ProtosTestIntegers.integer(TWO_POW_63.shiftLeft(1),x.prelude())))));

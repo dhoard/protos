@@ -114,8 +114,8 @@ final class ProtosNumericValueSupportTest {
 
         assertEquals(Long.MIN_VALUE, smallCopy.longValue());
         assertEquals(ProtosTestIntegers.exact(large), ProtosTestIntegers.exact(largeCopy));
-        // I091: a large Integer is rematerialized with the destination's Integer prototype.
-        assertSame(destination.integerPrototype(), largeCopy.parent().orElseThrow());
+        // I091: a large Integer is rematerialized with the destination's BigInteger prototype.
+        assertSame(destination.bigIntegerPrototype(), largeCopy.parent().orElseThrow());
         assertTrue(largeCopy.isFrozen());
         assertTrue(ProtosIdentity.identical(large, largeCopy));
         assertEquals(ProtosIdentity.identityHash(large), ProtosIdentity.identityHash(largeCopy));

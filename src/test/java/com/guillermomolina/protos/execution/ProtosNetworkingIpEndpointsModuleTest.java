@@ -132,7 +132,7 @@ final class ProtosNetworkingIpEndpointsModuleTest {
                 BigInteger.ONE.shiftLeft(128).subtract(BigInteger.ONE))) {
             Object hash = endpointHash(prelude, 6, bits, 443);
             assertEquals(expectedHash(6, bits, 443), ProtosTestIntegers.exact(hash));
-            assertSame(prelude.integerPrototype(),
+            assertSame(prelude.bigIntegerPrototype(),
                     ((ProtosObjectValue) hash).parent().orElseThrow());
         }
     }
@@ -179,7 +179,7 @@ final class ProtosNetworkingIpEndpointsModuleTest {
         Object otherHash = endpointHash(
                 other, 6, BigInteger.ONE.shiftLeft(128).subtract(BigInteger.ONE), 1);
         assertEquals(ProtosTestIntegers.exact(hash), ProtosTestIntegers.exact(otherHash));
-        assertSame(other.integerPrototype(),
+        assertSame(other.bigIntegerPrototype(),
                 ((ProtosObjectValue) otherHash).parent().orElseThrow());
     }
 }

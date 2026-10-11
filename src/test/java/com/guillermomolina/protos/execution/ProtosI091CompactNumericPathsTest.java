@@ -132,7 +132,7 @@ final class ProtosI091CompactNumericPathsTest {
         ProtosLargeIntegerValue twoPow63 = assertInstanceOf(
                 ProtosLargeIntegerValue.class,
                 ProtosBinary64Rounding.integralBinary64(0x1p63, prelude));
-        assertSame(prelude.integerPrototype(), twoPow63.parent().orElseThrow());
+        assertSame(prelude.bigIntegerPrototype(), twoPow63.parent().orElseThrow());
         assertEquals(BigInteger.ONE.shiftLeft(63), ProtosTestIntegers.exact(twoPow63));
         assertEquals(
                 BigInteger.ONE.shiftLeft(70).negate(),

@@ -1,0 +1,142 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+// D197-C (I090-A): the SmallInteger / BigInteger split at the signed-64 boundary.
+tests: [
+    Test("signed-64 bounds are SmallIntegers", () => {
+        Assertions.require((9223372036854775807).parent() === SmallInteger)
+        Assertions.require((-9223372036854775808).parent() === SmallInteger)
+        Assertions.require(SmallInteger.recognizes(9223372036854775807) === true)
+        Assertions.require(SmallInteger.recognizes(-9223372036854775808) === true)
+    }),
+    Test("values just outside signed-64 are BigIntegers", () => {
+        Assertions.require((9223372036854775808).parent() === BigInteger)
+        Assertions.require((-9223372036854775809).parent() === BigInteger)
+        Assertions.require(BigInteger.recognizes(9223372036854775808) === true)
+        Assertions.require(BigInteger.recognizes(-9223372036854775809) === true)
+    }),
+    Test("overflow promotes to BigInteger without wraparound", () => {
+        positive: 9223372036854775807 + 1
+        negative: -9223372036854775808 - 1
+        Assertions.require(positive.parent() === BigInteger)
+        Assertions.require(positive == 9223372036854775808)
+        Assertions.require(positive > 0)
+        Assertions.require(negative.parent() === BigInteger)
+        Assertions.require(negative == -9223372036854775809)
+        Assertions.require(negative < 0)
+        Assertions.require((4294967296 * 4294967296).parent() === BigInteger)
+        Assertions.require(Integer.recognizes(9223372036854775807 + 1) === true)
+        Assertions.require(Float.recognizes(9223372036854775807 + 1) === false)
+    }),
+    Test("results returning into signed-64 are SmallIntegers", () => {
+        Assertions.require((9223372036854775808 - 1).parent() === SmallInteger)
+        Assertions.require((-9223372036854775809 + 1).parent() === SmallInteger)
+        Assertions.require((18446744073709551616).div(4).parent() === SmallInteger)
+        Assertions.require((18446744073709551616).div(4) == 4611686018427387904)
+        Assertions.require((18446744073709551616).div(2).parent() === BigInteger)
+    }),
+    Test("Integer conversion normalizes the concrete family", () => {
+        Assertions.require(Integer(4.0).parent() === SmallInteger)
+        Assertions.require(Integer(1e23).parent() === BigInteger)
+        Assertions.require(Integer(1e23) == 99999999999999991611392)
+        Assertions.require(Integer(9223372036854775808).parent() === BigInteger)
+    }),
+    Test("exact parents of the Integer hierarchy", () => {
+        Assertions.require(Integer.parent() === Number)
+        Assertions.require(SmallInteger.parent() === Integer)
+        Assertions.require(BigInteger.parent() === Integer)
+    }),
+    Test("equality, identity and hash are by value", () => {
+        a: 9223372036854775807 + 1
+        b: 9223372036854775808
+        Assertions.require(a == b)
+        Assertions.require(a === b)
+        Assertions.require(a.hash() == b.hash())
+        c: 9223372036854775808 - 1
+        Assertions.require(c === 9223372036854775807)
+        Assertions.require(c.hash() == (9223372036854775807).hash())
+        Assertions.require(b == 9223372036854775808.0)
+        Assertions.require(b.hash() == (9223372036854775808.0).hash())
+        Assertions.require((b === 9223372036854775808.0) === false)
+    }),
+    Test("concrete prototypes are not conversion factories", () => {
+        Assertions.signals(Error, () => SmallInteger(1))
+        Assertions.signals(Error, () => BigInteger(1))
+        Assertions.signals(Error, () => BigInteger(9223372036854775808))
+        Assertions.require(Integer(1) === 1)
+    }),
+    Test("delegation does not confer concrete-family membership", () => {
+        smallChild: SmallInteger {}
+        bigChild: BigInteger {}
+        Assertions.require(SmallInteger.recognizes(smallChild) === false)
+        Assertions.require(BigInteger.recognizes(bigChild) === false)
+        Assertions.require(Integer.recognizes(smallChild) === false)
+        Assertions.require(Integer.recognizes(bigChild) === false)
+        Assertions.signals(Error, () => smallChild + 1)
+        Assertions.signals(Error, () => bigChild + 1)
+    }),
+    Test("both concrete families inherit the common Integer behavior", () => {
+        big: 9223372036854775808
+        Assertions.require((7).negated() == -7)
+        Assertions.require(big.negated() == -9223372036854775808)
+        Assertions.require(big.negated().parent() === SmallInteger)
+        Assertions.require((big + big).negated() == -18446744073709551616)
+        Assertions.require(big.mod(10) == 8)
+        Assertions.require((big % 10) == 8)
+        Assertions.require(((big - 1) + 1) === big)
+        Assertions.require(big > 9223372036854775807)
+        Assertions.require((1 + 2.0) === 3.0)
+        Assertions.require((big + 0.0) === 9223372036854775808.0)
+        Assertions.require((0.0 + big) === 9223372036854775808.0)
+    }),
+    Test("one call site serves both concrete families in either order", () => {
+        big: 9223372036854775808
+        add: (a, b) => a + b
+        greater: (a, b) => a > b
+        family: (x) => x.parent()
+        // Small first, then big, then small again through the same sites.
+        Assertions.require(add(1, 2) === 3)
+        Assertions.require(add(big, 1) === 9223372036854775809)
+        Assertions.require(add(big, 1).parent() === BigInteger)
+        Assertions.require(add(9223372036854775807, 1) === big)
+        Assertions.require(add(big, -1).parent() === SmallInteger)
+        Assertions.require(add(5, 5) === 10)
+        Assertions.require(greater(big, 1) === true)
+        Assertions.require(greater(1, big) === false)
+        Assertions.require(family(1) === SmallInteger)
+        Assertions.require(family(big) === BigInteger)
+        Assertions.require(family(2) === SmallInteger)
+        // Big first at a fresh site, then small.
+        sub: (a, b) => a - b
+        Assertions.require(sub(big, 1) === 9223372036854775807)
+        Assertions.require(sub(big, 1).parent() === SmallInteger)
+        Assertions.require(sub(3, 1) === 2)
+        Assertions.require(sub(-9223372036854775808, 1).parent() === BigInteger)
+        // A family-local selector at one site never borrows the other family's slot.
+        recognizer: (owner, x) => owner.recognizes(x)
+        Assertions.require(recognizer(SmallInteger, 1) === true)
+        Assertions.require(recognizer(BigInteger, 1) === false)
+        Assertions.require(recognizer(SmallInteger, big) === false)
+        Assertions.require(recognizer(BigInteger, big) === true)
+        selfRecognize: (x) => x.recognizes(x)
+        Assertions.signals(Error, () => selfRecognize(1))
+        Assertions.signals(Error, () => selfRecognize(big))
+        Assertions.signals(Error, () => selfRecognize(1))
+    })
+]
+tests.freeze()
