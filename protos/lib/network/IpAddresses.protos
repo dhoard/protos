@@ -17,10 +17,10 @@
 //! The canonical `IpAddress` prototype is published by the runtime;
 //! its construction, equality and hash behavior are implemented in Protos. 
 
-// Private exact octet codec. Addresses are encoded as fixed-width arrays of 4
-// (IPv4) or 16 (IPv6) Integer octets in network order using exact guest
-// Integer arithmetic, so all 128 IPv6 bits are preserved. It carries no
-// Network authority and is captured below before its binding is removed.
+/// Private exact octet codec. Addresses are encoded as fixed-width arrays of 4
+/// (IPv4) or 16 (IPv6) Integer octets in network order using exact guest
+/// Integer arithmetic, so all 128 IPv6 bits are preserved. It carries no
+/// Network authority and is captured below before its binding is removed.
 _ipOctets: {
     // Answers the IpAddress of `version` whose network-order octets are
     // `octets`, an Array of exactly 4 or 16 Integers in 0..255.
