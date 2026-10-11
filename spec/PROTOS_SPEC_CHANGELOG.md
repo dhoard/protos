@@ -23,6 +23,33 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.454] - 2026-10-11
+
+### I090-B / D197-C — Fraction and exact rational arithmetic
+- `spec/semantics/VALUES_AND_COLLECTIONS.md`: add `Fraction` as a concrete
+  numeric family and Prelude binding delegating immediately to `Number`. A
+  Fraction is an immutable exact rational in unique canonical form `n/d`
+  (Integer components, `d > 1`, `gcd(|n|, d) = 1`). Exact rational
+  normalization turns zero and integral results into canonically normalized
+  Integers and signals an Error for a zero divisor.
+- `Integer / Integer` is now the canonical exact quotient (an Integer or a
+  Fraction), never a Float. Exact-real `+`, `-`, `*`, `/` with a Fraction
+  operand follow the exact rational rule. With a Float operand, the exact
+  operand is first rounded to binary64 (a Fraction as its whole exact
+  quotient, once, roundTiesToEven), then the binary64 operation applies in
+  original operand order. `div`, `mod` and `%` stay Integer-only.
+- `Float(fraction)` rounds the exact quotient once; `Integer(fraction)`
+  signals an Error. No Fraction literal, factory or component selector is
+  defined.
+- `==` and ordering compare Integer, Fraction and finite Float values exactly
+  (a finite Float by its exact binary64 rational); `===` includes the family,
+  and equal canonical Fractions are identical. Normal hash stays coherent
+  across families. `Fraction.recognizes` joins the exact standard-owner
+  recognizers. Transfer rematerializes a Fraction with the destination's
+  `Fraction` prototype. `Complex` remains deferred.
+- `spec/runtime/ABSTRACT_RUNTIME.md` (informative): recognition pseudocode
+  now covers the seven owners.
+
 ## [0.1.453] - 2026-10-11
 
 ### I090-A / D197-C — Public SmallInteger and BigInteger families

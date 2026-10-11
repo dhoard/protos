@@ -831,7 +831,7 @@ encode: (rootTable) => {
 
                     (candidateExponent < 0).ifTrue(() => {
                         candidateFloat =
-                            candidate / powerInteger(10, 0 - candidateExponent)
+                            Float(candidate / powerInteger(10, 0 - candidateExponent))
                     })
 
                     candidateFloat == magnitude
@@ -2798,11 +2798,11 @@ parseDialect: (text, version) => {
                         (floating === null).ifTrue(() => {
                             (decimalExponent >= 0).ifTrue(() => {
                                 numerator: coefficient * powerOfTen(decimalExponent)
-                                floating = numerator / 1
+                                floating = Float(numerator)
                             })
                             (decimalExponent < 0).ifTrue(() => {
                                 denominator: powerOfTen(0 - decimalExponent)
-                                floating = coefficient / denominator
+                                floating = Float(coefficient / denominator)
                             })
                         })
                     })

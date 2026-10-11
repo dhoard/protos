@@ -21,6 +21,7 @@ tests: [
         tool009LegacyCase: () => {
             (Number.parent() === Object) &&
                 (Integer.parent() === Number) &&
+                (Fraction.parent() === Number) &&
                 (Float.parent() === Number)
         }
         Assertions.require(tool009LegacyCase() === true)

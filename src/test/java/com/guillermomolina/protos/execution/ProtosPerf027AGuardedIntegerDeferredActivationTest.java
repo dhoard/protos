@@ -35,6 +35,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
@@ -155,6 +156,29 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
             // A family-local slot is never shared by a guard.
             assertNull(PrepareSendArguments.createGuardedIntegerSend(
                     integer(7), "recognizes", prelude));
+        });
+    }
+
+    @Test
+    void exactQuotientStaysImmediateAndFractionArgumentDefersToSelectedMethod()
+            throws Exception {
+        inEnteredContext(prelude -> {
+            // D197-C: an integral quotient is an immediate Integer, never a Float.
+            PreparedClosureCall integral = guardedSend(prelude, integer(8), "/", integer(2));
+            assertTrue(integral.isImmediate());
+            assertEquals(4L, assertInstanceOf(
+                    ProtosIntegerValue.class,
+                    integral.finish(integral.enterImmediate())).longValue());
+
+            PreparedClosureCall quotient = guardedSend(prelude, integer(7), "/", integer(2));
+            assertTrue(quotient.isImmediate());
+            Object half = quotient.finish(quotient.enterImmediate());
+            assertTrue(ProtosNumericValueSupport.isFraction(half));
+
+            // A Fraction operand is outside the immediate domain: the selected native
+            // Integer method stays authoritative and computes the exact rational result.
+            PreparedClosureCall mixed = guardedSend(prelude, integer(1), "+", half);
+            assertTrue(!mixed.isImmediate());
         });
     }
 

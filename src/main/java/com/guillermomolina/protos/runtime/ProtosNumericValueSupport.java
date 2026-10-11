@@ -30,8 +30,10 @@ import java.util.Objects;
  * Candidate C); every exact Integer result is normalized here, so the two never
  * denote the same value. A Float is a {@link ProtosFloatValue}. Host Long,
  * Double, BigInteger, and arbitrary frozen guest objects do not thereby become
- * semantic Protos numbers. The D197 family transition requires a separate
- * normative and implementation gate.
+ * semantic Protos numbers. A Fraction (D197-C, I090) is a frozen
+ * {@link ProtosSealedValue} of a private family token held only here, whose
+ * private state is its canonical numerator and denominator Integers; an
+ * ordinary object delegating to {@code Fraction} is never a Fraction.
  *
  * <p>Ordinary copies are created only at explicit transfer boundaries.
  * This class installs no guest methods, global registry, or rich-value
@@ -54,7 +56,200 @@ public final class ProtosNumericValueSupport {
     }
 
     public static boolean isCurrentNumber(Object value) {
-        return isCurrentInteger(value) || isCurrentFloat(value);
+        return isCurrentInteger(value) || isCurrentFloat(value) || isFraction(value);
+    }
+
+    /*
+     * D197-C exact rational service (I090). The family token is private and immutable, so only
+     * this boundary mints or authenticates a Fraction; recognition reads the host
+     * representation alone and never sends a message to the candidate. The canonical state
+     * invariant is denominator > 1 and gcd(|numerator|, denominator) = 1, both normalized
+     * semantic Integers; zero and integral quotients are Integers, never Fractions.
+     */
+
+    private static final Object FRACTION_FAMILY = new Object();
+
+    /** Canonical immutable components of one Fraction; never reachable from guest code. */
+    private record FractionState(Object numerator, Object denominator) {}
+
+    /** Whether {@code value} is a genuine canonical Fraction. */
+    public static boolean isFraction(Object value) {
+        return value instanceof ProtosSealedValue sealed && sealed.belongsTo(FRACTION_FAMILY);
+    }
+
+    /** The canonical numerator Integer of a value admitted by {@link #isFraction}. */
+    public static Object fractionNumerator(Object fraction) {
+        return fractionState(fraction).numerator();
+    }
+
+    /** The canonical, always greater than one, denominator Integer of a Fraction. */
+    public static Object fractionDenominator(Object fraction) {
+        return fractionState(fraction).denominator();
+    }
+
+    private static FractionState fractionState(Object fraction) {
+        if (!isFraction(fraction)) {
+            throw new IllegalArgumentException("value is not a canonical Fraction");
+        }
+        return (FractionState) ((ProtosSealedValue) fraction).stateFor(FRACTION_FAMILY);
+    }
+
+    /**
+     * The canonical exact value of {@code numerator / denominator} for two semantic Integers:
+     * an Integer when the quotient is integral, otherwise one fresh Fraction owned by
+     * {@code prelude}. A zero denominator throws {@link ArithmeticException}. Without a Prelude
+     * a result that needs one (a Fraction or a large Integer) answers null, so a primitive fast
+     * path keeps its ordinary path.
+     */
+    public static Object normalizeExactRational(
+            Object numerator, Object denominator, ProtosPrelude prelude) {
+        requireCurrentInteger(numerator);
+        requireCurrentInteger(denominator);
+        if (numerator instanceof ProtosIntegerValue a && denominator instanceof ProtosIntegerValue b) {
+            long x = a.longValue();
+            long y = b.longValue();
+            if (y == 0L) {
+                throw new ArithmeticException("division by zero");
+            }
+            if (x != Long.MIN_VALUE && y != Long.MIN_VALUE) {
+                long divisor = gcd(Math.abs(x), Math.abs(y));
+                long n = x / divisor;
+                long d = y / divisor;
+                if (d < 0L) {
+                    n = -n;
+                    d = -d;
+                }
+                if (d == 1L) {
+                    return integer(n);
+                }
+                return prelude == null
+                        ? null
+                        : mintFraction(integer(n), integer(d), prelude);
+            }
+        }
+        if (integerSignum(denominator) == 0) {
+            throw new ArithmeticException("division by zero");
+        }
+        return normalizeLargeRational(numerator, denominator, prelude);
+    }
+
+    /** D197-C {@code /} of two semantic Integers: the canonical exact quotient. */
+    public static Object divideIntegersExactly(Object left, Object right, ProtosPrelude prelude) {
+        return normalizeExactRational(left, right, prelude);
+    }
+
+    /** The binary64 nearest to a Fraction's exact quotient, ties to even, rounded once. */
+    public static double roundFractionToBinary64(Object fraction) {
+        FractionState state = fractionState(fraction);
+        return ProtosBinary64Rounding.divideExactIntegers(state.numerator(), state.denominator());
+    }
+
+    private static long gcd(long a, long b) {
+        while (b != 0L) {
+            long remainder = a % b;
+            a = b;
+            b = remainder;
+        }
+        return a;
+    }
+
+    /* Rare arbitrary-precision normalization; BigInteger has no partial-evaluation value. */
+    @TruffleBoundary
+    private static Object normalizeLargeRational(
+            Object numerator, Object denominator, ProtosPrelude prelude) {
+        BigInteger n = exactBigInteger(numerator);
+        BigInteger d = exactBigInteger(denominator);
+        BigInteger divisor = n.gcd(d);
+        n = n.divide(divisor);
+        d = d.divide(divisor);
+        if (d.signum() < 0) {
+            n = n.negate();
+            d = d.negate();
+        }
+        if (d.equals(BigInteger.ONE)) {
+            return prelude == null && n.bitLength() >= Long.SIZE ? null : integer(n, prelude);
+        }
+        if (prelude == null) {
+            return null;
+        }
+        return mintFraction(integer(n, prelude), integer(d, prelude), prelude);
+    }
+
+    private static Object mintFraction(Object numerator, Object denominator, ProtosPrelude prelude) {
+        return ProtosSealedValue.mint(
+                FRACTION_FAMILY,
+                prelude.fractionPrototype(),
+                new FractionState(numerator, denominator));
+    }
+
+    /** Whether two canonical Fractions denote the same rational value. */
+    public static boolean sameFraction(Object left, Object right) {
+        FractionState a = fractionState(left);
+        FractionState b = fractionState(right);
+        return sameInteger(a.numerator(), b.numerator())
+                && sameInteger(a.denominator(), b.denominator());
+    }
+
+    /**
+     * Exact order of two exact real values, each a semantic Integer or a Fraction: negative,
+     * zero or positive. Integer pairs keep their primitive comparison.
+     */
+    public static int compareExactRationals(Object left, Object right) {
+        if (isCurrentInteger(left) && isCurrentInteger(right)) {
+            return compareIntegers(left, right);
+        }
+        return compareRationalsByCrossProduct(left, right);
+    }
+
+    /* a/b <=> c/d with positive denominators compares a*d against c*b, without rounding. */
+    @TruffleBoundary
+    private static int compareRationalsByCrossProduct(Object left, Object right) {
+        BigInteger a = exactBigInteger(isFraction(left) ? fractionNumerator(left) : left);
+        BigInteger b = isFraction(left)
+                ? exactBigInteger(fractionDenominator(left))
+                : BigInteger.ONE;
+        BigInteger c = exactBigInteger(isFraction(right) ? fractionNumerator(right) : right);
+        BigInteger d = isFraction(right)
+                ? exactBigInteger(fractionDenominator(right))
+                : BigInteger.ONE;
+        return a.multiply(d).compareTo(c.multiply(b));
+    }
+
+    /*
+     * Staged isolation transfer (as Path, I094): the source stage replaces a Fraction with an
+     * inert descriptor of exact host scalars, holding no guest object and no source Prelude;
+     * the destination stage mints one Fraction with the destination's Fraction prototype.
+     */
+    private record FractionTransferDescriptor(Object numerator, Object denominator) {}
+
+    /** The inert transfer descriptor of a value admitted by {@link #isFraction}. */
+    public static Object fractionTransferDescriptor(Object fraction) {
+        FractionState state = fractionState(fraction);
+        return new FractionTransferDescriptor(
+                hostInteger(state.numerator()), hostInteger(state.denominator()));
+    }
+
+    public static boolean isFractionTransferDescriptor(Object value) {
+        return value instanceof FractionTransferDescriptor;
+    }
+
+    /** One destination Fraction for a descriptor of {@link #fractionTransferDescriptor}. */
+    public static Object materializeFractionTransferDescriptor(
+            Object descriptor, ProtosPrelude destination) {
+        if (!(descriptor instanceof FractionTransferDescriptor inert)) {
+            throw new IllegalArgumentException("value is not a Fraction transfer descriptor");
+        }
+        Objects.requireNonNull(destination, "a Fraction requires its owning Prelude");
+        return mintFraction(
+                integerFromHost(inert.numerator(), destination),
+                integerFromHost(inert.denominator(), destination),
+                destination);
+    }
+
+    /** Deterministic hash of a Fraction's canonical components. */
+    public static int fractionComponentHash(Object fraction) {
+        FractionState state = fractionState(fraction);
+        return 31 * integerHashCode(state.numerator()) + integerHashCode(state.denominator());
     }
 
     /**
@@ -612,6 +807,9 @@ public final class ProtosNumericValueSupport {
             return Double.doubleToRawLongBits(av)
                     == Double.doubleToRawLongBits(bv);
         }
+        if (isFraction(left) && isFraction(right)) {
+            return sameFraction(left, right);
+        }
         return false;
     }
 
@@ -630,6 +828,9 @@ public final class ProtosNumericValueSupport {
                     : Double.doubleToRawLongBits(number);
             return tagged(30, Long.hashCode(bits));
         }
+        if (isFraction(value)) {
+            return tagged(37, fractionComponentHash(value));
+        }
         throw new IllegalArgumentException("value is not a current numeric family");
     }
 
@@ -639,7 +840,8 @@ public final class ProtosNumericValueSupport {
      * <p>A signed-64 Integer or a Float is a context-free immutable value. A large Integer is an
      * ordinary guest object delegating to its minting Prelude's BigInteger prototype, so it is
      * rematerialized with the destination's prototype and never shared across isolated domains.
-     * This method is not called on ordinary arithmetic, lookup, or numeric dispatch paths.
+     * A Fraction likewise is rematerialized by value with the destination's Fraction prototype
+     * (D197-C); no other sealed value is copied here. This method is not called on ordinary arithmetic, lookup, or numeric dispatch paths.
      */
     public static Object copyCurrentNumberOrNull(Object value, ProtosPrelude destination) {
         if (value instanceof ProtosIntegerValue integer) {
@@ -650,6 +852,13 @@ public final class ProtosNumericValueSupport {
         }
         if (value instanceof ProtosFloatValue floating) {
             return new ProtosFloatValue(floating.value());
+        }
+        if (isFraction(value)) {
+            FractionState state = fractionState(value);
+            return mintFraction(
+                    copyCurrentNumberOrNull(state.numerator(), destination),
+                    copyCurrentNumberOrNull(state.denominator(), destination),
+                    Objects.requireNonNull(destination, "a Fraction requires its owning Prelude"));
         }
         return null;
     }

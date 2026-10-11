@@ -7,6 +7,36 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.337-SNAPSHOT
+
+- `I090` (#868): I090-B implements the D197-C `Fraction` family and exact
+  rational arithmetic.
+  - New Core source `Fraction.protos` declares `Fraction` under `Number`, with
+    source-backed `+`, `-`, `*`, `/` and `negated`. `ProtosStandardFractionProtocol`
+    installs the trusted `Fraction.recognizes` and the private
+    `_coreFractionKernel` (`numerator`, `denominator`, `normalize`, `toFloat`).
+    `Fraction` is a Prelude binding; there is no public constructor.
+  - A Fraction is a frozen `ProtosSealedValue` of a private numeric family token
+    whose state is its canonical Integer numerator and denominator.
+    `ProtosNumericValueSupport` owns exact normalization (gcd, positive
+    denominator, Integer demotion), recognition, identity and copying. An
+    ordinary object delegating to `Fraction` is never numeric.
+  - `Integer / Integer` returns the canonical exact quotient (an Integer or a
+    Fraction) instead of Float (`EXACT_DIVIDE`). The compact Bytecode path keeps
+    integral signed-64 quotients primitive and falls back otherwise, including
+    `Long.MIN_VALUE / -1`. Integer with a Fraction argument computes the exact
+    result natively, because a native method cannot invoke guest code inside a
+    Task.
+  - Float arithmetic and `Float(fraction)` round the whole exact quotient once.
+    Equality, ordering and normal hash compare Fraction exactly against Integer
+    and against a Float's exact binary64 rational. `===` and the identity hash
+    are by canonical value and family.
+  - Actor and P transfer carry a Fraction as an inert descriptor and
+    rematerialize it with the destination Prelude's `Fraction`. Other sealed
+    values remain non-transferable.
+  - `std:toml` and its official-suite harness use `Float(a / b)` explicitly for
+    decimal float values. Structured logging scalars stay Integer and Float.
+
 ## 0.3.336-SNAPSHOT
 
 - `PERF032` (#831): explicit NORMAL and DEBUG execution modes replace the

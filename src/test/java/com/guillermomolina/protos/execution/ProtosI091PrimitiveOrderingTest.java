@@ -59,15 +59,18 @@ final class ProtosI091PrimitiveOrderingTest {
     }
 
     @Test
-    void integerQuotientIsCorrectlyRoundedFloat() {
+    void integerQuotientIsCanonicalExactRational() {
         try (Context context = context()) {
-            assertEquals(2.5d, context.eval(ProtosLanguage.ID, "5 / 2").asDouble());
-            double zero = context.eval(ProtosLanguage.ID, "0 / (0 - 5)").asDouble();
-            assertEquals(Double.doubleToRawLongBits(0.0d), Double.doubleToRawLongBits(zero));
-            assertEquals(1.0d / 3.0d, context.eval(ProtosLanguage.ID, "1 / 3").asDouble());
+            // D197-C: an integral quotient stays an Integer; a nonintegral one is a Fraction.
+            assertEquals(-2L, context.eval(ProtosLanguage.ID, "(0 - 6) / 3").asLong());
+            assertTrue(eval(context, "SmallInteger.recognizes(0 / (0 - 5))"));
+            assertTrue(eval(context, "Fraction.recognizes(5 / 2)"));
+            assertTrue(eval(context, "BigInteger.recognizes((0 - 9223372036854775807 - 1) / (0 - 1))"));
+            // Explicit Float conversion rounds the whole exact quotient once.
+            assertEquals(1.0d / 3.0d, context.eval(ProtosLanguage.ID, "Float(1 / 3)").asDouble());
             assertEquals(4611686018427387904.0d,
                     context.eval(ProtosLanguage.ID,
-                            "9223372036854775807 / 2").asDouble());
+                            "Float(9223372036854775807 / 2)").asDouble());
         }
     }
 

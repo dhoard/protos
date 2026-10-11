@@ -201,7 +201,10 @@ public final class ProtosLoggingFacility {
         if (value == ProtosNullValue.INSTANCE
                 || value instanceof ProtosBooleanValue
                 || value instanceof ProtosStringValue
-                || ProtosNumericValueSupport.isCurrentNumber(value)) {
+                // The structured-data scalars stay Integer and Float; D197-C does not extend
+                // the logging data contract to Fraction.
+                || ProtosNumericValueSupport.isCurrentInteger(value)
+                || ProtosNumericValueSupport.isCurrentFloat(value)) {
             return true;
         }
         if (value instanceof ProtosArrayValue array) {

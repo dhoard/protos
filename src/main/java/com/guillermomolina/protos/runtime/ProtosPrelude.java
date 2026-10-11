@@ -293,6 +293,11 @@ public final class ProtosPrelude {
         return requiredOrdinaryBinding("BigInteger");
     }
 
+    /** D197-C: the canonical Fraction prototype; no Fraction value is minted here. */
+    public ProtosObjectValue fractionPrototype() {
+        return requiredOrdinaryBinding("Fraction");
+    }
+
     public ProtosObjectValue floatPrototype() {
         return requiredOrdinaryBinding("Float");
     }

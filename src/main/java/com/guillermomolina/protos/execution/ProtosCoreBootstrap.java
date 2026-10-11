@@ -139,6 +139,9 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("BigInteger.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("Fraction.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("Float.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -239,6 +242,13 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue bigIntegerPrototype =
                 requirePrototype(
                         bootstrapContext, "BigInteger", integerPrototype);
+        ProtosObjectValue fractionPrototype =
+                requirePrototype(bootstrapContext, "Fraction", numberPrototype);
+        // The private kernel stays in the bootstrap context, where the Fraction source closures
+        // resolve it; it is never published through the Prelude.
+        ProtosObjectValue fractionKernel =
+                requirePrototype(
+                        bootstrapContext, "_coreFractionKernel", ProtosObjectValue.rootObject());
         ProtosObjectValue floatPrototype =
                 requirePrototype(bootstrapContext, "Float", numberPrototype);
         ProtosStandardNumberEqualityProtocol.install(numberPrototype);
@@ -247,6 +257,7 @@ public final class ProtosCoreBootstrap {
         ProtosStandardIntegerProtocol.install(integerPrototype);
         ProtosStandardIntegerProtocol.installConcreteRecognizers(
                 smallIntegerPrototype, bigIntegerPrototype);
+        ProtosStandardFractionProtocol.install(fractionPrototype, numberPrototype, fractionKernel);
         ProtosStandardFloatProtocol.install(floatPrototype);
         ProtosStandardNumericConversionProtocol.install(integerPrototype, floatPrototype);
 

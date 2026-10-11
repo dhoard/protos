@@ -24,7 +24,7 @@ negativeZero: Runner.evaluateSimple(
 
 third: Runner.evaluateSimple(
     Manifest.parseLine("third.protos\tfloat-bits\t3fd5555555555555"),
-    "1 / 3",
+    "Float(1 / 3)",
     execution
 )
 

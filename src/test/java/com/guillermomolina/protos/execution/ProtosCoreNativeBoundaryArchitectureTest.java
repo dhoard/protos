@@ -79,6 +79,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardIntegerProtocol.java", 2),
                     Map.entry("execution/ProtosStandardFutureProtocol.java", 2),
                     Map.entry("execution/ProtosStandardFloatProtocol.java", 2),
+                    Map.entry("execution/ProtosStandardFractionProtocol.java", 5),
                     Map.entry("execution/ProtosStandardBooleanProtocol.java", 1),
                     Map.entry("execution/ProtosStandardNumberEqualityProtocol.java", 1),
                     Map.entry("execution/ProtosParallelRuntime.java", 1),
@@ -150,8 +151,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
-        assertEquals(34, actualCore.size());
-        assertEquals(131, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(35, actualCore.size());
+        assertEquals(136, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -224,6 +225,19 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "SmallInteger", prelude.smallIntegerPrototype(), Set.of("recognizes"));
         assertNativeSelectors(
                 "BigInteger", prelude.bigIntegerPrototype(), Set.of("recognizes"));
+
+        // D197-C: Fraction arithmetic is source-backed; only the exact recognizer is native.
+        assertNativeSelectors(
+                "Fraction", prelude.fractionPrototype(), Set.of("recognizes"));
+        for (String selector :
+                Set.of(
+                        "negated",
+                        "+",
+                        "-",
+                        "*",
+                        "/")) {
+            assertSourceBacked(prelude.fractionPrototype(), selector);
+        }
 
         assertNativeSelectors(
                 "Float",

@@ -163,6 +163,9 @@ public final class ProtosStandardFloatProtocol {
                 right = floating.value();
             } else if (ProtosNumericValueSupport.isCurrentInteger(argument)) {
                 right = ProtosBinary64Rounding.roundExactInteger(argument);
+            } else if (ProtosNumericValueSupport.isFraction(argument)) {
+                // D197: the whole exact quotient is rounded once, before the binary64 operation.
+                right = ProtosNumericValueSupport.roundFractionToBinary64(argument);
             } else {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));

@@ -80,8 +80,8 @@ final class ProtosI091PrimitiveCarrierPropagationTest {
         try (Context context = context()) {
             assertEquals(42, eval(context,
                     "o: { twice: x => x + x }\nn: 20 + 1\no.twice(n)").asInt());
-            assertEquals(2.5d, eval(context,
-                    "o: { half: x => x / 2 }\no.half(3 + 2)").asDouble());
+            assertEquals(3, eval(context,
+                    "o: { half: x => x / 2 }\no.half(3 + 3)").asInt());
             assertEquals(12, eval(context,
                     "o: { keep: x => {\n y: x\n y } }\no.keep(5 + 7)").asInt());
         }

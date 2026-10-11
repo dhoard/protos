@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
 import java.math.BigInteger;
@@ -57,6 +58,26 @@ final class ProtosI091PrimitiveIntegerSendTest {
             assertEquals(3.5d, context.eval(ProtosLanguage.ID, "1 + 2.5").asDouble());
             assertEquals(3, context.eval(ProtosLanguage.ID, "true.ifTrue() { 1 + 2 }")
                     .asInt());
+        }
+    }
+
+    @Test
+    void exactQuotientStaysPrimitiveWhenIntegralAndFallsBackOtherwise() {
+        try (Context context = context()) {
+            // D197-C: integral quotients stay Integers through the carrier chain.
+            assertEquals(12L, context.eval(ProtosLanguage.ID,
+                    "i: 0\nacc: 0\n(() => i < 4).whileTrue() {\n"
+                            + "    acc = acc + ((i * 6) / 3)\n"
+                            + "    i = i + 1\n"
+                            + "}\nacc").asLong());
+            // One call site observes integral, Fraction, promoted and Error outcomes.
+            assertTrue(context.eval(ProtosLanguage.ID,
+                    "f: (a, b) => a / b\n"
+                            + "first: SmallInteger.recognizes(f(6, 3)) && (f(6, 3) == 2)\n"
+                            + "second: Fraction.recognizes(f(1, 3))\n"
+                            + "third: BigInteger.recognizes(f(0 - 9223372036854775807 - 1, 0 - 1))\n"
+                            + "fourth: SmallInteger.recognizes(f(6, 3))\n"
+                            + "first && second && third && fourth").asBoolean());
         }
     }
 

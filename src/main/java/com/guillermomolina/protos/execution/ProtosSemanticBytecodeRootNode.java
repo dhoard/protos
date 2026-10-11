@@ -37,7 +37,6 @@ import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedLocal
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedMapInitialDefinition;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedWhileCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ResolvedLexicalWriteTarget;
-import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -6599,11 +6598,15 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     case ADD -> Math.addExact(left, right);
                     case SUBTRACT -> Math.subtractExact(left, right);
                     case MULTIPLY -> Math.multiplyExact(left, right);
-                    // D196: Integer / Integer is the correctly rounded exact quotient (Float).
-                    case FLOAT_DIVIDE ->
+                    // D197-C: Integer / Integer is the canonical exact quotient. Only an
+                    // integral signed-64 quotient stays primitive; a zero divisor, the
+                    // Long.MIN_VALUE / -1 promotion and every Fraction belong to the
+                    // selected native fallback.
+                    case EXACT_DIVIDE ->
                             right != 0L
-                                    ? (Object) ProtosBinary64Rounding.dividePrimitiveIntegers(
-                                            left, right)
+                                            && (left != Long.MIN_VALUE || right != -1L)
+                                            && left % right == 0L
+                                    ? (Object) (left / right)
                                     : MISS;
                     default -> throw new AssertionError("non-arithmetic canonical operation");
                 };
@@ -6643,7 +6646,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 case ADD -> left + right;
                 case SUBTRACT -> left - right;
                 case MULTIPLY -> left * right;
-                case FLOAT_DIVIDE -> left / right;
+                case EXACT_DIVIDE -> left / right;
                 default -> throw new AssertionError(
                         "non-mixed canonical Integer operation");
             };
@@ -6812,7 +6815,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosStandardIntegerProtocol.CanonicalIntegerOperation operation) {
             return arithmetic(operation)
                     || operation ==
-                            ProtosStandardIntegerProtocol.CanonicalIntegerOperation.FLOAT_DIVIDE;
+                            ProtosStandardIntegerProtocol.CanonicalIntegerOperation.EXACT_DIVIDE;
         }
 
         static GuardedFloatSend canonicalFloatGuard(

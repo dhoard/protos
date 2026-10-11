@@ -45,7 +45,7 @@ public final class ProtosStandardIntegerProtocol {
         installCanonical(integerPrototype, CanonicalIntegerOperation.ADD);
         installCanonical(integerPrototype, CanonicalIntegerOperation.SUBTRACT);
         installCanonical(integerPrototype, CanonicalIntegerOperation.MULTIPLY);
-        installCanonical(integerPrototype, CanonicalIntegerOperation.FLOAT_DIVIDE);
+        installCanonical(integerPrototype, CanonicalIntegerOperation.EXACT_DIVIDE);
         installCanonical(integerPrototype, CanonicalIntegerOperation.QUOTIENT);
         installCanonical(integerPrototype, CanonicalIntegerOperation.REMAINDER);
         installSourceBackedSelector(integerPrototype, "_coreIntegerPercent", "%");
@@ -101,7 +101,8 @@ public final class ProtosStandardIntegerProtocol {
         ADD("+", false),
         SUBTRACT("-", false),
         MULTIPLY("*", false),
-        FLOAT_DIVIDE("/", true),
+        /** D197-C: the canonical exact quotient, an Integer or a Fraction. */
+        EXACT_DIVIDE("/", true),
         QUOTIENT("div", true),
         REMAINDER("mod", true);
 
@@ -236,7 +237,7 @@ public final class ProtosStandardIntegerProtocol {
 
         if (supplied0 instanceof ProtosFloatValue floating) {
             return switch (operation) {
-                case ADD, SUBTRACT, MULTIPLY, FLOAT_DIVIDE ->
+                case ADD, SUBTRACT, MULTIPLY, EXACT_DIVIDE ->
                         executeMixedFloatOperation(operation, receiver, floating);
                 case QUOTIENT, REMAINDER -> null;
             };
@@ -262,6 +263,9 @@ public final class ProtosStandardIntegerProtocol {
         }
         ProtosPrelude prelude = activation.prelude().orElseThrow(
                 () -> new IllegalStateException("Integer arithmetic requires Core prelude"));
+        if (ProtosNumericValueSupport.isFraction(supplied.get(0))) {
+            return executeWithFraction(operation, receiver, supplied.get(0), activation);
+        }
         Object result = tryExecuteCanonicalOperationOne(
                 operation, receiver, supplied.get(0), prelude);
         if (result == null) {
@@ -269,6 +273,36 @@ public final class ProtosStandardIntegerProtocol {
                     ProtosCoreErrors.newError(activation));
         }
         return result;
+    }
+
+    /*
+     * D197-C: an Integer operand is the exact rational i/1, so i op n/d is one exact rational
+     * normalized once. It is computed here with exact Integer arithmetic rather than by sending
+     * the Fraction source method: a native method cannot invoke guest code synchronously inside
+     * a Task. div and mod stay Integer-only.
+     */
+    private static Object executeWithFraction(
+            CanonicalIntegerOperation operation,
+            Object integer,
+            Object fraction,
+            ProtosActivation activation) {
+        ProtosPrelude prelude = activation.prelude().orElseThrow(
+                () -> new IllegalStateException("Integer arithmetic requires Core prelude"));
+        Object n = ProtosNumericValueSupport.fractionNumerator(fraction);
+        Object d = ProtosNumericValueSupport.fractionDenominator(fraction);
+        Object scaled = ProtosNumericValueSupport.multiplyIntegers(integer, d, prelude);
+        return switch (operation) {
+            case ADD -> ProtosNumericValueSupport.normalizeExactRational(
+                    ProtosNumericValueSupport.addIntegers(scaled, n, prelude), d, prelude);
+            case SUBTRACT -> ProtosNumericValueSupport.normalizeExactRational(
+                    ProtosNumericValueSupport.subtractIntegers(scaled, n, prelude), d, prelude);
+            case MULTIPLY -> ProtosNumericValueSupport.normalizeExactRational(
+                    ProtosNumericValueSupport.multiplyIntegers(integer, n, prelude), d, prelude);
+            // n is never zero: a canonical Fraction is nonzero.
+            case EXACT_DIVIDE -> ProtosNumericValueSupport.normalizeExactRational(scaled, n, prelude);
+            case QUOTIENT, REMAINDER ->
+                    throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        };
     }
 
     private static Object executeValidCanonicalOperation(
@@ -282,10 +316,8 @@ public final class ProtosStandardIntegerProtocol {
                     ProtosNumericValueSupport.subtractIntegers(receiver, argument, prelude);
             case MULTIPLY ->
                     ProtosNumericValueSupport.multiplyIntegers(receiver, argument, prelude);
-            case FLOAT_DIVIDE ->
-                    new ProtosFloatValue(
-                            ProtosBinary64Rounding.divideExactIntegers(
-                                    receiver, argument));
+            case EXACT_DIVIDE ->
+                    ProtosNumericValueSupport.divideIntegersExactly(receiver, argument, prelude);
             case QUOTIENT ->
                     ProtosNumericValueSupport.quotientIntegers(receiver, argument, prelude);
             case REMAINDER ->
@@ -303,7 +335,7 @@ public final class ProtosStandardIntegerProtocol {
             case ADD -> left + right;
             case SUBTRACT -> left - right;
             case MULTIPLY -> left * right;
-            case FLOAT_DIVIDE -> left / right;
+            case EXACT_DIVIDE -> left / right;
             case QUOTIENT, REMAINDER ->
                     throw new IllegalArgumentException(
                             "Integer-only operation cannot use a Float operand");

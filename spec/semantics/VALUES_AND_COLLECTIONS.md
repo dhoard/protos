@@ -321,11 +321,12 @@ String
 Integer
 SmallInteger
 BigInteger
+Fraction
 Float
 Array
 ```
 
-Each of these six standard behaviors requires its exact canonical standard
+Each of these seven standard behaviors requires its exact canonical standard
 owner as receiver and accepts exactly one supplied argument. The candidate
 argument may be any Protos value. A matching candidate returns canonical `true`;
 a non-matching candidate returns canonical `false`.
@@ -343,7 +344,7 @@ other than exactly one argument, follows the ordinary Error rules for invalid
 standard-behavior receivers and arity. Candidate mismatch itself is not an
 Error; it is canonical `false`.
 
-The six recognized domains are exactly:
+The seven recognized domains are exactly:
 
 - `String.recognizes(value)` is `true` iff `value` is a semantic String value.
   An ordinary object that merely delegates to `String` or to a String value is
@@ -358,6 +359,10 @@ The six recognized domains are exactly:
 - `BigInteger.recognizes(value)` is `true` iff `value` is a semantic Integer
   value outside the signed-64 range. `BigInteger.recognizes(BigInteger)` and
   `BigInteger.recognizes(Integer)` are `false`.
+- `Fraction.recognizes(value)` is `true` iff `value` is a semantic Fraction
+  value as defined under **Numeric Model**. An ordinary object that merely
+  delegates to `Fraction`, including a frozen one, is not recognized; Integers
+  and Floats are not Fractions; and `Fraction.recognizes(Fraction)` is `false`.
 - `Float.recognizes(value)` is `true` iff `value` is a semantic Float value.
   Recognition performs no numeric promotion or conversion; in particular an
   ordinary Integer is not a Float, and `Float.recognizes(Float)` is `false`.
@@ -1186,13 +1191,16 @@ Number                         common numeric prototype; not a concrete value fa
 ├── Integer                    common exact mathematical-integer domain; not a concrete value family
 │   ├── SmallInteger           concrete family: Integers in the signed-64 range
 │   └── BigInteger             concrete family: Integers outside the signed-64 range
+├── Fraction                   concrete family: exact non-integral rationals
 └── Float                      IEEE 754-2019 binary64 family
 ```
 
-`Number`, `Integer`, `SmallInteger`, `BigInteger`, and `Float` are the standard
-prototype objects corresponding to that hierarchy and are published as Prelude
-bindings of those names. `Integer` and `Float` delegate immediately to
-`Number`; `SmallInteger` and `BigInteger` delegate immediately to `Integer`.
+`Number`, `Integer`, `SmallInteger`, `BigInteger`, `Fraction`, and `Float` are
+the standard prototype objects corresponding to that hierarchy and are
+published as Prelude bindings of those names. `Integer`, `Fraction`, and
+`Float` delegate immediately to `Number`; `SmallInteger` and `BigInteger`
+delegate immediately to `Integer`. In this specification an **exact real** value
+is a semantic Integer or a semantic Fraction.
 Numeric-family membership is not conferred by delegation: an ordinary object
 that delegates to one of these prototype objects is still an ordinary object
 unless a separate normative factory or operation creates a numeric semantic
@@ -1211,10 +1219,32 @@ including the standard Integer arithmetic, recognition, and conversion
 behaviors, is owned by `Integer` and reached through ordinary delegation;
 the concrete-family prototypes add only their own `recognizes` behavior.
 
-D197-C also establishes `Fraction` and `Complex` as future concrete numeric
-families under `Number`. They are not part of this revision: no prototype,
-binding, literal, or operation for them is defined here, and no standard
-operation in this revision produces them.
+A semantic Fraction value is an immutable exact rational number in
+**canonical form** `n/d`: its numerator `n` and denominator `d` are semantic
+Integers (of either concrete family), `d > 1`, and `gcd(|n|, d) = 1`. The
+canonical form is unique for each rational value, so no Fraction has a zero or
+negative denominator, and no Fraction denotes zero or any other mathematical
+integer. **Exact rational normalization** of an exact rational result is: a
+zero divisor signals an `Error`; an integral result is the canonically
+normalized Integer of that value (a `SmallInteger` or `BigInteger`); every other
+result is the Fraction in canonical form. Every standard operation specified
+below to return an exact rational result applies this normalization, so for
+example `6 / 3` is the `SmallInteger` `2`, `2 / 4` and `1 / 2` are the same
+Fraction value, and `0 / 7` is the `SmallInteger` `0`. The immediate delegation
+parent of a semantic Fraction value is the `Fraction` prototype, so
+`(1 / 2).parent() === Fraction`; standard Fraction arithmetic and negation are
+reached through ordinary delegation, and the standard `Number` behaviors apply.
+
+Fraction values arise only from standard exact arithmetic. This revision
+defines no Fraction literal and no Fraction construction or conversion factory:
+`Fraction` has no standard `call` behavior, and an ordinary object delegating to
+`Fraction` never becomes a Fraction. A Fraction exposes no standard selector for
+its numerator or denominator in this revision.
+
+D197-C also establishes `Complex` as a future concrete numeric family under
+`Number`. It is not part of this revision: no prototype, binding, literal, or
+operation for it is defined here, and no standard operation in this revision
+produces it.
 
 Core v0.1 defines no standard width-specific numeric semantic family, prototype, or
 prelude binding. Width- or range-specific representations may exist inside an
@@ -1278,7 +1308,8 @@ Core v0.1 introduces no serialization format for an internal integer
 representation. Any standard transfer or encoding rule that preserves a numeric
 value operates on its semantic family and semantic value, never on a physical
 storage category; a transferred Integer delegates to the concrete-family
-prototype of its destination.
+prototype of its destination, and a transferred Fraction is the same canonical
+rational value delegating to the `Fraction` prototype of its destination.
 
 Integer-only bit-manipulation or explicit wrapping protocols are not added by
 this section. Libraries may define such ordinary messages, but portable Core
@@ -1345,7 +1376,9 @@ suspension point.
 an Integer. When `value` is a Float, conversion succeeds only if the Float is
 finite and its exact binary64 value is mathematically integral; the result is
 that exact unbounded Integer, canonically normalized to its concrete family. NaN, either infinity, and a finite non-integral
-Float signal an `Error`. `Integer` conversion never rounds or truncates.
+Float signal an `Error`. A Fraction is never mathematically integral, so
+`Integer(fraction)` signals an `Error`. `Integer` conversion never rounds or
+truncates.
 
 `Float(value)` returns the same semantic Float value when `value` is already a
 Float, preserving signed zero, infinity, and the Core NaN semantic value. For
@@ -1355,15 +1388,25 @@ integer precision in this explicit conversion is therefore permitted and
 normative, not an `Error`. A result beyond the finite binary64 range is the
 correspondingly signed infinity. Integer zero converts to positive `0.0`.
 
+For a Fraction value `n/d`, `Float(value)` returns the unique binary64 value
+obtained by rounding the **exact rational quotient** `n/d` once using
+`roundTiesToEven`; the numerator and denominator are never rounded separately.
+Precision loss, overflow to the correspondingly signed infinity, subnormal
+rounding, and rounding of a nonzero quotient to `+0.0` or `-0.0` according to
+its sign are part of that result and do not signal an `Error`. Consequently a
+Fraction whose components both lie beyond the binary64 range but whose quotient
+is close to one converts to a finite Float near `1.0`, never to NaN.
+
 `SmallInteger` and `BigInteger` are not conversion factories. The standard
 `Integer` conversion behavior is reachable from them by ordinary lookup, but it
 requires its exact canonical `Integer` owner as receiver, so invoking
 `SmallInteger(value)` or `BigInteger(value)` signals an `Error`.
 
-Outside the standard mixed Integer/Float arithmetic rule below, these
+Outside the standard mixed exact-real/Float arithmetic rule below, these
 conversion factories introduce no implicit numeric coercion. Standard mixed
-arithmetic is defined using the existing `Float(Integer)` conversion, but that
-does not make `Float(x)` an implicit conversion for other protocols.
+arithmetic is defined using the existing `Float(Integer)` and `Float(Fraction)`
+conversions, but that does not make `Float(x)` an implicit conversion for other
+protocols.
 
 ### Standard arithmetic compatibility matrix
 
@@ -1378,14 +1421,35 @@ exact `Integer` result is canonically normalized to its concrete family.
 | receiver family | argument family | result |
 | --- | --- | --- |
 | `Integer` | `Integer` | `Integer`, exact |
-| `Integer` | `Float` | `Float`, operand-first binary64 rule below |
-| `Float` | `Integer` | `Float`, operand-first binary64 rule below |
+| `Integer` | `Fraction` | exact real, exact rational rule below |
+| `Fraction` | `Integer` | exact real, exact rational rule below |
+| `Fraction` | `Fraction` | exact real, exact rational rule below |
+| `Integer` or `Fraction` | `Float` | `Float`, operand-first binary64 rule below |
+| `Float` | `Integer` or `Fraction` | `Float`, operand-first binary64 rule below |
 | `Float` | `Float` | `Float`, binary64 rule below |
 
-For standard binary `+`, `-`, `*`, and `/` with one semantic Integer and one
-semantic Float operand, convert the Integer operand to binary64 using exactly
-the standard `Float(Integer)` rule above, including `roundTiesToEven`, signed
-infinity for out-of-range magnitude, and positive zero for Integer zero. Then
+**Exact rational rule.** When both operands of standard binary `+`, `-`, `*`,
+or `/` are exact real values and at least one is a Fraction, each Integer
+operand participates as the rational with denominator one, the result is the
+exact mathematical rational
+
+```text
+(a/b) + (c/d) = (ad + bc)/(bd)
+(a/b) - (c/d) = (ad - bc)/(bd)
+(a/b) * (c/d) = (ac)/(bd)
+(a/b) / (c/d) = (ad)/(bc)
+```
+
+and that result is subject to exact rational normalization under **Standard
+numeric families and prototypes**. No intermediate value is rounded, and the
+result may be an Integer: for example `(1 / 2) + (1 / 2)` is the `SmallInteger`
+`1`. Division by an exact zero signals an `Error`.
+
+For standard binary `+`, `-`, `*`, and `/` with one exact real operand and one
+semantic Float operand, convert the exact real operand to binary64 using exactly
+the standard `Float(Integer)` or `Float(Fraction)` rule above, including
+`roundTiesToEven` of a Fraction's whole exact quotient, signed infinity for
+out-of-range magnitude, and positive zero for Integer zero. Then
 apply the selected IEEE 754-2019 binary64 operation to the resulting Float
 operands **in their original receiver/argument order**, with the normal binary64
 operation rounding. The standard result is a semantic Float in both operand
@@ -1418,32 +1482,32 @@ their existing semantics.
 The same-family rule also governs standard unary negation:
 
 - Integer negation returns the exact Integer;
+- Fraction negation returns the exact canonical Fraction of opposite sign;
 - Float negation is the binary64 sign-negation operation described below.
 
 The grammar-owned prefix `-` lowering inherits exactly that standard behavior.
 
 ### Division, integer quotient, and remainder
 
-Standard `/` applies the same operand-first binary64 rule above to
-Integer/Float and Float/Integer operand pairs. The result is Float, with
+Standard `/` applies the same operand-first binary64 rule above to every
+operand pair of one exact real value and one Float. The result is Float, with
 original operand order preserved.
 
-For same-family operands:
+For the remaining operand pairs:
 
 - `Float / Float` returns the IEEE binary64 result described below.
-- `Integer / Integer` with nonzero divisor returns a `Float` equal to the
-  correctly rounded `roundTiesToEven` binary64 representation of the exact
-  mathematical rational quotient.
-- division by Integer zero signals an `Error`.
+- `Integer / Integer` with nonzero divisor returns the exact mathematical
+  rational quotient under exact rational normalization: an integral quotient is
+  the canonically normalized Integer, including `BigInteger` promotion such as
+  `-2^63 / -1`, and every other quotient is the canonical Fraction. It never
+  returns a Float.
+- every other pair of exact real operands follows the exact rational rule
+  above.
+- division by an exact zero (Integer zero) signals an `Error`.
 
-The integer-to-Float division rule rounds the exact quotient, not separately
-rounded operands. Consequently it remains deterministic even when either exact
-integer is far outside binary64 precision or range. Precision loss, overflow to
-infinity, subnormal rounding, and rounding to signed zero that arise in this
-specified Float result are part of the Float result and do not signal an Error.
-An exact zero quotient produced by a zero Integer dividend is positive
-`0.0`. If a nonzero exact rational quotient rounds to zero, the Float result is
-`+0.0` or `-0.0` according to the sign of that exact quotient.
+A program that requires the binary64 approximation of an exact quotient
+requests it explicitly with `Float(a / b)`, which rounds the whole exact
+quotient once under the `Float(Fraction)` rule.
 
 Core v0.1 standardizes integer quotient/remainder selectors `div` and `mod`, and
 the grammar operator `%` has the same standard numeric result as `mod` for
@@ -1451,7 +1515,8 @@ Integer receivers.
 
 For `div`, `mod`, and `%`:
 
-- both operands must be `Integer` values;
+- both operands must be `Integer` values; a Fraction or Float operand signals
+  an `Error`;
 - a zero divisor signals an `Error`;
 - the mathematical quotient for `div` is truncated toward zero;
 - `mod` and `%` return `a - (a div b) * b`, so a nonzero remainder has the sign
@@ -1503,13 +1568,18 @@ identity, or hashing.
 
 For any two numeric values, standard `==` compares exact mathematical numeric
 value across families as already specified. The comparison never converts an
-Integer to Float or otherwise rounds an operand. A finite Float participates by
-its exact binary64 mathematical value. Therefore, for example:
+Integer or Fraction to Float or otherwise rounds an operand. A finite Float
+participates by its exact binary64 mathematical value, which is a dyadic
+rational. Therefore, for example:
 
 ```js
 1 == 1.0                         // true
 1 === 1.0                        // false
 9007199254740993 == 9007199254740992.0 // false
+(1 / 2) == 0.5                   // true
+(1 / 10) == 0.1                  // false: binary64 0.1 is not exactly 1/10
+(1 / 2) === 0.5                  // false
+(2 / 4) === (1 / 2)              // true
 ```
 
 `===` remains non-overridable semantic identity and includes numeric semantic
@@ -1517,29 +1587,35 @@ family, with the previously specified Float signed-zero and NaN special cases.
 Two Integers are identical exactly when they denote the same mathematical
 value. Because the `SmallInteger` and `BigInteger` ranges are disjoint, equal
 Integers always share their concrete family, so the concrete family never
-splits an Integer value into distinct identities. Physical representation is
-never a semantic family and cannot change `===`.
+splits an Integer value into distinct identities. Two Fractions are identical
+exactly when they denote the same rational value; because the canonical form is
+unique, separately produced equal Fractions are identical. A Fraction is never
+identical to an Integer or Float. Physical representation is never a semantic
+family and cannot change `===`.
 
 The standard numeric ordering operators `<`, `<=`, `>`, and `>=` accept any two
 semantic Number values, including distinct numeric families. They compare
 without promotion or coercion:
 
 - finite values are ordered by exact mathematical value, treating each finite
-  Float as its exact binary64 value;
+  Float as its exact binary64 value and each Fraction as its exact rational
+  value;
 - negative infinity is below every finite value;
 - positive infinity is above every finite value;
 - `-0.0`, `+0.0`, and exact-integer zero are equal for ordering;
 - if either operand is Float NaN, every one of `<`, `<=`, `>`, and `>=` returns
   canonical `false`.
 
-Consequently `1 < 1.5` is `true`. Integer/Float ordering is cross-family by
-exact mathematical value; it does not use mixed arithmetic's binary64 promotion.
+Consequently `1 < 1.5` is `true` and `(1 / 3) > 0.3333333333333333` is
+`true`. Integer, Fraction, and Float ordering is cross-family by exact
+mathematical value; it does not use mixed arithmetic's binary64 promotion.
 
 The existing numeric hash coherence rule is unchanged and mandatory across all
 these families: whenever numeric `a == b` is true, standard `a.hash` and
 `b.hash` are the same mathematical Integer hash value for that execution.
-Float-vs-Integer family and internal Integer representation must not split
-equal numeric values into different normal-Map hash classes.
+Numeric family (Integer, Fraction, or Float) and internal representation must
+not split equal numeric values into different normal-Map hash classes; for
+example `(1 / 2).hash == 0.5.hash`.
 `IdentityMap` continues to use `===` and `identityHashOf`, so distinct semantic
 numeric families remain distinct identity keys even when ordinary numeric `==`
 is true.
@@ -1567,7 +1643,8 @@ Number values are immutable value objects. Actor transfer, `P` transfer, constan
 folding, JIT specialization, unboxing, arbitrary-precision specialization, and
 other optimizations may copy, share, inline, or change physical representation
 only when semantic family, exact Integer value, exact binary64 Float value and
-special-value distinctions, result/error behavior, equality, ordering, hashing,
+special-value distinctions, exact canonical Fraction value, result/error
+behavior, equality, ordering, hashing,
 identity, dispatch, and observable evaluation order remain exactly as specified.
 
 Endianness is not a property of a numeric value. It belongs to binary encoding

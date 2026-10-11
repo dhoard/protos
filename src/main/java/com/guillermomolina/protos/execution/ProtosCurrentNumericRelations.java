@@ -25,11 +25,12 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.execution.ProtosStandardNumberOrderingProtocol.Comparison;
 
 /**
- * Current Integer/Float mathematical equality, ordering and normal hash.
+ * Current Integer/Fraction/Float mathematical equality, ordering and normal hash.
  *
- * Preserves published numeric semantics. D197's additional families are
- * deliberately not admitted until their normative implementation is ready.
- * D013 ordinary overridable dispatch remains owned by the protocols.
+ * <p>D197-C (I090): exact real values (Integer, Fraction) and finite binary64 values are
+ * compared as exact mathematical rationals; a Fraction is never rounded to Float here. Complex
+ * is not admitted. D013 ordinary overridable dispatch remains owned by the protocols; this
+ * trusted relation never sends a message to an operand.
  */
 final class ProtosCurrentNumericRelations {
     private ProtosCurrentNumericRelations() {}
@@ -38,6 +39,11 @@ final class ProtosCurrentNumericRelations {
         if (left instanceof ProtosIntegerValue leftInteger
                 && right instanceof ProtosIntegerValue rightInteger) {
             return leftInteger.longValue() == rightInteger.longValue();
+        }
+
+        if (ProtosNumericValueSupport.isFraction(left)
+                || ProtosNumericValueSupport.isFraction(right)) {
+            return compare(left, right) == Comparison.EQUAL;
         }
 
         if (left instanceof ProtosFloatValue leftFloat) {
@@ -79,19 +85,33 @@ final class ProtosCurrentNumericRelations {
             if (right instanceof ProtosFloatValue rightFloat) {
                 return compareFloats(leftFloat.value(), rightFloat.value());
             }
+            if (ProtosNumericValueSupport.isFraction(right)) {
+                return reverse(compareFractionToFloat(right, leftFloat.value()));
+            }
             return compareFloatToInteger(
                     leftFloat.value(),
                     ProtosNumericValueSupport.requireCurrentInteger(right));
         }
         if (right instanceof ProtosFloatValue rightFloat) {
+            if (ProtosNumericValueSupport.isFraction(left)) {
+                return compareFractionToFloat(left, rightFloat.value());
+            }
             return reverse(compareFloatToInteger(
                     rightFloat.value(),
                     ProtosNumericValueSupport.requireCurrentInteger(left)));
         }
-        return fromSign(
-                ProtosNumericValueSupport.compareIntegers(
-                        ProtosNumericValueSupport.requireCurrentInteger(left),
-                        ProtosNumericValueSupport.requireCurrentInteger(right)));
+        return fromSign(ProtosNumericValueSupport.compareExactRationals(left, right));
+    }
+
+    /* The Float is read as its exact represented binary rational; NaN stays unordered. */
+    private static Comparison compareFractionToFloat(Object fraction, double floating) {
+        if (Double.isNaN(floating)) {
+            return Comparison.UNORDERED;
+        }
+        return fromSign(ProtosBinary64Rounding.compareRationalToBinary64(
+                ProtosNumericValueSupport.fractionNumerator(fraction),
+                ProtosNumericValueSupport.fractionDenominator(fraction),
+                floating));
     }
 
     /* I091 primitive carriers share the exact algorithms used for represented values. */
@@ -156,6 +176,21 @@ final class ProtosCurrentNumericRelations {
     }
 
 
+    /*
+     * A canonical Fraction is never integral. When it equals a finite binary64 exactly, it takes
+     * that Float's non-integral normal hash; otherwise no Float or Integer equals it and the
+     * deterministic hash of its canonical components suffices.
+     */
+    private static Object fractionNormalHash(Object fraction) {
+        double nearest = ProtosNumericValueSupport.roundFractionToBinary64(fraction);
+        if (Double.isFinite(nearest)
+                && compareFractionToFloat(fraction, nearest) == Comparison.EQUAL) {
+            return ProtosNumericValueSupport.integer(Double.hashCode(nearest));
+        }
+        return ProtosNumericValueSupport.integer(
+                ProtosNumericValueSupport.fractionComponentHash(fraction));
+    }
+
     private static final Object NAN_NORMAL_HASH = ProtosNumericValueSupport.integer(2146959360L);
 
     /** {@code prelude} owns a hash outside the signed-64 range. */
@@ -179,6 +214,10 @@ final class ProtosCurrentNumericRelations {
                     ? integral
                     : ProtosNumericValueSupport.integer(
                             Double.hashCode(number == 0.0 ? 0.0 : number));
+        }
+
+        if (ProtosNumericValueSupport.isFraction(value)) {
+            return fractionNormalHash(value);
         }
 
         throw new IllegalArgumentException(

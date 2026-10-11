@@ -84,6 +84,8 @@ public final class ProtosStandardNumericConversionProtocol {
     /*
      * The D196 factory conversion; null selects the guest Error. Package-private for tests. Only
      * an integral Float outside the signed-64 range consults prelude, which mints the result.
+     * A canonical Fraction is never integral, so Integer conversion rejects it instead of
+     * silently truncating (D197-C).
      */
     static Object convert(
             FactoryKind factoryKind, Object value, ProtosPrelude prelude) {
@@ -103,6 +105,11 @@ public final class ProtosStandardNumericConversionProtocol {
                 }
                 if (ProtosNumericValueSupport.isCurrentInteger(value)) {
                     yield new ProtosFloatValue(ProtosBinary64Rounding.roundExactInteger(value));
+                }
+                if (ProtosNumericValueSupport.isFraction(value)) {
+                    // D197-C: the exact quotient rounded once, nearest with ties to even.
+                    yield new ProtosFloatValue(
+                            ProtosNumericValueSupport.roundFractionToBinary64(value));
                 }
                 yield null;
             }

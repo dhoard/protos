@@ -22,6 +22,7 @@ _corePreludeBindings: Context {
     Integer: Integer
     SmallInteger: SmallInteger
     BigInteger: BigInteger
+    Fraction: Fraction
     Float: Float
     Error: Error
     fail: () => {

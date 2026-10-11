@@ -314,6 +314,45 @@ public final class ProtosBinary64Rounding {
         return sign * order;
     }
 
+    /**
+     * D197-C exact order of the rational {@code numerator / denominator} (semantic Integers,
+     * positive denominator) against a non-NaN binary64, read as its exact represented binary
+     * rational: negative, zero or positive as the rational is below, equal to or above it. The
+     * rational is never rounded; normal, subnormal, signed-zero and infinite values are exact.
+     */
+    @TruffleBoundary
+    public static int compareRationalToBinary64(
+            Object numerator, Object denominator, double value) {
+        if (Double.isNaN(value)) {
+            throw new IllegalArgumentException("NaN has no order");
+        }
+        BigInteger n = ProtosNumericValueSupport.exactBigInteger(numerator);
+        BigInteger d = ProtosNumericValueSupport.exactBigInteger(denominator);
+        if (d.signum() <= 0) {
+            throw new IllegalArgumentException("denominator must be positive");
+        }
+        if (Double.isInfinite(value)) {
+            return value > 0.0d ? -1 : 1;
+        }
+        if (value == 0.0d) {
+            return n.signum();
+        }
+        long rawBits = Double.doubleToRawLongBits(value);
+        int exponentField = (int) ((rawBits >>> 52) & 0x7ffL);
+        long significand = exponentField == 0
+                ? rawBits & 0x000fffffffffffffL
+                : binary64Significand(rawBits);
+        int shift = exponentField == 0 ? -1074 : binary64Shift(rawBits);
+        BigInteger represented = BigInteger.valueOf(value < 0.0d ? -significand : significand);
+        // n/d <=> m*2^shift with d > 0: scale both sides to integers without dividing.
+        BigInteger left = shift < 0 ? n.shiftLeft(-shift) : n;
+        BigInteger right = represented.multiply(d);
+        if (shift > 0) {
+            right = right.shiftLeft(shift);
+        }
+        return left.compareTo(right);
+    }
+
     /* The 53-bit significand of a normal binary64, hidden bit included. */
     private static long binary64Significand(long rawBits) {
         return (1L << 52) | (rawBits & 0x000fffffffffffffL);

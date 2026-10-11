@@ -42,7 +42,7 @@
 //!
 //! Tagged scalar spellings are interpreted here, not through `TOML.parse`, so
 //! the decoder is never its own oracle. Decimal float spellings become exact
-//! rationals and use the correctly rounded `Integer / Integer` binary64 rule.
+//! rationals, rounded once to binary64 by `Float(Integer / Integer)`.
 
 Arrays: import("std:collections/Array")
 Assertions: import("std:test/Assertions")
@@ -211,7 +211,7 @@ decimalFloat: (text) => {
         magnitude = Float(coefficient * power10(scale))
     })
     (scale < 0).ifTrue(() => {
-        magnitude = coefficient / power10(0 - scale)
+        magnitude = Float(coefficient / power10(0 - scale))
     })
 
     result: magnitude

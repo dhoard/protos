@@ -212,6 +212,21 @@ public final class ProtosActorValueTransfer {
                 memo.put(value, value);
                 return value;
             }
+            if (ProtosNumericValueSupport.isFraction(value)) {
+                // D197-C source stage: only exact inert components cross; the destination
+                // Prelude's Fraction prototype is bound by materialization, once per identity.
+                if (materializing) {
+                    throw nonTransferable();
+                }
+                semanticRecords = true;
+                return remember(value, ProtosNumericValueSupport.fractionTransferDescriptor(value));
+            }
+            if (materializing && ProtosNumericValueSupport.isFractionTransferDescriptor(value)) {
+                return remember(
+                        value,
+                        ProtosNumericValueSupport.materializeFractionTransferDescriptor(
+                                value, prelude));
+            }
             Object copiedNumber =
                     ProtosNumericValueSupport.copyCurrentNumberOrNull(value, prelude);
             if (copiedNumber != null) {
@@ -265,6 +280,8 @@ public final class ProtosActorValueTransfer {
                     || value instanceof ProtosTcpConnectionValue
                     || value instanceof ProtosTcpListenerValue
                     // LIB020-A sealed families are not portable; copying would drop the family.
+                    // A Core Fraction never reaches here: it crossed above as an inert
+                    // descriptor (D197-C).
                     || value instanceof ProtosSealedValue) {
                 throw nonTransferable();
             }

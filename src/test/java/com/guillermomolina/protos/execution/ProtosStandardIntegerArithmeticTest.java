@@ -30,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
@@ -282,6 +283,43 @@ class ProtosStandardIntegerArithmeticTest {
         assertNull(direct(prelude, "/",
                 new ProtosIntegerValue(7L),
                 new ProtosIntegerValue(0L)));
+    }
+
+    @Test
+    void canonicalExactDivideNormalizesWithoutFloat() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        // D197-C: an integral quotient stays a signed-64 Integer, never a Float or Fraction.
+        ProtosIntegerValue integral = assertInstanceOf(
+                ProtosIntegerValue.class,
+                direct(prelude, "/", new ProtosIntegerValue(-6L), new ProtosIntegerValue(3L)));
+        assertEquals(-2L, integral.longValue());
+
+        Object half = direct(prelude, "/",
+                new ProtosIntegerValue(2L), new ProtosIntegerValue(-4L));
+        assertTrue(ProtosNumericValueSupport.isFraction(half));
+        assertEquals(-1L, ((ProtosIntegerValue)
+                ProtosNumericValueSupport.fractionNumerator(half)).longValue());
+        assertEquals(2L, ((ProtosIntegerValue)
+                ProtosNumericValueSupport.fractionDenominator(half)).longValue());
+        assertSame(prelude.fractionPrototype(), ((ProtosObjectValue) half).parent().orElseThrow());
+
+        // Long.MIN_VALUE / -1 promotes to the canonical BigInteger 2^63.
+        assertInstanceOf(
+                ProtosLargeIntegerValue.class,
+                direct(prelude, "/",
+                        new ProtosIntegerValue(Long.MIN_VALUE), new ProtosIntegerValue(-1L)));
+
+        // Without a Prelude a Fraction result stays on the ordinary path.
+        ProtosClosureValue selected = assertInstanceOf(
+                ProtosClosureValue.class,
+                prelude.integerPrototype().readLocalSlot("/").orElseThrow());
+        assertNull(ProtosStandardIntegerProtocol.tryExecuteCanonicalOperationOne(
+                ProtosStandardIntegerProtocol.canonicalOperationForSelection(
+                        selected, prelude.integerPrototype(), "/", prelude),
+                new ProtosIntegerValue(1L),
+                new ProtosIntegerValue(3L),
+                null));
     }
 
     private static Object direct(

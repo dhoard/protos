@@ -284,6 +284,22 @@ public final class ProtosParallelRuntime {
             // D188: raw foreign references, foreign module facades, and projected foreign Closures
             // carry provider-session state with no P transfer contract.
             if(v instanceof ProtosForeignProjectedReceiver||(v instanceof ProtosClosureValue c&&ProtosForeignProjectedOperations.isProjectionClosure(c)))throw new NonParallel();
+            if(ProtosNumericValueSupport.isFraction(v)){
+                // D197-C source stage: only exact inert components cross, once per source identity.
+                if(memo.containsKey(v))return memo.get(v);
+                if(!(memo instanceof TransferMemo tracked)||tracked.materializing)
+                    throw new IllegalStateException("D197-C internal inconsistency: Fraction outside a P source stage");
+                Object y=ProtosNumericValueSupport.fractionTransferDescriptor(v);
+                tracked.semanticRecords=true;memo.put(v,y);return y;
+            }
+            if(ProtosNumericValueSupport.isFractionTransferDescriptor(v)){
+                // D197-C destination stage: one destination-Prelude Fraction per descriptor identity.
+                if(!(memo instanceof TransferMemo tracked)||!tracked.materializing)
+                    throw new IllegalStateException("D197-C internal inconsistency: Fraction descriptor outside a P destination stage");
+                if(memo.containsKey(v))return memo.get(v);
+                Object y=ProtosNumericValueSupport.materializeFractionTransferDescriptor(v,a.prelude().orElseThrow());
+                memo.put(v,y);return y;
+            }
             Object copiedNumber =
                     ProtosNumericValueSupport.copyCurrentNumberOrNull(v, a.prelude().orElse(null));
             if (copiedNumber != null) return copiedNumber;
@@ -311,6 +327,7 @@ public final class ProtosParallelRuntime {
                 if(memo.containsKey(v))return memo.get(v);
                 ProtosEnvironmentValue y=x.rematerializeForParallelTransfer();memo.put(v,y);return y;
             }
+            // A Core Fraction crossed above as an inert descriptor (D197-C); other sealed values stay non-parallel.
             if(v instanceof ProtosFutureValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosNetworkCapabilityValue||v instanceof ProtosTcpConnectionValue||v instanceof ProtosTcpListenerValue||v instanceof ProtosProcessStandardStreamValue||v instanceof ProtosSendOperationControl||v instanceof ProtosSealedValue||v==null)throw new NonParallel();
             if(memo.containsKey(v))return memo.get(v);
             ProtosPrelude p=a.prelude().orElseThrow();
