@@ -23,6 +23,40 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.457] - 2026-10-12
+
+### D198 — Public Complex construction, arithmetic, and `std:math/Math.sqrt`
+- `spec/semantics/VALUES_AND_COLLECTIONS.md`: Complex components may be any
+  semantic Float, including NaN, infinities, and signed zeros. Replace the
+  previous prohibitions with the public Complex contract. `Integer(...)` and
+  `Float(...)` still reject Complex arguments. Complex is a scalar Number,
+  not a collection, Vector, or Matrix; no `Real`, `Vector`, or `Matrix`
+  prototype is introduced.
+- Construction and components: `Complex(real, imaginary)` is an ordinary
+  `call` on the exact `Complex` owner taking two semantic real values, with
+  canonical exact-zero collapse and retained Float zeros. `Number` owns
+  `real()` and `imaginary()`; a real value returns itself and exact `0`.
+- Arithmetic: `+`, `-`, negation, Complex × real, and Complex ÷ real are
+  separable per coordinate, with Float promotion only where a Float takes
+  part (P2). Complex × Complex, Complex ÷ Complex, and real ÷ Complex are
+  exact for exact operands. With any Float operand, all components are
+  promoted first, and each finite coordinate is rounded once (R), with
+  defined signs for exact zeros (F1).
+- Exceptional results: an exhaustive, ordered Z/F/I/N rule set (G1) for
+  Float-domain coupled multiplication and division, including conservative
+  NaN handling (F2-A/F2-B), Float-zero divisors, and infinity directions, plus
+  the real ÷ Complex convention. An all-exact division by exact zero signals
+  `Error` (E2). A Float-bearing Complex ÷ exact `0` is evaluated in the Float
+  domain by dividing each coordinate by `+0.0`.
+- `std:math/Math` publishes the ordinary function `sqrt(value)` (F4). It
+  returns the principal root, exact wherever rational (F3), with no premature
+  Float conversion of exact components. It defines branch-cut zero signs and a
+  NaN/Infinity table (N4). Every inexact Float coordinate, including for real
+  inputs, is within 4 ULP of a correctly rounded oracle, with exact oracle
+  zeros and no spurious NaN, Infinity, or flush-to-zero (G2-B).
+- Equality, identity, hashing, ordering, and transfer rules (D197) are
+  unchanged.
+
 ## [0.1.456] - 2026-10-12
 
 ### I091 / PLAT056-C — Structural close/freeze reject Number receivers

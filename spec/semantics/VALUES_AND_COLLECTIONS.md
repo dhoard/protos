@@ -1253,7 +1253,8 @@ A semantic Complex value is an immutable number with a **real component** and
 an **imaginary component**, each a semantic real value (an Integer of either
 concrete family, a Fraction, or a Float) held exactly: an exact component is
 never rounded to binary64, and a Float component keeps its exact binary64 value,
-including the sign of a zero. A component is never itself a Complex value, and
+including the sign of a zero. Either component may be any semantic Float value,
+including NaN and either infinity. A component is never itself a Complex value, and
 an ordinary object that merely delegates to `Number` or to a numeric prototype
 is never a component. A Complex value exposes neither component as a slot. Its
 immediate delegation parent is the `Complex` prototype, and the standard
@@ -1265,16 +1266,22 @@ component's own family. A Float zero imaginary component, `+0.0` or `-0.0`, is
 not exact and is retained, so such a value is a Complex value. A canonical
 Fraction is never zero, so no other exact imaginary component is zero.
 
-Complex values are not producible from Protos source in this revision. This
-revision defines no Complex construction factory (`Complex` has no standard
-`call` behavior), no imaginary literal, no standard selector for either
-component, no Complex arithmetic, no Complex ordering, and no principal-branch
-operation such as a complex square root; no standard operation in this revision
-produces a Complex value. A Complex value with a NaN or infinite Float component
-is not defined by this revision. Standard Integer, Fraction, and Float
-arithmetic and the standard `Integer(...)` and `Float(...)` conversions do not
-admit a Complex operand or argument. The recognition, identity, equality,
-hashing, and transfer rules of this specification apply to every Complex value.
+Complex values are produced by the standard `Complex(real, imaginary)` factory
+and the standard component selectors (**Standard Complex construction and
+components**), by standard Complex arithmetic (**Standard Complex
+arithmetic**), and by the Standard Library function `sqrt` (**Standard Library
+`std:math/Math`**). This revision defines no imaginary literal and no Complex
+ordering. The standard `Integer(...)` and `Float(...)` conversions do not admit a
+Complex argument. The recognition, identity, equality, hashing, and transfer
+rules of this specification apply to every Complex value, including one with a
+NaN or infinite component.
+
+Complex is a scalar numeric family. A Complex value is not a two-element
+collection, Vector, or Matrix: its identity, equality, hashing, and arithmetic
+are exactly the numeric rules of this section, never collection or linear-algebra
+rules, and no standard operation implicitly converts a Complex value to or from a
+collection. Core defines no `Real`, `Vector`, or `Matrix` prototype and no
+algebraic protocol hierarchy for Complex.
 
 Core v0.1 defines no standard width-specific numeric semantic family, prototype, or
 prelude binding. Width- or range-specific representations may exist inside an
@@ -1402,7 +1409,9 @@ polymorphic invocation as one-argument numeric conversion factories. Argument
 evaluation and invocation otherwise follow `CALLABLES.md`. Each standard numeric
 conversion requires exactly one positional argument and requires that argument
 to be a semantic `Number`; wrong arity or a non-Number argument signals an
-`Error`.
+`Error`. A Complex argument also signals an `Error` for both conversions, even
+when its imaginary component is a Float zero; a program extracts a component
+explicitly with `real()` or `imaginary()`.
 
 No standard numeric conversion sends a user conversion callback, performs
 String parsing, invokes equality/hash behavior, or introduces a hidden
@@ -1463,6 +1472,8 @@ exact `Integer` result is canonically normalized to its concrete family.
 | `Integer` or `Fraction` | `Float` | `Float`, operand-first binary64 rule below |
 | `Float` | `Integer` or `Fraction` | `Float`, operand-first binary64 rule below |
 | `Float` | `Float` | `Float`, binary64 rule below |
+| `Complex` | any real family, or `Complex` | **Standard Complex arithmetic** below |
+| any real family | `Complex` | **Standard Complex arithmetic** below |
 
 **Exact rational rule.** When both operands of standard binary `+`, `-`, `*`,
 or `/` are exact real values and at least one is a Fraction, each Integer
@@ -1519,7 +1530,9 @@ The same-family rule also governs standard unary negation:
 
 - Integer negation returns the exact Integer;
 - Fraction negation returns the exact canonical Fraction of opposite sign;
-- Float negation is the binary64 sign-negation operation described below.
+- Float negation is the binary64 sign-negation operation described below;
+- Complex negation is the separable operation under **Standard Complex
+  arithmetic** below.
 
 The grammar-owned prefix `-` lowering inherits exactly that standard behavior.
 
@@ -1540,6 +1553,8 @@ For the remaining operand pairs:
 - every other pair of exact real operands follows the exact rational rule
   above.
 - division by an exact zero (Integer zero) signals an `Error`.
+- every pair with a Complex operand follows **Standard Complex arithmetic**
+  below.
 
 A program that requires the binary64 approximation of an exact quotient
 requests it explicitly with `Float(a / b)`, which rounds the whole exact
@@ -1551,8 +1566,8 @@ Integer receivers.
 
 For `div`, `mod`, and `%`:
 
-- both operands must be `Integer` values; a Fraction or Float operand signals
-  an `Error`;
+- both operands must be `Integer` values; a Fraction, Float, or Complex operand
+  signals an `Error`;
 - a zero divisor signals an `Error`;
 - the mathematical quotient for `div` is truncated toward zero;
 - `mod` and `%` return `a - (a div b) * b`, so a nonzero remainder has the sign
@@ -1593,6 +1608,343 @@ For IEEE basic Float arithmetic, overflow, underflow, division by zero, and
 invalid floating-point arithmetic produce the corresponding binary64 infinity,
 signed zero/subnormal, or NaN result rather than signaling a Protos Error merely
 because the IEEE condition occurred.
+
+### Standard Complex construction and components
+
+The standard prototype object `Complex` specializes ordinary polymorphic
+invocation as a two-argument construction factory, `Complex(real, imaginary)`.
+It is an ordinary `call` under `CALLABLES.md`, not a grammar form: argument
+evaluation follows the ordinary call rules, and the standard behavior requires
+its exact canonical `Complex` owner as receiver, so invoking an ordinary object
+that merely delegates to `Complex` signals an `Error`. Exactly two positional
+arguments are required, and each must be a semantic real value (an Integer of
+either concrete family, a Fraction, or a Float), recognized by semantic family
+membership exactly as `recognizes` does; delegation to a numeric prototype or
+value confers nothing. Wrong arity, a non-Number argument, an ordinary object
+delegating to a numeric prototype, or a Complex argument signals an `Error`.
+
+The factory preserves both arguments exactly as components and applies only
+Complex canonical form: when `imaginary` is the exact Integer zero, the result is
+`real` itself, of its own family; otherwise the result is a Complex value whose
+components are identical (`===`) to `real` and `imaginary`. A NaN, infinite, or
+signed-zero Float argument is a valid component. For example (`C(a, b)`
+abbreviates `Complex(a, b)`, and `1/2` denotes the exact rational, not new
+syntax):
+
+```text
+Complex(3, 0)      -> the SmallInteger 3
+Complex(3, +0.0)   -> C(3, +0.0)
+Complex(3, -0.0)   -> C(3, -0.0)
+Complex(3, 1/2)    -> C(3, 1/2), with an exact Fraction imaginary component
+```
+
+`Number` owns two standard component selectors, reached by ordinary delegation
+from every numeric family:
+
+```text
+value.real()
+value.imaginary()
+```
+
+Each requires a semantic Number receiver and accepts no argument; an invalid
+receiver or any argument follows the ordinary Error rules for invalid
+standard-behavior receivers and arity. For a Complex receiver, `real()` and
+`imaginary()` return its real and imaginary components respectively, so
+`Complex(z.real(), z.imaginary()) === z` for every Complex value `z`. For a real
+receiver `x`, `x.real()` returns `x` itself and `x.imaginary()` returns the exact
+SmallInteger `0`, whatever the family of `x`, including Float NaN, infinities,
+and signed zeros.
+
+Construction and component selection execute no user callback, perform no
+conversion or rounding, and introduce no hidden suspension point.
+
+### Standard Complex arithmetic
+
+This subsection defines the standard results of binary `+`, `-`, `*`, and `/`
+whose receiver or argument is a Complex value, and of standard unary negation of
+a Complex value. As for the other numeric families, these are rules for the
+standard numeric behaviors, not syntax intrinsics: ordinary overridable message
+dispatch, lookup, receiver-domain checking, evaluation order, and guarded-send
+fallback retain their existing semantics, and receiver, arity, and argument
+validation precede every rule below.
+
+In this subsection `C(a, b)` denotes a Complex operand with real component `a`
+and imaginary component `b`; a divisor is written `C(c, d)`; and `r` denotes a
+real operand. Every standard Complex arithmetic result is subject to Complex
+canonical form: each coordinate produced by exact arithmetic is exact-rationally
+normalized, and an exact
+Integer-zero imaginary coordinate yields the real coordinate itself, while a
+Float zero imaginary coordinate of either sign is retained. Every NaN produced is
+the Core NaN semantic value. A real operand is never materialized as a Complex
+value with a zero imaginary component; the scalar rules below apply directly.
+
+**Separable operations.** These act on each coordinate independently with the
+standard real operation of the same selector, in the original operand order,
+including the exact rational rule, the operand-first binary64 rule, and Float
+binary64 arithmetic. A Float participates only in the coordinates whose
+mathematical result it determines, so an exact coordinate stays exact when a
+Float participates only in the other coordinate, and a NaN or infinity affects
+only the coordinates in which it participates:
+
+```text
+C(a, b) + C(c, d)  = C(a + c, b + d)       C(a, b) - C(c, d)  = C(a - c, b - d)
+C(a, b) + r        = C(a + r, b)           r + C(a, b)        = C(r + a, b)
+C(a, b) - r        = C(a - r, b)           r - C(a, b)        = C(r - a, -b)
+C(a, b) * r        = C(a * r, b * r)       r * C(a, b)        = C(r * a, r * b)
+C(a, b) / r        = C(a / r, b / r)
+-C(a, b)           = C(-a, -b)
+```
+
+Here `-b` and `-a` denote standard real negation. The `C(a, b) / r` row applies
+coordinatewise when `r` is nonzero or is a Float zero, preserving the existing
+separable-operation and operand-first binary64 rules.
+
+When `r` is the exact Integer zero and both components of `C(a, b)` are exact
+(Integer or Fraction), the division signals an `Error`.
+
+When `r` is the exact Integer zero and at least one component of `C(a, b)` is
+a semantic Float, the whole exceptional division enters the Float domain.
+The exact Integer zero divisor is converted to binary64 `+0.0`, and every exact
+numerator component is converted to binary64 by the standard `Float(Integer)`
+or `Float(Fraction)` conversion before arithmetic. Existing Float components
+retain their binary64 values, including signed zeros, infinities, and NaN.
+
+Each resulting Float numerator component is then divided independently by
+`+0.0` using standard IEEE 754-2019 binary64 division. The resulting coordinates
+are subject to ordinary Complex canonicalization. A NaN in one coordinate does
+not contaminate the other coordinate merely because it is NaN.
+
+This exact-zero exceptional-domain rule does not alter division by a nonzero
+real divisor or by a Float `+0.0` or `-0.0` divisor. It introduces no synthetic
+Complex divisor, no coupled Complex/Complex division, and no change to ordinary
+overridable message dispatch, validation, or evaluation order.
+
+For example, `C(1.0, -0.0) + 3` is `C(4.0, -0.0)`, `C(1.0, -0.0) * 1.0` is
+`C(1.0, -0.0)`, `C(1, 2) / 0.0` is `C(+Infinity, +Infinity)`, and
+`C(NaN, 1) + C(2, 3)` is `C(NaN, 4)`. Division by the exact Integer zero:
+
+```text
+C(1, 2) / 0       -> Error
+C(1.0, 2) / 0     -> C(+Infinity, +Infinity)
+C(-1.0, 2) / 0    -> C(-Infinity, +Infinity)
+C(0.0, 2) / 0     -> C(NaN, +Infinity)
+C(NaN, 2) / 0     -> C(NaN, +Infinity)
+```
+
+**Coupled operations.** `C(a, b) * C(c, d)`, `C(a, b) / C(c, d)`, and
+`r / C(c, d)` are coupled: every result coordinate depends on every participating
+component. If every participating component is exact, the operation is performed
+exactly, with no Float conversion:
+
+```text
+C(a, b) * C(c, d) = C(ac - bd, ad + bc)
+C(a, b) / C(c, d) = C((ac + bd)/(c² + d²), (bc - ad)/(c² + d²))
+r / C(c, d)       = C(rc/(c² + d²), -rd/(c² + d²))
+```
+
+An exact Complex divisor always has a nonzero exact imaginary component, so an
+exact coupled division never divides by zero. An exact zero divisor is the
+Integer `0`, a real operand: an all-exact Complex divided by it uses the
+separable `C(a, b) / r` row and signals an `Error`, never fabricating NaN or
+infinity.
+
+If any participating component is a Float, every participating exact component
+is first converted to binary64 by the standard `Float(Integer)` or
+`Float(Fraction)` rule, before any arithmetic, and the coupled operation is
+evaluated over the resulting Float values. Each Float value is then classified
+as `Z` (a zero of either sign), `F` (finite nonzero), `I` (an infinity of either
+sign), or `N` (NaN). Every combination of classes and signs of the participating
+components is covered by exactly one of the ordered rules below. These rules are
+mathematical result specifications, not mandated formulas or evaluation orders;
+entering the Float domain never by itself signals a Protos `Error`.
+
+**Finite-result accuracy (`R`).** Where a rule below requires the finite result,
+each result coordinate is the exact mathematical value of that coordinate over
+the converted finite Float inputs, rounded once to binary64 using
+`roundTiesToEven`. Individual products, sums, and quotients are not rounded
+separately, and no intermediate overflow or underflow may produce NaN, an
+infinity, or a zero that the once-rounded mathematical value does not. A
+once-rounded coordinate beyond the finite binary64 range is the infinity of its
+mathematical sign; a nonzero coordinate that rounds to zero is the zero of its
+mathematical sign, and gradual underflow applies. This guarantee does not change
+standard scalar Float arithmetic.
+
+**Signed-zero rule (`F1`).** A finite-result coordinate whose exact mathematical
+value is zero has the sign obtained from its rectangular terms as written above
+(for division, the terms of the numerator over the positive `c² + d²`):
+
+- a product term with a zero factor is a zero whose sign is the exclusive-or of
+  the factor signs;
+- a lone term keeps the sign of that product, and a negated lone term has the
+  opposite sign;
+- two zero terms combine as binary64 `roundTiesToEven` addition of signed zeros,
+  with `x - y` meaning `x + (-y)`, so the sum is `-0.0` only when both addends
+  are `-0.0`; and
+- two nonzero terms that cancel exactly give `+0.0`.
+
+For example, `C(1.0, -0.0) * C(1.0, +0.0)` has imaginary coordinate `+0.0`, and
+`C(1.0, -0.0) / C(2.0, +0.0)` has imaginary coordinate `-0.0`.
+
+**Coupled multiplication** `C(a, b) * C(c, d)` in the Float domain:
+
+1. If any of `a`, `b`, `c`, or `d` is NaN, the result is `C(NaN, NaN)`.
+2. Otherwise, if all four are finite, the result is the finite result under `R`
+   and `F1`.
+3. Otherwise at least one component is infinite and none is NaN. Each
+   coordinate is evaluated by extended-real rectangular arithmetic,
+   `ac - bd` and `ad + bc`: a product of an infinity and a zero is NaN, a
+   product of an infinity and a nonzero value is the infinity of the product's
+   sign, a product of two finite values is its exact finite value, a sum with a
+   NaN term is NaN, a sum of infinities of opposite signs is NaN, and otherwise
+   a sum with an infinite term is that infinity. No geometric or axis-based
+   recovery replaces a NaN obtained this way. For example,
+   `C(+Infinity, +0.0) * C(+0.0, 1.0)` is `C(NaN, +Infinity)`, and
+   `C(NaN, +Infinity) * C(1.0, 1.0)` is `C(NaN, NaN)` under rule 1.
+
+**Coupled division** `C(a, b) / C(c, d)` in the Float domain, rules in priority
+order:
+
+1. If any of `a`, `b`, `c`, or `d` is NaN, the result is `C(NaN, NaN)`.
+2. If `a`, `b`, `c`, and `d` are all finite and `c` and `d` are not both zero,
+   the result is the finite result under `R` and `F1`; it may legitimately
+   overflow or underflow.
+3. If `c` and `d` are both zero, let `k` be the infinity with the sign of `c`
+   (the sign of `d` does not affect `k`); the result is `C(k * a, k * b)` with
+   binary64 multiplication, so a zero numerator coordinate yields NaN.
+4. If `a` or `b` is infinite and `c` or `d` is infinite, the result is
+   `C(NaN, NaN)`.
+5. If `a` or `b` is infinite and the divisor is finite and not both zero, let
+   `A` be `+1` or `-1` with the sign of `a` when `a` is infinite and otherwise
+   the zero with the sign of `a`, and `B` likewise from `b`. Let `X = Ac + Bd`
+   and `Y = Bc - Ad`, evaluated exactly with the `F1` zero-term signs. Each
+   result coordinate is the infinity with the sign of its coefficient when that
+   coefficient is nonzero, and NaN when it is zero.
+6. If `a` and `b` are finite and `c` or `d` is infinite, let `C'` be `+1` or
+   `-1` with the sign of `c` when `c` is infinite and otherwise the zero with
+   the sign of `c`, and `D'` likewise from `d`. Let `X = aC' + bD'` and
+   `Y = bC' - aD'`, evaluated exactly with the `F1` zero-term signs. Each result
+   coordinate is the zero with the sign of its coefficient.
+
+These six rules are exhaustive for the Float domain. For example:
+
+```text
+C(1, 2) / C(0, 0)            -> Error: C(0, 0) is the exact Integer 0
+C(1, 2) / C(+0.0, +0.0)      -> C(+Infinity, +Infinity)
+C(1, 2) / C(-0.0, +0.0)      -> C(-Infinity, -Infinity)
+C(0, 2) / C(+0.0, +0.0)      -> C(NaN, +Infinity)
+C(0, 0.0) / C(+0.0, +0.0)    -> C(NaN, NaN)
+C(+Infinity, +Infinity) / C(+Infinity, -Infinity) -> C(NaN, NaN)
+C(1, 2) / C(+Infinity, -Infinity) -> C(-0.0, +0.0)
+```
+
+**Real divided by Complex** `r / C(c, d)` in the Float domain applies the same
+priority order with the real dividend contributing no imaginary terms:
+
+1. If any of `r`, `c`, or `d` is NaN, the result is `C(NaN, NaN)`.
+2. If `r`, `c`, and `d` are finite and `c` and `d` are not both zero, the result
+   is the finite result under `R` and `F1` with coordinate terms `rc` and
+   `-(rd)`.
+3. If `c` and `d` are both zero, with `k` as in division rule 3, the result is
+   `C(k * r, NaN)`.
+4. If `r` is infinite and `c` or `d` is infinite, the result is `C(NaN, NaN)`.
+5. If `r` is infinite and the divisor is finite and not both zero, with `A` from
+   `r` as in division rule 5, the coefficients are `X = Ac` and `Y = -(Ad)`, and
+   each coordinate is determined from its coefficient as in division rule 5.
+6. If `r` is finite and `c` or `d` is infinite, with `C'` and `D'` as in division
+   rule 6, the coefficients are `X = rC'` and `Y = -(rD')`, and each coordinate
+   is the zero with the sign of its coefficient.
+
+For example, `1.0 / C(+0.0, +0.0)` is `C(+Infinity, NaN)`, and
+`+0.0 / C(1.0, 1.0)` is `C(+0.0, -0.0)`.
+
+### Standard Library `std:math/Math`
+
+The Standard Library module `std:math/Math` publishes the ordinary function
+`sqrt(value)` as a local slot of its module instance, reachable only through an
+explicit import such as `Math: import("std:math/Math")`. `sqrt` is not a
+reserved word, a grammar form, a Prelude binding, or a `Number` selector, and
+this revision defines no other standard member of `std:math/Math`.
+
+`sqrt` is invoked through the ordinary call rules and requires exactly one
+argument that is a semantic Number; wrong arity or any other argument signals an
+`Error`. It executes no user callback, performs no dispatch on its argument, and
+introduces no hidden suspension point. NaN, infinite, zero, overflowing, and
+underflowing values never by themselves cause it to signal an `Error`. Its
+result is the principal square root, subject to Complex canonical form:
+
+- **Exact real `x >= 0`.** If the exact square root is rational, the result is
+  that exact value under exact rational normalization. Otherwise the result is
+  a Float approximating the exact mathematical root of `x`; `x` is never first
+  rounded to binary64.
+- **Exact real `x < 0`.** The result is `Complex(0, s)` with the exact Integer
+  `0` as real component, where `s` is the root of `-x` determined as for
+  `x >= 0`.
+- **Float `x`.** NaN gives NaN; `+Infinity` gives `+Infinity`; `+0.0` and
+  `-0.0` give themselves; a finite positive `x` gives a Float approximation; a
+  finite negative `x` gives `Complex(+0.0, s)` where `s` approximates the root of
+  `-x`; and `-Infinity` gives `Complex(+0.0, +Infinity)`.
+- **Exact Complex `C(a, b)`** (both components exact). The result coordinates are
+  `u = sqrt((|z| + a)/2)` and `v = sign(b) * sqrt((|z| - a)/2)`, with `|z|` the
+  exact modulus. Each coordinate that is rational is that exact value; only an
+  irrational coordinate is approximated as a Float.
+- **Float-bearing Complex `C(a, b)`.** No component is converted to Float
+  before the root is determined: an exact component keeps its exact value and is
+  classified as finite. Both result coordinates are Floats, determined by the
+  first matching row:
+
+  | `a` | `b` | result |
+  | --- | --- | --- |
+  | any, including NaN | infinite | `C(+Infinity, b)` |
+  | NaN | finite or NaN | `C(NaN, NaN)` |
+  | `+Infinity` | finite | `C(+Infinity, z)`, `z` the zero with the sign of `b` |
+  | `+Infinity` | NaN | `C(+Infinity, NaN)` |
+  | `-Infinity` | finite | `C(+0.0, i)`, `i` the infinity with the sign of `b` |
+  | `-Infinity` | NaN | `C(NaN, +Infinity)` |
+  | finite | NaN | `C(NaN, NaN)` |
+  | finite | finite | principal root `C(u, v)`: `u >= 0`, a zero `u` being `+0.0`; `v` has the sign of `b`, including a zero `b` |
+
+For example:
+
+```text
+sqrt(4)                 -> the SmallInteger 2
+sqrt(1/4)               -> the Fraction 1/2
+sqrt(-4)                -> C(0, 2)
+sqrt(C(3, 4))           -> C(2, 1)
+sqrt(-2)                -> C(0, s), s a Float with oracle 1.4142135623730951
+sqrt(2^1200 + 1)        -> a finite Float approximating 2^600
+sqrt(-4.0)              -> C(+0.0, +2.0)
+sqrt(C(-4.0, +0.0))     -> C(+0.0, +2.0)
+sqrt(C(-4.0, -0.0))     -> C(+0.0, -2.0)
+sqrt(-0.0)              -> -0.0
+sqrt(C(NaN, +Infinity)) -> C(+Infinity, +Infinity)
+```
+
+`2^1200 + 1` denotes the exact Integer value, not new syntax. Each result shown
+exactly above is required exactly, and `sqrt(C(2^1200, 1.0))` has finite Float
+coordinates. These special-value
+rules are owned by `sqrt`; the coupled NaN rules of **Standard Complex
+arithmetic** do not apply to it.
+
+**Accuracy.** For each Float coordinate of a `sqrt` result that is not fixed by
+the rules above, the **oracle** is the exact mathematical principal root of the
+argument value (finite Float components taken as their exact binary64 values,
+exact components as their exact rational values), rounded once to binary64 using `roundTiesToEven`. The oracle is a
+specification device, not a required algorithm, and must be independent of the
+implementation under test. The coordinate must satisfy:
+
+- if the oracle is finite and nonzero, the coordinate lies within
+  4 ULP of it:
+  at most four steps apart counting consecutive binary64 values of the oracle's
+  sign, where the zero of that sign counts as the last step;
+- if the oracle is a zero, the coordinate is exactly that zero, including its
+  sign: the sign of the mathematical value when it is nonzero, and the sign
+  required by the rules above when it is exactly zero;
+- if the oracle is an infinity, the coordinate is that infinity; and
+- the coordinate is never NaN or an infinity that the oracle does not require,
+  and intermediate computation must not flush a subnormal coordinate to zero.
+
+A coordinate required to be exact remains exact. Correct rounding of inexact
+`sqrt` coordinates is permitted but not required.
 
 ### Numeric equality, identity, ordering, and hashing
 
