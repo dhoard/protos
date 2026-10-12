@@ -73,6 +73,7 @@ native_numeric_cases=0
 
 for numeric_file in \
     "protos/tests/conformance/integer/prototype-and-receiver.protos" \
+    "protos/tests/conformance/integer/primitive-call-boundaries.protos" \
     "protos/tests/conformance/number/fraction-relations.protos" \
     "protos/tests/conformance/float/special-values.protos"
 do

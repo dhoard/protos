@@ -1,0 +1,63 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina.
+// https://github.com/guillermomolina/protos
+//
+// I091-F2/F4: primitive results and guest-value observations
+// across direct Call1 and Send0 in portable and Native execution.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("Call1 retains integer result", () => {
+        identity: x => x
+        increment: x => x + 1
+        Assertions.require(increment(identity(40 + 1)) === 42)
+    }),
+    Test("Send0 forwards integer result", () => {
+        holder: { next: () => 20 + 21 }
+        Assertions.require(holder.next() + 1 === 42)
+    }),
+    Test("Call1 forwards float result", () => {
+        identity: x => x
+        Assertions.require(identity(1.25 + 0.25) + 1.0 === 2.5)
+    }),
+    Test("Send0 forwards float result", () => {
+        holder: { next: () => 1.25 + 0.25 }
+        Assertions.require(holder.next() + 1.0 === 2.5)
+    }),
+    Test("Call1 overflow materializes BigInteger", () => {
+        identity: x => x
+        result: identity(9223372036854775807) + 1
+        Assertions.require(result === 9223372036854775808)
+        Assertions.require(result.parent() === BigInteger)
+    }),
+    Test("Send0 overflow materializes BigInteger", () => {
+        holder: { next: () => 9223372036854775807 + 1 }
+        result: holder.next()
+        Assertions.require(result === 9223372036854775808)
+        Assertions.require(BigInteger.recognizes(result))
+    }),
+    Test("Call1 generic result remains observable", () => {
+        identity: x => x
+        Assertions.require(identity("ordinary") === "ordinary")
+    }),
+    Test("Send0 generic result remains observable", () => {
+        holder: { next: () => "ordinary" }
+        Assertions.require(holder.next() === "ordinary")
+    }),
+    Test("numeric family survives returned carrier", () => {
+        identity: x => x
+        holder: { next: () => 41 + 1 }
+        Assertions.require(identity(41 + 1).parent() === SmallInteger)
+        Assertions.require(holder.next().parent() === SmallInteger)
+    }),
+    Test("negative float zero survives direct calls", () => {
+        identity: x => x
+        holder: { next: () => -0.0 }
+        Assertions.require(identity(-0.0) === -0.0)
+        Assertions.require(holder.next() === -0.0)
+        Assertions.require((identity(-0.0) === 0.0) === false)
+    })
+]
+tests.freeze()

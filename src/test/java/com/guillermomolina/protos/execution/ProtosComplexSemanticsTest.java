@@ -59,7 +59,7 @@ final class ProtosComplexSemanticsTest {
     private static final BigInteger TWO_POW_100 = BigInteger.ONE.shiftLeft(100);
 
     @Test
-    void structuralCloseAndFreezeAreRepresentationNeutralForNumbers()
+    void structuralCloseAndFreezeRejectEveryNumberRepresentation()
             throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation caller = prelude.newModuleActivation();
@@ -78,16 +78,16 @@ final class ProtosComplexSemanticsTest {
                 small, large, floating, fraction, complex)) {
             assertTrue(ProtosNumericValueSupport.isCurrentNumber(number));
 
-            assertSame(number, ProtosInvocation.invokeMessage(
-                    number, "close", List.of(), caller));
-            assertSame(number, ProtosInvocation.invokeMessage(
-                    number, "freeze", List.of(), caller));
-
-            // Repetition must remain idempotent.
-            assertSame(number, ProtosInvocation.invokeMessage(
-                    number, "close", List.of(), caller));
-            assertSame(number, ProtosInvocation.invokeMessage(
-                    number, "freeze", List.of(), caller));
+            // Semantic immutability is not ordinary FROZEN state; repeated
+            // attempts must reject as well.
+            for (int attempt = 0; attempt < 2; attempt++) {
+                assertThrows(ProtosSignalException.class,
+                        () -> ProtosInvocation.invokeMessage(
+                                number, "close", List.of(), caller));
+                assertThrows(ProtosSignalException.class,
+                        () -> ProtosInvocation.invokeMessage(
+                                number, "freeze", List.of(), caller));
+            }
         }
     }
 

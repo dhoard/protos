@@ -23,6 +23,17 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.456] - 2026-10-12
+
+### I091 / PLAT056-C — Structural close/freeze reject Number receivers
+- `spec/semantics/OBJECT_MODEL.md`: distinguish semantic value immutability
+  from ordinary open/closed/frozen structural state. Structural
+  `Object.close()` and `Object.freeze()` signal an error, including on
+  repeated attempts, for every Number family receiver (`SmallInteger`,
+  `BigInteger`, `Float`, `Fraction`, `Complex`) independently of physical
+  representation. Ordinary objects delegating to a Number keep the ordinary
+  close/freeze contract. No PLAT056 architectural change.
+
 ## [0.1.455] - 2026-10-11
 
 ### I090-C1 / D197-C — Canonical Complex numeric family

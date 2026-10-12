@@ -338,12 +338,6 @@ public final class ProtosStandardObjectProtocol {
         }
         Object receiver = activation.receiver();
 
-        // Semantic Numbers are immutable. Structural close is
-        // idempotent regardless of their physical Java representation.
-        if (ProtosNumericValueSupport.isCurrentNumber(receiver)) {
-            return receiver;
-        }
-
         if (!(receiver instanceof ProtosObjectValue ordinary)
                 || !ordinaryReceiver(receiver)) {
             throw invalid(activation);
@@ -356,12 +350,6 @@ public final class ProtosStandardObjectProtocol {
             throw invalid(activation);
         }
         Object receiver = activation.receiver();
-
-        // Semantic Numbers are immutable. Structural freeze is
-        // idempotent regardless of their physical Java representation.
-        if (ProtosNumericValueSupport.isCurrentNumber(receiver)) {
-            return receiver;
-        }
 
         if (!(receiver instanceof ProtosObjectValue ordinary)
                 || !ordinaryReceiver(receiver)) {

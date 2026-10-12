@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.341-SNAPSHOT
+
+- `I091` (#869): strengthen PLAT056 numeric boundary conformance and
+  representation-neutral structural behavior.
+  - Add Java acceptance coverage for primitive Call1/Send0 propagation and
+    deferred isolated-P graph population, including cycles, aliases,
+    collection contents, identity hashes and mutation states.
+  - Add ten Protos conformance cases for direct numeric call/send results,
+    overflow, Float signed zero and generic fallback.
+  - Include the new numeric conformance cases in Native Image validation.
+  - Extend F2 static checks for direct Call1 and Send0, and reconcile the
+    production numeric dependency census.
+  - Reject inherited structural Object.close() and Object.freeze() on
+    semantic Number values of every family, independently of Java
+    representation; preserve ordinary-object behavior.
+  - Record the structural Number contract in specification revision 0.1.456.
+  - Preserve I090 numeric-family semantics and PERF040 measurement ownership.
+
 ## 0.3.340-SNAPSHOT
 
 - `I091` (#869): advance PLAT056 primitive-first numeric execution,

@@ -149,8 +149,8 @@ CHECKS = [
     (
         "F1_OBJECT_NATIVE_GUARD",
         "execution/ProtosStandardObjectProtocol.java",
-        "!ProtosNumericValueSupport.isLargeInteger(receiver)",
-        "Object reflection and construction have an explicit large-Integer guard",
+        "!ProtosNumericValueSupport.isCurrentNumber(receiver)",
+        "Object reflection and construction reject all semantic Numbers",
     ),
     (
         "F1_SEALED_NUMERIC_STORAGE",
@@ -181,6 +181,18 @@ CHECKS = [
         "execution/CanonicalToBytecodeLowerer.java",
         "builder.beginMaterializeReturnCarrier();",
         "Literal return has an explicit materialization boundary",
+    ),
+    (
+        "F2_DIRECT_CALL1_RESULT",
+        "execution/CanonicalToBytecodeLowerer.java",
+        "return call.arguments().size() == 1\n                && !hasSpreadArgument(call.arguments());",
+        "Direct Call1 admits primitive results with a non-spread argument",
+    ),
+    (
+        "F2_DIRECT_SEND0_RESULT",
+        "execution/CanonicalToBytecodeLowerer.java",
+        "return send.arguments().isEmpty()",
+        "Direct Send0 admits primitive results",
     ),
     (
         "F3_EXACT_RATIONAL_NORMALIZATION",
@@ -246,7 +258,7 @@ CHECKS = [
 
 
 
-F5_SOURCE_OWNERS = {'runtime/ProtosNumericValueSupport.java': ((24, 50, 9), 'NUMERIC_BOUNDARY', 'Exact algorithms, canonical carriers and semantic normalization'), 'runtime/ProtosBinary64Rounding.java': ((20, 5, 0), 'EXACT_ROUNDING', 'Primitive-first binary rounding and exceptional large arithmetic'), 'execution/ProtosCurrentNumericRelations.java': ((0, 6, 7), 'SEMANTIC_RELATIONS', 'Numeric comparison, equality and hash'), 'runtime/ProtosSemanticTransferPayload.java': ((13, 0, 0), 'TRANSFER_BOUNDARY', 'Long leaves with BigInteger reserved for large or mixed leaves'), 'execution/ProtosSemanticBytecodeRootNode.java': ((1, 5, 5), 'BYTECODE_BOUNDARY', 'Primitive carriers, large literals and observable materialization'), 'execution/ProtosStandardFloatProtocol.java': ((0, 0, 6), 'GUEST_PROTOCOL', 'Standard Float receiver and result handling'), 'execution/ProtosStandardIntegerProtocol.java': ((0, 0, 5), 'GUEST_PROTOCOL', 'Standard Integer receiver and numeric dispatch'), 'execution/ProtosStandardNumericConversionProtocol.java': ((0, 0, 5), 'GUEST_PROTOCOL', 'Explicit numeric conversions'), 'runtime/ProtosFixedIntegerInteropValue.java': ((5, 0, 0), 'EXPLICIT_HOST_INTEROP', 'Requested arbitrary-precision and unsigned host projections'), 'runtime/ProtosIntegerValue.java': ((3, 2, 0), 'COMPACT_CARRIER', 'Signed-64 representation and on-demand asBigInteger interop'), 'runtime/ProtosLargeIntegerValue.java': ((5, 0, 0), 'LARGE_CARRIER', 'Immutable outside-signed-64 payload'), 'runtime/ProtosFloatValue.java': ((2, 0, 2), 'FLOAT_CARRIER', 'Binary64 representation and requested exact-integral interop'), 'runtime/ProtosNumericHashKey.java': ((4, 0, 0), 'EXACT_HASH', 'Long small branch and exact large hash results'), 'execution/ProtosHostJavaProvider.java': ((3, 0, 0), 'EXPLICIT_HOST_ABI', 'Conversion only for a declared Java BigInteger parameter'), 'spi/foreign/polyglot/ProtosPolyglotValueOperations.java': ((3, 0, 0), 'POLYGLOT_INTEROP', 'Long-first integral admission and exceptional large projection'), 'runtime/ProtosNumberLiteral.java': ((2, 0, 0), 'LARGE_LITERAL', 'Arbitrary-precision literal descriptor'), 'spi/foreign/ProtosForeignValueClass.java': ((2, 0, 0), 'PUBLIC_SPI', 'Lossless provider classification of large integral values'), 'execution/ProtosForeignPluginValueAdapter.java': ((1, 0, 0), 'LEGACY_SPI_COMPATIBILITY', 'BigInteger only for providers lacking Long transport opt-in'), 'execution/CanonicalToBytecodeLowerer.java': ((2, 0, 0), 'LARGE_LITERAL', 'Arbitrary-precision literal lowering'), 'runtime/ProtosComplexNumericSupport.java': ((0, 0, 2), 'COMPLEX_COMPONENT', 'Validated binary64 components of canonical Complex'), 'execution/ProtosStandardFractionProtocol.java': ((0, 0, 2), 'FRACTION_COMPONENT', 'Float component and exact conversion boundaries'), 'execution/ProtosHostJavaCatalogue.java': ((2, 0, 0), 'EXPLICIT_HOST_ABI', 'Registration of the declared Java BigInteger type')}
+F5_SOURCE_OWNERS = {'runtime/ProtosNumericValueSupport.java': ((24, 50, 9), 'NUMERIC_BOUNDARY', 'Exact algorithms, canonical carriers and semantic normalization'), 'runtime/ProtosBinary64Rounding.java': ((20, 5, 0), 'EXACT_ROUNDING', 'Primitive-first binary rounding and exceptional large arithmetic'), 'execution/ProtosCurrentNumericRelations.java': ((0, 6, 7), 'SEMANTIC_RELATIONS', 'Numeric comparison, equality and hash'), 'runtime/ProtosSemanticTransferPayload.java': ((13, 0, 0), 'TRANSFER_BOUNDARY', 'Long leaves with BigInteger reserved for large or mixed leaves'), 'execution/ProtosSemanticBytecodeRootNode.java': ((1, 5, 5), 'BYTECODE_BOUNDARY', 'Primitive carriers, large literals and observable materialization'), 'execution/ProtosStandardFloatProtocol.java': ((0, 0, 6), 'GUEST_PROTOCOL', 'Standard Float receiver and result handling'), 'execution/ProtosStandardIntegerProtocol.java': ((0, 0, 5), 'GUEST_PROTOCOL', 'Standard Integer receiver and numeric dispatch'), 'execution/ProtosStandardNumericConversionProtocol.java': ((0, 0, 5), 'GUEST_PROTOCOL', 'Explicit numeric conversions'), 'runtime/ProtosFixedIntegerInteropValue.java': ((5, 0, 0), 'EXPLICIT_HOST_INTEROP', 'Requested arbitrary-precision and unsigned host projections'), 'runtime/ProtosIntegerValue.java': ((3, 2, 0), 'COMPACT_CARRIER', 'Signed-64 representation and on-demand asBigInteger interop'), 'runtime/ProtosLargeIntegerValue.java': ((5, 0, 0), 'LARGE_CARRIER', 'Immutable outside-signed-64 payload'), 'runtime/ProtosFloatValue.java': ((2, 0, 2), 'FLOAT_CARRIER', 'Binary64 representation and requested exact-integral interop'), 'runtime/ProtosNumericHashKey.java': ((4, 0, 0), 'EXACT_HASH', 'Long small branch and exact large hash results'), 'execution/ProtosHostJavaProvider.java': ((4, 0, 0), 'EXPLICIT_HOST_ABI', 'Conversion only for a declared Java BigInteger parameter'), 'spi/foreign/polyglot/ProtosPolyglotValueOperations.java': ((3, 0, 0), 'POLYGLOT_INTEROP', 'Long-first integral admission and exceptional large projection'), 'runtime/ProtosNumberLiteral.java': ((2, 0, 0), 'LARGE_LITERAL', 'Arbitrary-precision literal descriptor'), 'spi/foreign/ProtosForeignValueClass.java': ((2, 0, 0), 'PUBLIC_SPI', 'Lossless provider classification of large integral values'), 'execution/ProtosForeignPluginValueAdapter.java': ((1, 0, 0), 'LEGACY_SPI_COMPATIBILITY', 'BigInteger only for providers lacking Long transport opt-in'), 'execution/CanonicalToBytecodeLowerer.java': ((2, 0, 0), 'LARGE_LITERAL', 'Arbitrary-precision literal lowering'), 'runtime/ProtosComplexNumericSupport.java': ((0, 0, 2), 'COMPLEX_COMPONENT', 'Validated binary64 components of canonical Complex'), 'execution/ProtosStandardFractionProtocol.java': ((0, 0, 2), 'FRACTION_COMPONENT', 'Float component and exact conversion boundaries'), 'execution/ProtosHostJavaCatalogue.java': ((2, 0, 0), 'EXPLICIT_HOST_ABI', 'Registration of the declared Java BigInteger type')}
 
 
 def f5_source_owner(item):

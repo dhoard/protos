@@ -109,6 +109,72 @@ final class ProtosI091PrimitiveCarrierPropagationTest {
         }
     }
 
+
+    @Test
+    void call1RetainsPrimitiveResultsAndRestoresObservableValues() {
+        try (Context context = context()) {
+            assertEquals(42, eval(context,
+                    "identity: x => x\n"
+                    + "increment: x => x + 1\n"
+                    + "increment(identity(40 + 1))").asInt());
+
+            assertEquals(2.5d, eval(context,
+                    "identity: x => x\n"
+                    + "identity(1.25 + 0.25) + 1.0").asDouble());
+
+            assertEquals(
+                    new BigInteger("9223372036854775808"),
+                    eval(context,
+                            "identity: x => x\n"
+                            + "identity(9223372036854775807) + 1")
+                            .asBigInteger());
+
+            assertEquals("guest", eval(context,
+                    "identity: x => x\n"
+                    + "identity(\"guest\")").asString());
+
+            assertTrue(eval(context,
+                    "identity: x => x\n"
+                    + "a: identity(41 + 1)\n"
+                    + "(a === 42) && (a.parent() === SmallInteger)")
+                    .asBoolean());
+        }
+    }
+
+    @Test
+    void send0RetainsNumericResultsAndMaterializesGenericResults() {
+        try (Context context = context()) {
+            assertEquals(8, eval(context,
+                    "o: { next: () => 3 + 4 }\n"
+                    + "o.next() + 1").asInt());
+
+            assertEquals(2.5d, eval(context,
+                    "o: { next: () => 1.25 + 0.25 }\n"
+                    + "o.next() + 1.0").asDouble());
+
+            assertEquals(
+                    new BigInteger("9223372036854775808"),
+                    eval(context,
+                            "o: { next: () => 9223372036854775807 + 1 }\n"
+                            + "o.next()").asBigInteger());
+
+            assertEquals("ordinary", eval(context,
+                    "o: { next: () => \"ordinary\" }\n"
+                    + "o.next()").asString());
+
+            assertTrue(eval(context,
+                    "o: { next: () => 41 + 1 }\n"
+                    + "a: o.next()\n"
+                    + "(a === 42) && (a.parent() === SmallInteger)")
+                    .asBoolean());
+
+            assertEquals(44, eval(context,
+                    "o: { next: () => 40 + 2 }\n"
+                    + "identity: x => x\n"
+                    + "identity(o.next()) + 2").asInt());
+        }
+    }
+
     @Test
     void retainedCarriersKeepValueIdentityAndEquality() {
         try (Context context = context()) {

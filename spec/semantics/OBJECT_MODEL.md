@@ -586,6 +586,19 @@ protocol defined by `io/IO_CORE.md`, whose standard operation returns a
 contract applies; inheriting `Object.close()` alone does not grant resource
 lifecycle semantics.
 
+Semantic value immutability is distinct from the open/closed/frozen structural
+state of ordinary objects. A Number value of any family (`SmallInteger`,
+`BigInteger`, `Float`, `Fraction`, or `Complex`) is immutable by its value
+semantics, but it is not an ordinary object in the FROZEN state. When a Number
+value is the receiver, the structural `Object.close()` and `Object.freeze()`
+behaviors signal an error and produce no normal result, exactly as
+`removeSlot(name)` and the other structural mutators do for that receiver.
+Repeated attempts signal again; the idempotent results above apply only to
+ordinary objects. This rule is independent of the physical representation of
+the Number value. An ordinary object whose delegation chain reaches a Number
+value remains an ordinary object, and `close()` and `freeze()` apply to it
+under the ordinary state-transition rules above.
+
 ```js
 dog.removeSlot("age")
 ```
