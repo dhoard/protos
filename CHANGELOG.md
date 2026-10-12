@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.340-SNAPSHOT
+
+- `I091` (#869): advance PLAT056 primitive-first numeric execution,
+  representation boundaries and isolated graph transfer.
+  - Extend signed-64 Integer and binary64 Float carrier propagation through
+    frame-native literals, direct Closure calls and selected sends, while
+    retaining observable guest-value materialization and generic fallback.
+  - Consolidate numeric admission and structural boundaries for BigInteger,
+    Fraction and Complex in Object, Actor and Package Tool integration.
+  - Normalize PLAT051 inert Integer payloads to signed-64 host scalars where
+    possible; retain exact arbitrary-precision values when necessary.
+  - Repair isolated P transfers of Array, Bytes, Map and IdentityMap graphs,
+    including destination identity hashes, delegation, shared references,
+    cyclic structures and deferred population before mutation-state publication.
+  - Initialize the parallel executor and domain registry lazily so ordinary
+    programs do not allocate unused P infrastructure.
+  - Preserve D013 dispatch authority, numeric isolation and explicit host
+    interoperability requirements. I091 remains open for final architecture
+    review and revision-pinned closure evidence.
+
 ## 0.3.339-SNAPSHOT
 
 - `I091` (#869): consolidate exact Integer boundaries and retire redundant BigInteger-based test infrastructure.

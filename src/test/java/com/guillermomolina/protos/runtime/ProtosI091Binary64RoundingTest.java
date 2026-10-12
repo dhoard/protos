@@ -233,6 +233,52 @@ final class ProtosI091Binary64RoundingTest {
         }
     }
 
+    @Test
+    void compactRationalFloatExtremesMatchTheExactDecimalOracle() {
+        long[][] fractions = {
+            {1L, 3L}, {-1L, 3L},
+            {Long.MAX_VALUE, 1L}, {Long.MIN_VALUE, 1L},
+            {1L, Long.MAX_VALUE}, {-1L, Long.MAX_VALUE},
+            {0L, 1L}
+        };
+        double[] floats = {
+            0x1p64, -0x1p64,
+            Math.nextDown(0x1p64), -Math.nextDown(0x1p64),
+            Double.MAX_VALUE, -Double.MAX_VALUE,
+            0x1p63, -0x1p63,
+            0x1p-64, -0x1p-64,
+            Math.nextUp(0x1p-64), -Math.nextUp(0x1p-64),
+            Double.MIN_NORMAL, -Double.MIN_NORMAL,
+            Double.MIN_VALUE, -Double.MIN_VALUE,
+            0.5d, -0.5d
+        };
+
+        for (long[] fraction : fractions) {
+            long numerator = fraction[0];
+            long denominator = fraction[1];
+            Object n = new ProtosIntegerValue(numerator);
+            Object d = new ProtosIntegerValue(denominator);
+            BigDecimal exactNumerator = BigDecimal.valueOf(numerator);
+            BigDecimal exactDenominator = BigDecimal.valueOf(denominator);
+
+            for (double floating : floats) {
+                // BigDecimal(double) preserves the exact binary64 value.
+                int expected = Integer.signum(
+                        exactNumerator.compareTo(
+                                new BigDecimal(floating).multiply(exactDenominator)));
+                int actual = Integer.signum(
+                        ProtosBinary64Rounding.compareRationalToBinary64(
+                                n, d, floating));
+
+                assertEquals(
+                        expected,
+                        actual,
+                        numerator + " / " + denominator
+                                + " versus " + Double.toHexString(floating));
+            }
+        }
+    }
+
     private static BigInteger randomInteger(Random random, int bits) {
         BigInteger magnitude = new BigInteger(bits, random);
         return random.nextBoolean() ? magnitude : magnitude.negate();

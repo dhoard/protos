@@ -917,8 +917,10 @@ final class CanonicalToBytecodeLowerer {
 
                 boolean carrierTerminal =
                         sharedScratch != null
-                                && last instanceof CanonicalSend terminalSend
-                                && primitiveResultSend(terminalSend);
+                                && ((last instanceof CanonicalSend terminalSend
+                                                && primitiveResultSend(terminalSend))
+                                        || (last instanceof CanonicalCall terminalCall
+                                                && primitiveResultCall(terminalCall)));
                 if (carrierTerminal) {
                     // I091: the final numeric result may return as a carrier.
                     emitPrimitiveNumericOperandToLocal(
@@ -6335,8 +6337,23 @@ final class CanonicalToBytecodeLowerer {
      * primitive result to a carrier-permitting consumer.
      */
     private static boolean primitiveResultSend(CanonicalSend send) {
-        return primitiveNumericSendCandidate(send)
-                || (send.arguments().size() == 1 && !hasSpreadArgument(send.arguments()));
+        // I091-F2: zero-argument sends may return primitive carriers
+        // through the admitted direct Send0 frame. Generic dispatch
+        // remains materialized, and Send1 retains its existing rules.
+        return send.arguments().isEmpty()
+                || primitiveNumericSendCandidate(send)
+                || (send.arguments().size() == 1
+                        && !hasSpreadArgument(send.arguments()));
+    }
+
+    /*
+     * I091-F2: a direct Call1 has the full compact header required
+     * for the private primitive-result marker. A generic or rejected
+     * call still returns an observable guest value.
+     */
+    private static boolean primitiveResultCall(CanonicalCall call) {
+        return call.arguments().size() == 1
+                && !hasSpreadArgument(call.arguments());
     }
 
     private static boolean primitiveNumericSelector(String selector) {
@@ -6350,17 +6367,25 @@ final class CanonicalToBytecodeLowerer {
      * I091: an argument worth staging as a carrier for an admitted direct
      * source call (whose frame-native parameter binding retains it).
      */
-    private static boolean primitiveNumericCarrierArgument(CanonicalExpression argument) {
+    private boolean primitiveNumericCarrierArgument(CanonicalExpression argument) {
+        if (argument instanceof CanonicalLiteral literal) {
+            return primitiveNumberLiteralOrNull(literal) != null;
+        }
         return argument instanceof CanonicalLookup
-                || (argument instanceof CanonicalSend send && primitiveResultSend(send));
+                || (argument instanceof CanonicalSend send && primitiveResultSend(send))
+                || (argument instanceof CanonicalCall call && primitiveResultCall(call));
     }
 
     /* I091: a binding value the guarded chain or a raw binding read may yield as a carrier. */
     private boolean primitiveNumericCarrierValue(CanonicalExpression value) {
+        if (value instanceof CanonicalLiteral literal) {
+            return primitiveNumberLiteralOrNull(literal) != null;
+        }
         if (value instanceof CanonicalLookup lookup) {
             return !isScalarLocalRead(lookup);
         }
-        return value instanceof CanonicalSend send && primitiveResultSend(send);
+        return (value instanceof CanonicalSend send && primitiveResultSend(send))
+                || (value instanceof CanonicalCall call && primitiveResultCall(call));
     }
 
     /*
@@ -6374,7 +6399,8 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalLiteral literal) {
             return primitiveNumberLiteralOrNull(literal) != null;
         }
-        return expression instanceof CanonicalSend send && primitiveResultSend(send);
+        return (expression instanceof CanonicalSend send && primitiveResultSend(send))
+                || (expression instanceof CanonicalCall call && primitiveResultCall(call));
     }
 
     private void emitPrimitiveNumericOperandToLocal(
@@ -6405,6 +6431,16 @@ final class CanonicalToBytecodeLowerer {
             builder.beginSourceSection(
                     nested.span().startOffset(), nested.span().length());
             emitComposedSend(builder, nested, target, preparedCall,
+                    childResult, resumeValue, true);
+            builder.endSourceSection();
+            return;
+        }
+        if (expression instanceof CanonicalCall nested
+                && primitiveResultCall(nested)) {
+            builder.beginSourceSection(
+                    nested.span().startOffset(), nested.span().length());
+            emitComposedCall(
+                    builder, nested, target, preparedCall,
                     childResult, resumeValue, true);
             builder.endSourceSection();
             return;
@@ -7340,6 +7376,19 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        emitComposedCall(
+                builder, call, result, preparedCall,
+                childResult, resumeValue, false);
+    }
+
+    private void emitComposedCall(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalCall call,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
         if (result == null
                 || preparedCall == null
                 || childResult == null
@@ -7364,6 +7413,7 @@ final class CanonicalToBytecodeLowerer {
                         || tryDirectCall;
         BytecodeLocal receiverValue = null;
         BytecodeLocal suppliedVector = null;
+        boolean carrierDirectArgument = false;
         java.util.List<BytecodeLocal> argumentValues =
                 java.util.List.of();
 
@@ -7411,13 +7461,27 @@ final class CanonicalToBytecodeLowerer {
                             builder.createLocal(
                                     "callArgument",
                                     null);
-                    emitBodyExpressionToLocal(
-                            builder,
-                            argument,
-                            argumentValue,
-                            preparedCall,
-                            childResult,
-                            resumeValue);
+                    if (tryDirectCall
+                            && primitiveNumericCarrierArgument(argument)) {
+                        // I091-F2: the admitted direct Closure receives a
+                        // primitive carrier; the miss restores a guest value.
+                        carrierDirectArgument = true;
+                        emitPrimitiveNumericOperandToLocal(
+                                builder,
+                                argument,
+                                argumentValue,
+                                preparedCall,
+                                childResult,
+                                resumeValue);
+                    } else {
+                        emitBodyExpressionToLocal(
+                                builder,
+                                argument,
+                                argumentValue,
+                                preparedCall,
+                                childResult,
+                                resumeValue);
+                    }
                     argumentValues.add(argumentValue);
                 }
             }
@@ -7456,6 +7520,15 @@ final class CanonicalToBytecodeLowerer {
             builder.endIsDirectSendMiss();
 
             builder.beginBlock();
+            if (carrierDirectArgument) {
+                BytecodeLocal stagedArgument = argumentValues.get(0);
+                builder.beginStoreLocal(stagedArgument);
+                builder.beginMaterializePrimitiveNumericCarrier();
+                builder.emitLoadLocal(stagedArgument);
+                builder.emitLoadConstant(true);
+                builder.endMaterializePrimitiveNumericCarrier();
+                builder.endStoreLocal();
+            }
         }
 
         builder.beginStoreLocal(preparedCall);
@@ -7545,7 +7618,14 @@ final class CanonicalToBytecodeLowerer {
 
             builder.beginBlock();
             builder.beginStoreLocal(result);
+            if (!primitiveCarrierResult) {
+                builder.beginMaterializePrimitiveNumericCarrier();
+            }
             builder.emitLoadLocal(directCallResult);
+            if (!primitiveCarrierResult) {
+                builder.emitLoadConstant(true);
+                builder.endMaterializePrimitiveNumericCarrier();
+            }
             builder.endStoreLocal();
             builder.endBlock();
 

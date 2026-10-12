@@ -24,20 +24,65 @@ import java.util.concurrent.atomic.*;
 
 /** Process-local host machinery for I010 isolated P execution. */
 public final class ProtosParallelRuntime {
-    private static final int CARRIERS=Math.max(2,Integer.getInteger(
-            "protos.parallel.carriers",Math.max(2,Runtime.getRuntime().availableProcessors())));
-    private static final ThreadPoolExecutor EXECUTOR=new ThreadPoolExecutor(
-            CARRIERS,CARRIERS,30L,TimeUnit.SECONDS,new LinkedBlockingQueue<>(),
-            new ThreadFactory(){private final AtomicInteger n=new AtomicInteger();
-                public Thread newThread(Runnable r){Thread t=new Thread(r,"protos-p-"+n.incrementAndGet());t.setDaemon(true);return t;}});
+    /*
+     * I091: merely installing Object.parallel must not initialize
+     * the P executor, its queue, thread factory or domain registry.
+     */
+    private static final class CarrierConfiguration {
+        static final int LIMIT=Math.max(
+                2,
+                Integer.getInteger(
+                        "protos.parallel.carriers",
+                        Math.max(2,Runtime.getRuntime().availableProcessors())));
+    }
+
+    private static volatile ThreadPoolExecutor initializedExecutor;
+
+    private static ThreadPoolExecutor newExecutor() {
+        int carriers=CarrierConfiguration.LIMIT;
+        ThreadPoolExecutor pool=new ThreadPoolExecutor(
+                carriers,carriers,30L,TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(),
+                new ThreadFactory(){
+                    private final AtomicInteger n=new AtomicInteger();
+
+                    public Thread newThread(Runnable r){
+                        Thread t=new Thread(
+                                r,"protos-p-"+n.incrementAndGet());
+                        t.setDaemon(true);
+                        return t;
+                    }
+                });
+        pool.allowCoreThreadTimeOut(true);
+        initializedExecutor=pool;
+        return pool;
+    }
+
+    private static final class CarrierExecutor {
+        static final ThreadPoolExecutor INSTANCE=newExecutor();
+    }
+
+    private static ThreadPoolExecutor executor() {
+        return CarrierExecutor.INSTANCE;
+    }
+
     private record PPlacement(ProtosProcessExecutionHost host) {}
-    private static final Map<ProtosActorExecutionDomain,PPlacement> P_DOMAINS=
-            new ConcurrentHashMap<>();
-    static { EXECUTOR.allowCoreThreadTimeOut(true); }
+
+    private static final class PlacementRegistry {
+        static final Map<ProtosActorExecutionDomain,PPlacement> DOMAINS=
+                new ConcurrentHashMap<>();
+    }
+
     private ProtosParallelRuntime(){}
 
-    public static int configuredCarrierLimit(){return CARRIERS;}
-    public static int liveCarrierCountForTesting(){return EXECUTOR.getPoolSize();}
+    public static int configuredCarrierLimit(){
+        return CarrierConfiguration.LIMIT;
+    }
+
+    public static int liveCarrierCountForTesting(){
+        ThreadPoolExecutor pool=initializedExecutor;
+        return pool==null ? 0 : pool.getPoolSize();
+    }
 
     public static void installObjectParallel(){
         ProtosObjectValue object=ProtosObjectValue.rootObject();
@@ -140,7 +185,7 @@ public final class ProtosParallelRuntime {
         }catch(RuntimeException inconsistency){return Outcome.fail(ProtosCoreErrors.newError(caller));}
     }
 
-    private static void submit(Runnable r){EXECUTOR.execute(r);}
+    private static void submit(Runnable r){executor().execute(r);}
     private static void run(Snapshot s,Completion c){settle(c,s.caller,()->runInline(s));}
 
     /**
@@ -180,7 +225,7 @@ public final class ProtosParallelRuntime {
 
     private static Outcome runInlinePlaced(Snapshot s){
         ProtosActorExecutionDomain d=new ProtosActorExecutionDomain();
-        P_DOMAINS.put(d,new PPlacement(s.executionHost));
+        PlacementRegistry.DOMAINS.put(d,new PPlacement(s.executionHost));
         try{
             ProtosActivation creator=s.caller.prelude().orElseThrow().newModuleActivation(
                     new ProtosActorModuleState(),null,s.caller.prelude().orElseThrow().newExecutionContext(),d);
@@ -195,7 +240,7 @@ public final class ProtosParallelRuntime {
                 ProtosInvocation.executeInTaskForRuntime(local.callable,local.args,creator,t);
             });
             d.dispatchUntilTerminal(root,()->{
-                Runnable helper=EXECUTOR.getQueue().poll();if(helper==null)return false;helper.run();return true;
+                Runnable helper=executor().getQueue().poll();if(helper==null)return false;helper.run();return true;
             });
             if(root.state()==ProtosTask.State.COMPLETED){
                 try{
@@ -214,11 +259,11 @@ public final class ProtosParallelRuntime {
                 catch(NonParallel x){return Outcome.fail(nonParallel(s.caller));}
             }
             return Outcome.fail(occ(s.caller,ProtosCoreErrors.StandardError.CANCELLED));
-        }finally{P_DOMAINS.remove(d);}
+        }finally{PlacementRegistry.DOMAINS.remove(d);}
     }
 
     private static ProtosProcessExecutionHost executionHost(ProtosActivation caller){
-        PPlacement placement=P_DOMAINS.get(caller.executionDomain());
+        PPlacement placement=PlacementRegistry.DOMAINS.get(caller.executionDomain());
         if(placement!=null)return placement.host();
         return caller.executionDomain().currentActorForRuntime()
                 .flatMap(ProtosActor::processForRuntime)
@@ -260,7 +305,34 @@ public final class ProtosParallelRuntime {
     private static final class TransferMemo extends IdentityHashMap<Object,Object>{
         private static final long serialVersionUID = 1L;
         final boolean materializing;boolean semanticRecords;
-        TransferMemo(boolean materializing){this.materializing=materializing;}
+
+        // I091-F4: ownership is confined to one P transfer stage.
+        int copyDepth;
+        boolean draining;
+        final ArrayList<Runnable> pendingPopulation=new ArrayList<>();
+
+        TransferMemo(boolean materializing){
+            this.materializing=materializing;
+        }
+
+        void defer(Runnable population){
+            pendingPopulation.add(
+                    Objects.requireNonNull(population,"population"));
+        }
+
+        void drainPopulation(){
+            draining=true;
+            try{
+                // A population callback can discover another object and
+                // append its population to this same queue.
+                for(int index=0;index<pendingPopulation.size();index++){
+                    pendingPopulation.get(index).run();
+                }
+            }finally{
+                pendingPopulation.clear();
+                draining=false;
+            }
+        }
     }
 
     /** PLAT051-A2 test seam: the P source stage over {@code values} sharing one memo. */
@@ -280,6 +352,42 @@ public final class ProtosParallelRuntime {
     private static final class NonParallel extends RuntimeException{private static final long serialVersionUID = 1L; NonParallel(){super(null,null,false,false);}}
     private static final class Transfer {
         static Object copy(Object v,ProtosActivation a,IdentityHashMap<Object,Object> memo){
+            // An untracked memo populates inline and still fails closed on
+            // any semantic value or record (see TransferMemo).
+            if(!(memo instanceof TransferMemo tracked)){
+                return allocateAndCopy(v,a,memo);
+            }
+
+            tracked.copyDepth++;
+            boolean completed=false;
+            try{
+                Object result=allocateAndCopy(v,a,memo);
+                completed=true;
+                return result;
+            }finally{
+                tracked.copyDepth--;
+
+                // No partially populated object can escape after a
+                // failed transfer. Nested calls and callbacks running
+                // during the drain never initiate a second drain.
+                if(tracked.copyDepth==0 && !tracked.draining){
+                    if(completed){
+                        tracked.drainPopulation();
+                    }else{
+                        tracked.pendingPopulation.clear();
+                    }
+                }
+            }
+        }
+
+        private static void defer(IdentityHashMap<Object,Object> memo,Runnable population){
+            if(memo instanceof TransferMemo tracked)tracked.defer(population);
+            else population.run();
+        }
+
+        private static Object allocateAndCopy(
+                Object v,ProtosActivation a,
+                IdentityHashMap<Object,Object> memo){
             if(v==ProtosNullValue.INSTANCE||v==ProtosBooleanValue.TRUE||v==ProtosBooleanValue.FALSE)return v;
             // D188: raw foreign references, foreign module facades, and projected foreign Closures
             // carry provider-session state with no P transfer contract.
@@ -386,31 +494,104 @@ public final class ProtosParallelRuntime {
                 }
                 ProtosClosureValue y=x.parallelProjectionDeferred(
                         List.of(p.newExecutionContext()),ProtosNullValue.INSTANCE,p,rematerializer);
-                memo.put(v,y);slots(x,y,a,memo);state(x,y);return y;
+                memo.put(v,y);deferPopulation(x,y,a,memo);return y;
             }
             if(v instanceof ProtosArrayValue x){
-                ArrayList<Object> es=new ArrayList<>();ProtosArrayValue shell=new ProtosArrayValue(p.arrayPrototype(),List.of());memo.put(v,shell);
-                for(Object e:x.indexedSnapshot())es.add(copy(e,a,memo));ProtosArrayValue y=new ProtosArrayValue(p.arrayPrototype(),es);
-                memo.put(v,y);slots(x,y,a,memo);state(x,y);return y;
+                // I091-F4: allocate the definitive destination Array before
+                // following any elements. A cycle must resolve through memo
+                // to this same Array, never to a discarded temporary shell.
+                List<Object> elements=x.indexedSnapshot();
+                ArrayList<Object> placeholders=new ArrayList<>(elements.size());
+                for(int index=0;index<elements.size();index++){
+                    placeholders.add(ProtosNullValue.INSTANCE);
+                }
+
+                Object copiedParent=copy(x.parent().orElseThrow(),a,memo);
+                ProtosArrayValue y=new ProtosArrayValue(
+                        copiedParent,placeholders);
+                memo.put(v,y);
+                // The definitive destination shell is already memoized.
+                // Defer indexed/keyed content and local slots together.
+                defer(memo,() -> {
+                    // Populate only after memo publication. This preserves
+                    // self-reference, mutual cycles and shared object identity.
+                    for(int index=0;index<elements.size();index++){
+                        y.indexedPut(index,copy(elements.get(index),a,memo));
+                    }
+
+
+                    slots(x,y,a,memo);
+                    state(x,y);
+                });
+                return y;
             }
             if(v instanceof ProtosBytesValue x){
                 Object parent=copy(x.parent().orElseThrow(),a,memo);ProtosBytesValue y=new ProtosBytesValue(parent);memo.put(v,y);
-                for(Object e:x.indexedSnapshot())y.indexedAdd(copy(e,a,memo));slots(x,y,a,memo);state(x,y);return y;
+                // The definitive destination shell is already memoized.
+                // Defer indexed/keyed content and local slots together.
+                defer(memo,() -> {
+                    for(Object e:x.indexedSnapshot())y.indexedAdd(copy(e,a,memo));
+                    slots(x,y,a,memo);
+                    state(x,y);
+                });
+                return y;
             }
             if(v instanceof ProtosMapValue x){
-                ProtosMapValue y=new ProtosMapValue(p.mapPrototype());memo.put(v,y);
-                for(var e:x.keyedSnapshot())y.append(copy(e.key(),a,memo),e.recordedHash(),copy(e.value(),a,memo));
-                slots(x,y,a,memo);state(x,y);return y;
+                Object copiedParent=copy(x.parent().orElseThrow(),a,memo);
+                ProtosMapValue y=new ProtosMapValue(copiedParent);memo.put(v,y);
+                // The definitive destination shell is already memoized.
+                // Defer indexed/keyed content and local slots together.
+                defer(memo,() -> {
+                    for(var e:x.keyedSnapshot()){
+                        Object copiedKey=copy(e.key(),a,memo);
+                        Object copiedValue=copy(e.value(),a,memo);
+
+                        // I091-F4: default Object.hash denotes the object's
+                        // identity. A copied ordinary object has a new identity.
+                        // Custom/numeric hashes retain their recorded value:
+                        // do not execute guest hash code during transfer.
+                        ProtosNumericHashKey recordedHash=
+                                usesDefaultObjectHash(e.key(),memo)
+                                        ? ProtosNumericHashKey.fromIdentity(copiedKey)
+                                        : e.recordedHash();
+
+                        y.append(copiedKey,recordedHash,copiedValue);
+                    }
+
+                    slots(x,y,a,memo);
+                    state(x,y);
+                });
+                return y;
             }
             if(v instanceof ProtosIdentityMapValue x){
-                ProtosIdentityMapValue y=new ProtosIdentityMapValue(p.identityMapPrototype());memo.put(v,y);
-                for(var e:x.keyedSnapshot())y.append(copy(e.key(),a,memo),e.recordedIdentityHash(),copy(e.value(),a,memo));
-                slots(x,y,a,memo);state(x,y);return y;
+                Object copiedParent=copy(x.parent().orElseThrow(),a,memo);
+                ProtosIdentityMapValue y=
+                        new ProtosIdentityMapValue(copiedParent);memo.put(v,y);
+                // The definitive destination shell is already memoized.
+                // Defer indexed/keyed content and local slots together.
+                defer(memo,() -> {
+                    for(var e:x.keyedSnapshot()){
+                        // I091-F4: copying an ordinary key changes its identity.
+                        // Rebuild the recorded hash from the destination key,
+                        // as Actor transfer already does. Numeric value identity
+                        // remains stable under rematerialization.
+                        Object copiedKey=copy(e.key(),a,memo);
+                        Object copiedValue=copy(e.value(),a,memo);
+                        y.append(
+                                copiedKey,
+                                ProtosNumericHashKey.fromIdentity(copiedKey),
+                                copiedValue);
+                    }
+
+                    slots(x,y,a,memo);
+                    state(x,y);
+                });
+                return y;
             }
             if(v instanceof ProtosObjectValue x){
                 if(x.parent().orElse(null)==p.contextPrototype())throw new NonParallel();
                 Object parent=copy(x.parent().orElseThrow(),a,memo);ProtosObjectValue y=new ProtosObjectValue(parent);memo.put(v,y);
-                slots(x,y,a,memo);state(x,y);return y;
+                deferPopulation(x,y,a,memo);return y;
             }
             if(v instanceof ProtosSemanticTransferRecord x){
                 // PLAT051-A2 destination stage: one materialization per record identity.
@@ -420,6 +601,31 @@ public final class ProtosParallelRuntime {
             }
             throw new NonParallel();
         }
+        /*
+         * I091-F4: read-only selection of the standard Object.hash.
+         * Mirrors Actor transfer. Never sends a guest message.
+         *
+         * Semantic transfer records and Path descriptors are followed
+         * through already-established memo entries when present.
+         */
+        static boolean usesDefaultObjectHash(
+                Object key, IdentityHashMap<Object,Object> memo){
+            Object current=key;
+            while(true){
+                if(current instanceof ProtosObjectValue object){
+                    if(object.hasLocalSlot("hash")){
+                        return object==ProtosObjectValue.rootObject();
+                    }
+                    current=object.parent().orElse(null);
+                }else if(current instanceof ProtosSemanticTransferRecord
+                        || current instanceof ProtosPathComponents){
+                    current=memo.get(current);
+                }else{
+                    return false;
+                }
+            }
+        }
+
         static boolean prelude(Object v,ProtosPrelude p){
             if(!(v instanceof ProtosObjectValue o)||!o.isFrozen())return false;
             if(p.isTcpConnectionPrototypeForRuntime(v))return true;
@@ -431,6 +637,24 @@ public final class ProtosParallelRuntime {
             for(int index=0;index<values.size();index++)if(values.get(index)==v)return true;
             return false;
         }
+        /*
+         * I091-F4: a parent can hold a slot that points back to a child.
+         * Because the Protos delegation parent is immutable, a copied
+         * parent must be allocated before its child's destination shell.
+         * Do not populate the parent's slots until that child has been
+         * registered in the same memo.
+         */
+        static void deferPopulation(
+                ProtosObjectValue source,
+                ProtosObjectValue destination,
+                ProtosActivation activation,
+                IdentityHashMap<Object,Object> memo){
+            defer(memo,()->{
+                slots(source,destination,activation,memo);
+                state(source,destination);
+            });
+        }
+
         static void slots(ProtosObjectValue x,ProtosObjectValue y,ProtosActivation a,IdentityHashMap<Object,Object> memo){
             ArrayList<String> names=new ArrayList<>();
             ArrayList<Object> values=new ArrayList<>();

@@ -221,7 +221,7 @@ public final class ProtosPackageExecutionPlanAdapter {
     static ProtosObjectValue requireObject(Object value, String label)
             throws IOException {
         if (!(value instanceof ProtosObjectValue object)
-                || ProtosNumericValueSupport.isLargeInteger(value)) {
+                || ProtosNumericValueSupport.isCurrentNumber(value)) {
             throw new IOException(label + " is not an ordinary object");
         }
         return object;

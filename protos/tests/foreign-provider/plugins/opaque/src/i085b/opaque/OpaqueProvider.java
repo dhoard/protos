@@ -81,10 +81,15 @@ public final class OpaqueProvider implements ProtosForeignProviderPlugin {
                 return ID;
             }
 
+            @Override
+            public boolean supportsLongIntegerArguments() {
+                return true;
+            }
+
             public ProtosForeignValueClass classify(
                     ProtosForeignPluginSession session, Object handle) {
                 if (handle instanceof Long number) {
-                    return ProtosForeignValueClass.integral(BigInteger.valueOf(number));
+                    return ProtosForeignValueClass.integral(number);
                 }
                 if (handle instanceof Bound) {
                     return ProtosForeignValueClass.handle(
@@ -115,7 +120,10 @@ public final class OpaqueProvider implements ProtosForeignProviderPlugin {
                 if (arguments.size() != 1) {
                     throw new IllegalArgumentException("double expects one argument");
                 }
-                long value = ((BigInteger) arguments.get(0).value()).longValueExact();
+                Object argument = arguments.get(0).value();
+                long value = argument instanceof Long small
+                        ? small.longValue()
+                        : ((BigInteger) argument).longValueExact();
                 return ((Bound) handle).receiver().twice(value);
             }
         };

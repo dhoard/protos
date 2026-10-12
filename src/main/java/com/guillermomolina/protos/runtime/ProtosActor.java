@@ -272,6 +272,12 @@ public final class ProtosActor {
      */
     public boolean completeInitialization(ProtosObjectValue behavior) {
         Objects.requireNonNull(behavior, "behavior");
+        // I091-F4: a rich numeric value is physically object-backed,
+        // but it is not an ordinary Actor behavior object.
+        if (ProtosNumericValueSupport.isCurrentNumber(behavior)) {
+            throw new IllegalArgumentException(
+                    "Actor behavior must be an ordinary object");
+        }
         boolean transitioned;
         synchronized (this) {
             if (lifecycle.get() != LifecycleState.INITIALIZING) {

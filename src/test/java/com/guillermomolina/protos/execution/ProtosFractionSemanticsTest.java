@@ -187,6 +187,44 @@ final class ProtosFractionSemanticsTest {
     }
 
     @Test
+    void compactFractionsCompareExactlyWithExtremeBinary64Values()
+            throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        Object positive = divide(1L, 3L, prelude);
+        Object negative = divide(-1L, 3L, prelude);
+
+        assertSame(Comparison.LESS,
+                ProtosCurrentNumericRelations.compare(
+                        positive, new ProtosFloatValue(0x1p64)));
+        assertSame(Comparison.GREATER,
+                ProtosCurrentNumericRelations.compare(
+                        positive, new ProtosFloatValue(-0x1p64)));
+        assertSame(Comparison.GREATER,
+                ProtosCurrentNumericRelations.compare(
+                        negative, new ProtosFloatValue(-0x1p64)));
+        assertSame(Comparison.LESS,
+                ProtosCurrentNumericRelations.compare(
+                        negative, new ProtosFloatValue(0x1p64)));
+
+        assertSame(Comparison.GREATER,
+                ProtosCurrentNumericRelations.compare(
+                        positive, new ProtosFloatValue(Double.MIN_VALUE)));
+        assertSame(Comparison.LESS,
+                ProtosCurrentNumericRelations.compare(
+                        negative, new ProtosFloatValue(-Double.MIN_VALUE)));
+
+        assertSame(Comparison.LESS,
+                ProtosCurrentNumericRelations.compare(
+                        new ProtosFloatValue(Double.MIN_VALUE), positive));
+        assertSame(Comparison.GREATER,
+                ProtosCurrentNumericRelations.compare(
+                        new ProtosFloatValue(-Double.MIN_VALUE), negative));
+
+        assertFalse(ProtosCurrentNumericRelations.numericEquals(
+                positive, new ProtosFloatValue(Double.MIN_VALUE)));
+    }
+
+    @Test
     void compactRationalComparisonsRemainExactAcrossWideProducts()
             throws IOException {
         ProtosPrelude prelude = corePrelude();

@@ -89,7 +89,10 @@ public final class JavaProvider implements ProtosForeignProviderPlugin {
         if (argument.kind() != ProtosForeignValueClass.Kind.INTEGER) {
             throw new IllegalArgumentException("expected an Integer argument");
         }
-        return ((BigInteger) argument.value()).longValueExact();
+        Object value = argument.value();
+        return value instanceof Long small
+                ? small.longValue()
+                : ((BigInteger) value).longValueExact();
     }
 
     private static LocalDate dateArgument(List<ProtosForeignArgumentValue> arguments) {
@@ -120,10 +123,15 @@ public final class JavaProvider implements ProtosForeignProviderPlugin {
                 return ID;
             }
 
+            @Override
+            public boolean supportsLongIntegerArguments() {
+                return true;
+            }
+
             public ProtosForeignValueClass classify(
                     ProtosForeignPluginSession session, Object handle) {
                 if (handle instanceof Long number) {
-                    return ProtosForeignValueClass.integral(BigInteger.valueOf(number));
+                    return ProtosForeignValueClass.integral(number);
                 }
                 if (handle instanceof Bound) {
                     return ProtosForeignValueClass.handle(

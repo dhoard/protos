@@ -104,8 +104,12 @@ public final class ProtosActorBootstrap {
                                     ProtosActorValueTransfer.materializeArguments(
                                             transferredArguments, activation)),
                             activation);
+            // A represented Number is a semantic value, not an ordinary
+            // Actor behavior object. Check semantic membership, not the Java
+            // representation: BigInteger, Fraction and Complex all extend
+            // ProtosObjectValue, while ordinary delegates remain admissible.
             if (!(result instanceof ProtosObjectValue behavior)
-                    || ProtosNumericValueSupport.isLargeInteger(result)) {
+                    || ProtosNumericValueSupport.isCurrentNumber(result)) {
                 throw bootstrapError(activation);
             }
             actor.bindMessageEnvironmentForRuntime(prelude, canonicalModuleKey);

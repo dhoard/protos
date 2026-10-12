@@ -88,8 +88,13 @@ public final class ProtosPolyglotValueOperations implements ProtosForeignValueOp
                     return ProtosForeignValueClass.absent();
                 }
                 case INTEGRAL -> {
-                    requireDeclared(polyglot.fitsInBigInteger(), family);
-                    return polyglot.fitsInLong()
+                    // A signed-64 projection is already an exact Integer.
+                    // Do not consult arbitrary-precision interop for the
+                    // ordinary case. Retain it for genuinely large values.
+                    boolean fitsLong = polyglot.fitsInLong();
+                    requireDeclared(
+                            fitsLong || polyglot.fitsInBigInteger(), family);
+                    return fitsLong
                             ? ProtosForeignValueClass.integral(polyglot.asLong())
                             : ProtosForeignValueClass.integral(polyglot.asBigInteger());
                 }

@@ -52,8 +52,18 @@ final class ProtosCurrentNumericRelations {
                     && numericEquals(imaginaryPart(left), imaginaryPart(right));
         }
 
-        if (ProtosNumericValueSupport.isFraction(left)
-                || ProtosNumericValueSupport.isFraction(right)) {
+        boolean leftFraction = ProtosNumericValueSupport.isFraction(left);
+        boolean rightFraction = ProtosNumericValueSupport.isFraction(right);
+
+        if (leftFraction && rightFraction) {
+            // D197-C canonical normalization makes component equality
+            // equivalent to mathematical equality. In particular, do not
+            // build arbitrary-precision cross-products merely to test ==.
+            return ProtosNumericValueSupport.sameFraction(left, right);
+        }
+        if (leftFraction || rightFraction) {
+            // Mixed Fraction/Integer/Float still requires exact ordering
+            // against the other representation.
             return compare(left, right) == Comparison.EQUAL;
         }
 
@@ -77,7 +87,13 @@ final class ProtosCurrentNumericRelations {
                 ProtosNumericValueSupport.requireCurrentInteger(right));
     }
 
-    private static final Object EXACT_ZERO = ProtosNumericValueSupport.integer(0L);
+    /*
+     * No guest Integer is materialized when ordinary real-number
+     * equality and ordering initialize this class.
+     */
+    private static final class ComplexExactZero {
+        static final Object VALUE = ProtosNumericValueSupport.integer(0L);
+    }
 
     /* Components of a Number viewed as complex; a real value has an exact zero imaginary part. */
     private static Object realPart(Object number) {
@@ -89,7 +105,7 @@ final class ProtosCurrentNumericRelations {
     private static Object imaginaryPart(Object number) {
         return ProtosComplexNumericSupport.isComplex(number)
                 ? ProtosComplexNumericSupport.imaginary(number)
-                : EXACT_ZERO;
+                : ComplexExactZero.VALUE;
     }
 
     private static boolean floatEqualsExactInteger(double floating, Object integer) {
@@ -226,7 +242,7 @@ final class ProtosCurrentNumericRelations {
         Object real = ProtosComplexNumericSupport.real(complex);
         Object imaginary = ProtosComplexNumericSupport.imaginary(complex);
         Object realHash = normalHash(real, prelude);
-        if (numericEquals(imaginary, EXACT_ZERO)) {
+        if (numericEquals(imaginary, ComplexExactZero.VALUE)) {
             return realHash;
         }
         Object imaginaryHash = normalHash(imaginary, prelude);
@@ -235,7 +251,10 @@ final class ProtosCurrentNumericRelations {
                         + ProtosNumericValueSupport.integerHashCode(imaginaryHash));
     }
 
-    private static final Object NAN_NORMAL_HASH = ProtosNumericValueSupport.integer(2146959360L);
+    /* Materialize the canonical NaN hash only when NaN is hashed. */
+    private static final class NaNNormalHash {
+        static final Object VALUE = ProtosNumericValueSupport.integer(2146959360L);
+    }
 
     /** {@code prelude} owns a hash outside the signed-64 range. */
     static Object normalHash(Object value, ProtosPrelude prelude) {
@@ -248,7 +267,7 @@ final class ProtosCurrentNumericRelations {
                     ProtosNumericValueSupport.currentFloatValue(value);
 
             if (Double.isNaN(number)) {
-                return NAN_NORMAL_HASH;
+                return NaNNormalHash.VALUE;
             }
 
             Object integral =

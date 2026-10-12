@@ -49,7 +49,15 @@ public final class ProtosSemanticTransferPayload {
                     || element instanceof ProtosSemanticTransferPayload)) {
                 throw new IllegalArgumentException("semantic transfer payload element is not inert");
             }
-            copy.add(element);
+            // I091 / PLAT056-C: preserve the canonical inert
+            // Integer representation even when a family supplies a
+            // host BigInteger directly instead of using integer(...).
+            // Signed-64 values become Long; genuinely large values
+            // retain their exact BigInteger magnitude.
+            copy.add(
+                    element instanceof BigInteger
+                            ? ProtosNumericValueSupport.normalizedHostInteger(element)
+                            : element);
         }
         return new ProtosSemanticTransferPayload(Collections.unmodifiableList(copy));
     }
@@ -94,11 +102,8 @@ public final class ProtosSemanticTransferPayload {
                     ? small.intValue()
                     : -1;
         }
-        if (value instanceof BigInteger large
-                && large.signum() >= 0
-                && large.bitLength() < Integer.SIZE) {
-            return large.intValue();
-        }
+        // Every remaining BigInteger is outside signed-64,
+        // so none can be a non-negative int.
         return -1;
     }
 

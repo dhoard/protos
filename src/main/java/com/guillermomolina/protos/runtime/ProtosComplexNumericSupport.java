@@ -35,7 +35,13 @@ import java.util.Objects;
  * no Complex arithmetic is defined here. Nothing here sends a message to a guest value.
  */
 public final class ProtosComplexNumericSupport {
-    private static final Object COMPLEX_FAMILY = new Object();
+    /*
+     * I091: Complex family identity is initialized only when a genuine
+     * sealed Complex needs authentication or construction.
+     */
+    private static final class ComplexFamilyToken {
+        static final Object VALUE = new Object();
+    }
 
     /** The immutable components of one Complex; never reachable from guest code. */
     private record ComplexState(Object real, Object imaginary) {}
@@ -44,7 +50,7 @@ public final class ProtosComplexNumericSupport {
 
     /** Whether {@code value} is a genuine canonical Complex. */
     public static boolean isComplex(Object value) {
-        return value instanceof ProtosSealedValue sealed && sealed.belongsTo(COMPLEX_FAMILY);
+        return value instanceof ProtosSealedValue sealed && sealed.belongsTo(ComplexFamilyToken.VALUE);
     }
 
     /** The real component of a value admitted by {@link #isComplex}. */
@@ -61,7 +67,7 @@ public final class ProtosComplexNumericSupport {
         if (!isComplex(complex)) {
             throw new IllegalArgumentException("value is not a canonical Complex");
         }
-        return (ComplexState) ((ProtosSealedValue) complex).stateFor(COMPLEX_FAMILY);
+        return (ComplexState) ((ProtosSealedValue) complex).stateFor(ComplexFamilyToken.VALUE);
     }
 
     /**
@@ -83,7 +89,7 @@ public final class ProtosComplexNumericSupport {
         Objects.requireNonNull(prelude, "a Complex requires its owning Prelude");
         // mint answers a frozen value whose parent is exactly the owning Complex prototype.
         return ProtosSealedValue.mint(
-                COMPLEX_FAMILY, prelude.complexPrototype(), new ComplexState(real, imaginary));
+                ComplexFamilyToken.VALUE, prelude.complexPrototype(), new ComplexState(real, imaginary));
     }
 
     private static void requireComponent(Object component) {

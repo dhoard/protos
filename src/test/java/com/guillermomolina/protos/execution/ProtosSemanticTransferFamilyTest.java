@@ -725,8 +725,8 @@ final class ProtosSemanticTransferFamilyTest {
         protected boolean acceptsPayload(
                 ProtosSemanticTransferPayload payload) {
             return payload.size() == 3
-                    && payload.get(0) instanceof BigInteger
-                    && payload.get(1) instanceof BigInteger denominator
+                    && exactInteger(payload.get(0)) != null
+                    && exactInteger(payload.get(1)) instanceof BigInteger denominator
                     && denominator.signum() > 0
                     && payload.get(2) instanceof Double;
         }
@@ -737,10 +737,18 @@ final class ProtosSemanticTransferFamilyTest {
                 ProtosSemanticTransferDestination destination) {
             NumericCandidateState state =
                     new NumericCandidateState(
-                            (BigInteger) payload.get(0),
-                            (BigInteger) payload.get(1),
+                            exactInteger(payload.get(0)),
+                            exactInteger(payload.get(1)),
                             (Double) payload.get(2));
             return mint(state, destination.prelude());
+        }
+
+        // Payloads carry canonical Integers: Long within signed-64, BigInteger beyond it.
+        private static BigInteger exactInteger(Object element) {
+            if (element instanceof Long small) {
+                return BigInteger.valueOf(small);
+            }
+            return element instanceof BigInteger large ? large : null;
         }
     }
 

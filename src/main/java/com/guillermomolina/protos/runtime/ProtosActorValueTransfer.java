@@ -430,9 +430,10 @@ public final class ProtosActorValueTransfer {
         }
 
         private boolean needsPopulation(Object value) {
-            // I091: a large Integer is rematerialized whole by allocation; it has no slots.
+            // I091: every semantic Number is reconstructed by the numeric
+            // boundary, not by copying ordinary object slots.
             return value instanceof ProtosObjectValue
-                    && !ProtosNumericValueSupport.isLargeInteger(value)
+                    && !ProtosNumericValueSupport.isCurrentNumber(value)
                     && !isSharedStandardObject((ProtosObjectValue) value)
                     && !(value instanceof ProtosClosureValue)
                     && !(value instanceof ProtosFutureValue);

@@ -85,9 +85,18 @@ public final class ProtosForeignValueClass {
         return new ProtosForeignValueClass(Kind.INTEGER, value, null, Set.of());
     }
 
+    /**
+     * Canonical host representation of a source-declared exact Integer.
+     * A BigInteger is retained only outside the signed-64 range.
+     * This is an optional foreign-provider boundary, never an ordinary
+     * guest numeric execution path.
+     */
     public static ProtosForeignValueClass integral(BigInteger value) {
-        return new ProtosForeignValueClass(
-                Kind.INTEGER, Objects.requireNonNull(value, "value"), null, Set.of());
+        Objects.requireNonNull(value, "value");
+        if (value.bitLength() < Long.SIZE) {
+            return integral(value.longValue());
+        }
+        return new ProtosForeignValueClass(Kind.INTEGER, value, null, Set.of());
     }
 
     public static ProtosForeignValueClass binary64(double value) {

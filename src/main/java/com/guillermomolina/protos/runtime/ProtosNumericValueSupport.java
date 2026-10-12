@@ -78,14 +78,21 @@ public final class ProtosNumericValueSupport {
      * semantic Integers; zero and integral quotients are Integers, never Fractions.
      */
 
-    private static final Object FRACTION_FAMILY = new Object();
+    /*
+     * I091: a program that never uses Fraction must not allocate its
+     * semantic-family authority while initializing ordinary numeric support.
+     * The token remains stable across every Prelude and execution domain.
+     */
+    private static final class FractionFamilyToken {
+        static final Object VALUE = new Object();
+    }
 
     /** Canonical immutable components of one Fraction; never reachable from guest code. */
     private record FractionState(Object numerator, Object denominator) {}
 
     /** Whether {@code value} is a genuine canonical Fraction. */
     public static boolean isFraction(Object value) {
-        return value instanceof ProtosSealedValue sealed && sealed.belongsTo(FRACTION_FAMILY);
+        return value instanceof ProtosSealedValue sealed && sealed.belongsTo(FractionFamilyToken.VALUE);
     }
 
     /** The canonical numerator Integer of a value admitted by {@link #isFraction}. */
@@ -102,7 +109,7 @@ public final class ProtosNumericValueSupport {
         if (!isFraction(fraction)) {
             throw new IllegalArgumentException("value is not a canonical Fraction");
         }
-        return (FractionState) ((ProtosSealedValue) fraction).stateFor(FRACTION_FAMILY);
+        return (FractionState) ((ProtosSealedValue) fraction).stateFor(FractionFamilyToken.VALUE);
     }
 
     /**
@@ -237,7 +244,7 @@ public final class ProtosNumericValueSupport {
 
     private static Object mintFraction(Object numerator, Object denominator, ProtosPrelude prelude) {
         return ProtosSealedValue.mint(
-                FRACTION_FAMILY,
+                FractionFamilyToken.VALUE,
                 prelude.fractionPrototype(),
                 new FractionState(numerator, denominator));
     }

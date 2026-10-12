@@ -298,7 +298,7 @@ final class ProtosFrameArguments {
             DIRECT_CLOSURE_CALL,
             null,
             caller,
-            ProtosReturnHome.unobservable(),
+            ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
             supplied0
         };
     }
@@ -317,7 +317,7 @@ final class ProtosFrameArguments {
             receiver,
             methodHome,
             caller,
-            ProtosReturnHome.unobservable()
+            ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime()
         };
     }
 
@@ -825,7 +825,7 @@ final class ProtosFrameArguments {
 
     /**
      * I091: whether the caller of this invocation accepts a primitive numeric
-     * result. Only a fused direct source send writes the private marker, and
+     * result. Only a fused direct source call or send writes the private marker, and
      * only into a full compact header; argument 0 publication keeps it.
      */
     static boolean acceptsPrimitiveResult(Object[] arguments) {

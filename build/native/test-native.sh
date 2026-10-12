@@ -65,6 +65,35 @@ PROTOS_HOME="${root}" \
     >"${test_tool_log}" 2>&1
 test_tool_status=$?
 
+# I091 / PLAT056: exercise the actual Native Image interpreter against the
+# public numeric semantics, not only the trivial -e '1' smoke test.
+# These are focused existing conformance files, not the full Protos suite.
+native_numeric_status=0
+native_numeric_cases=0
+
+for numeric_file in \
+    "protos/tests/conformance/integer/prototype-and-receiver.protos" \
+    "protos/tests/conformance/number/fraction-relations.protos" \
+    "protos/tests/conformance/float/special-values.protos"
+do
+    case_log="${tmp_dir}/numeric-${native_numeric_cases}.log"
+
+    PROTOS_HOME="${root}" \
+        "${native_bin}" \
+        test --file "${root}/${numeric_file}" \
+        >"${case_log}" 2>&1
+    case_status=$?
+
+    if [[ "${case_status}" -ne 0 ]] || \
+       ! grep -Eq '^[[:space:]]*[1-9][0-9]* passed, 0 failed[[:space:]]*$' "${case_log}"; then
+        cat "${case_log}" >&2
+        echo "NATIVE_NUMERIC_CASE_FAILURE=${numeric_file}" >&2
+        native_numeric_status=1
+    fi
+
+    native_numeric_cases=$((native_numeric_cases + 1))
+done
+
 test_tool_output_ok=1
 for expected_line in \
     "[library/uri] 0/4" \
@@ -138,6 +167,8 @@ echo "NATIVE_VERSION_STATUS=${version_status}"
 echo "NATIVE_HELP_STATUS=${help_status}"
 echo "NATIVE_GUEST_SMOKE_STATUS=${smoke_status}"
 echo "NATIVE_TEST_TOOL_STATUS=${test_tool_status}"
+echo "NATIVE_NUMERIC_CONFORMANCE_STATUS=${native_numeric_status}"
+echo "NATIVE_NUMERIC_CONFORMANCE_FILES=${native_numeric_cases}"
 echo "NATIVE_TEST_TOOL_OUTPUT_OK=${test_tool_output_ok}"
 echo "NATIVE_TEST_TOOL_CONTEXT_TEARDOWN_FAILURES=${test_tool_context_teardown_failures}"
 cat "${dap_log}"
@@ -177,6 +208,11 @@ fi
 if [[ "${test_tool_output_ok}" -ne 1 ]]; then
     cat "${test_tool_log}" >&2
     echo "NATIVE_TEST_TOOL_SMOKE=FAIL_OUTPUT" >&2
+    exit 1
+fi
+
+if [[ "${native_numeric_status}" -ne 0 ]]; then
+    echo "NATIVE_NUMERIC_CONFORMANCE=FAIL" >&2
     exit 1
 fi
 
@@ -232,6 +268,7 @@ echo "NATIVE_VERSION_SMOKE=PASS"
 echo "NATIVE_HELP_SMOKE=PASS"
 echo "NATIVE_GUEST_SMOKE=PASS"
 echo "NATIVE_TEST_TOOL_SMOKE=PASS"
+echo "NATIVE_NUMERIC_CONFORMANCE=PASS"
 echo "NATIVE_DAP_STACKTRACE_REGRESSION=PASS"
 echo "NATIVE_INTERPRETER_ONLY=PASS"
 echo "NATIVE_GUEST_JIT=UNSUPPORTED_UPSTREAM_ORACLE_GRAAL_14579"

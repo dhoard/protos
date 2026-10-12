@@ -42,6 +42,8 @@ import com.guillermomolina.protos.runtime.ProtosSealedValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -55,6 +57,39 @@ import org.junit.jupiter.api.Test;
  */
 final class ProtosComplexSemanticsTest {
     private static final BigInteger TWO_POW_100 = BigInteger.ONE.shiftLeft(100);
+
+    @Test
+    void structuralCloseAndFreezeAreRepresentationNeutralForNumbers()
+            throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation caller = prelude.newModuleActivation();
+
+        Object small = new ProtosIntegerValue(7L);
+        Object large = ProtosNumericValueSupport.integerFromHost(
+                BigInteger.ONE.shiftLeft(90), prelude);
+        Object floating = new ProtosFloatValue(-0.0d);
+        Object fraction = divide(1L, 2L, prelude);
+        Object complex = complex(
+                new ProtosIntegerValue(3L),
+                new ProtosFloatValue(-0.0d),
+                prelude);
+
+        for (Object number : List.of(
+                small, large, floating, fraction, complex)) {
+            assertTrue(ProtosNumericValueSupport.isCurrentNumber(number));
+
+            assertSame(number, ProtosInvocation.invokeMessage(
+                    number, "close", List.of(), caller));
+            assertSame(number, ProtosInvocation.invokeMessage(
+                    number, "freeze", List.of(), caller));
+
+            // Repetition must remain idempotent.
+            assertSame(number, ProtosInvocation.invokeMessage(
+                    number, "close", List.of(), caller));
+            assertSame(number, ProtosInvocation.invokeMessage(
+                    number, "freeze", List.of(), caller));
+        }
+    }
 
     @Test
     void bootstrapPublishesAFrozenComplexPrototypePerPrelude() throws IOException {
@@ -72,6 +107,82 @@ final class ProtosComplexSemanticsTest {
                 ProtosClosureValue.class, complex.readLocalSlot("recognizes").orElseThrow());
         assertTrue(recognizes.nativeBody().isPresent());
         assertFalse(ProtosComplexNumericSupport.isComplex(complex));
+    }
+
+    @Test
+    void canonicalFractionAndComplexHideHostStateWithoutChangingOrdinaryObjects()
+            throws Exception {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation caller = prelude.newModuleActivation();
+        InteropLibrary interop = InteropLibrary.getUncached();
+
+        Object fraction = divide(2L, 3L, prelude);
+        Object complex = complex(
+                new ProtosIntegerValue(2L),
+                new ProtosIntegerValue(3L),
+                prelude);
+
+        assertTrue(ProtosNumericValueSupport.isFraction(fraction));
+        assertTrue(ProtosComplexNumericSupport.isComplex(complex));
+
+        for (Object value : List.of(fraction, complex)) {
+            ProtosObjectValue object =
+                    assertInstanceOf(ProtosObjectValue.class, value);
+
+            assertTrue(object.isFrozen());
+            assertTrue(object.localSlotsSnapshot().isEmpty());
+
+            // Physical Java fields are not guest-visible members.
+            assertFalse(interop.hasMembers(value));
+            assertFalse(interop.isMemberReadable(value, "family"));
+            assertFalse(interop.isMemberReadable(value, "state"));
+            assertFalse(interop.isMemberReadable(value, "familyState"));
+
+            assertThrows(
+                    UnsupportedMessageException.class,
+                    () -> interop.getMembers(value));
+
+            // Guest reflection observes no fabricated backing slots.
+            assertSame(
+                    ProtosBooleanValue.FALSE,
+                    ProtosInvocation.invokeMessage(
+                            value,
+                            "hasSlot",
+                            List.of(new ProtosStringValue("familyState")),
+                            caller));
+
+            ProtosArrayValue names = assertInstanceOf(
+                    ProtosArrayValue.class,
+                    ProtosInvocation.invokeMessage(
+                            value, "slotNames", List.of(), caller));
+            assertEquals(0, names.indexedSize());
+
+            // A canonical numeric value cannot acquire local bindings.
+            assertThrows(
+                    IllegalStateException.class,
+                    () -> object.createLocalSlot(
+                            "familyState", new ProtosIntegerValue(42L)));
+        }
+
+        // Ordinary delegation must not be mistaken for numeric membership
+        // or disabled by the interop protection of sealed numeric values.
+        for (ProtosObjectValue prototype : List.of(
+                prelude.fractionPrototype(),
+                prelude.complexPrototype())) {
+
+            ProtosObjectValue ordinary = new ProtosObjectValue(prototype);
+            ProtosStringValue marker = new ProtosStringValue("ordinary");
+            ordinary.createLocalSlot("familyState", marker);
+            ordinary.freeze();
+
+            assertTrue(interop.hasMembers(ordinary));
+            assertTrue(interop.isMemberReadable(ordinary, "familyState"));
+            assertSame(marker, interop.readMember(ordinary, "familyState"));
+
+            assertFalse(ProtosNumericValueSupport.isCurrentNumber(ordinary));
+            assertFalse(ProtosNumericValueSupport.isFraction(ordinary));
+            assertFalse(ProtosComplexNumericSupport.isComplex(ordinary));
+        }
     }
 
     @Test

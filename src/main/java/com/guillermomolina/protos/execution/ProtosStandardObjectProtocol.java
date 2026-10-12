@@ -233,13 +233,13 @@ public final class ProtosStandardObjectProtocol {
     }
 
     /*
-     * I091 / PLAT056 Candidate C: a large Integer is physically a frozen ordinary object, but it
-     * is a semantic Integer, so the reflective and instantiating object primitives treat it
-     * exactly as they treat every other Integer representation: as a value with no slots that
-     * cannot be mutated or instantiated as a prototype.
+     * I091 / PLAT056-C: physically object-backed semantic Numbers
+     * (BigInteger, Fraction and Complex) are not ordinary object
+     * receivers for construction, mutation or structural reflection.
+     * An ordinary object delegating to a Number remains ordinary.
      */
     private static boolean ordinaryReceiver(Object receiver) {
-        return !ProtosNumericValueSupport.isLargeInteger(receiver);
+        return !ProtosNumericValueSupport.isCurrentNumber(receiver);
     }
 
     private static Object hasSlot(ProtosActivation activation, List<?> supplied) {
@@ -336,22 +336,38 @@ public final class ProtosStandardObjectProtocol {
         if (!supplied.isEmpty()) {
             throw invalid(activation);
         }
-        if (!(activation.receiver() instanceof ProtosObjectValue receiver)
+        Object receiver = activation.receiver();
+
+        // Semantic Numbers are immutable. Structural close is
+        // idempotent regardless of their physical Java representation.
+        if (ProtosNumericValueSupport.isCurrentNumber(receiver)) {
+            return receiver;
+        }
+
+        if (!(receiver instanceof ProtosObjectValue ordinary)
                 || !ordinaryReceiver(receiver)) {
             throw invalid(activation);
         }
-        return receiver.close();
+        return ordinary.close();
     }
 
     private static Object freeze(ProtosActivation activation, List<?> supplied) {
         if (!supplied.isEmpty()) {
             throw invalid(activation);
         }
-        if (!(activation.receiver() instanceof ProtosObjectValue receiver)
+        Object receiver = activation.receiver();
+
+        // Semantic Numbers are immutable. Structural freeze is
+        // idempotent regardless of their physical Java representation.
+        if (ProtosNumericValueSupport.isCurrentNumber(receiver)) {
+            return receiver;
+        }
+
+        if (!(receiver instanceof ProtosObjectValue ordinary)
                 || !ordinaryReceiver(receiver)) {
             throw invalid(activation);
         }
-        return receiver.freeze();
+        return ordinary.freeze();
     }
 
     private static Object without(ProtosActivation activation, List<?> supplied) {

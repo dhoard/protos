@@ -368,6 +368,19 @@ public final class ProtosBinary64Rounding {
                         compactNumerator.longValue(), 1L,
                         binaryInteger, compactDenominator.longValue());
             }
+
+            // For a positive signed-64 denominator, |n/d| <= 2^63 and
+            // every nonzero |n/d| > 2^-63. Binary64 values outside these
+            // bounds can be ordered without an arbitrary-precision product.
+            // Only reach these guards when the ordinary primitive path misses.
+            double magnitude = Math.abs(value);
+            if (magnitude >= 0x1p64) {
+                return value > 0.0d ? -1 : 1;
+            }
+            if (magnitude <= 0x1p-64) {
+                int sign = Long.signum(compactNumerator.longValue());
+                return sign != 0 ? sign : (value > 0.0d ? -1 : 1);
+            }
         }
 
         return compareLargeRationalToBinary64(numerator, denominator, value);

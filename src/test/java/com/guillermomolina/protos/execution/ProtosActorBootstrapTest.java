@@ -8,6 +8,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
+import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -119,6 +122,65 @@ final class ProtosActorBootstrapTest {
     void nonInvokableBindingAndNonObjectBehaviorAreInitializationFailures() throws Exception {
         assertBootstrapFailure("bootstrap: 7");
         assertBootstrapFailure("bootstrap: () => { 7 }");
+    }
+
+    @Test
+    void numericRichValuesCannotBecomeActorBehaviorButOrdinaryDelegatesCan()
+            throws Exception {
+        // Source-produced Fraction is a sealed ProtosObjectValue, but
+        // semantically it is a Number, not an Actor behavior object.
+        assertBootstrapFailure("bootstrap: () => { 1 / 2 }");
+
+        CanonicalResolver resolver =
+                new CanonicalResolver().module(
+                        "app/bootstrap",
+                        "bootstrap: (candidate) => { candidate }");
+
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+
+        Object complex = ProtosComplexNumericSupport.normalize(
+                new ProtosIntegerValue(2L),
+                new ProtosIntegerValue(3L),
+                prelude);
+
+        assertTrue(ProtosComplexNumericSupport.isComplex(complex));
+
+        ProtosActorBootstrap bootstrap =
+                new ProtosActorBootstrap(new ProtosModuleRuntime(resolver));
+        ProtosModuleKey key = new ProtosModuleKey("app/bootstrap");
+
+        ProtosActor numericActor = new ProtosActor(actorRefPrototype());
+
+        assertThrows(
+                ProtosSignalException.class,
+                () -> bootstrap.initialize(
+                        numericActor, prelude, key, "bootstrap",
+                        List.of(complex)));
+
+        assertEquals(
+                ProtosActor.LifecycleState.TERMINATED,
+                numericActor.lifecycleState());
+        assertTrue(numericActor.currentBehavior().isEmpty());
+
+        // Parentability is independent of numeric family membership.
+        // This is a genuine ordinary object, even though its parent is
+        // a genuine Complex value.
+        ProtosObjectValue ordinary = new ProtosObjectValue(complex);
+        assertFalse(ProtosNumericValueSupport.isCurrentNumber(ordinary));
+
+        ProtosActor ordinaryActor = new ProtosActor(actorRefPrototype());
+
+        assertTrue(bootstrap.initialize(
+                ordinaryActor, prelude, key, "bootstrap",
+                List.of(ordinary)));
+
+        assertEquals(
+                ProtosActor.LifecycleState.READY,
+                ordinaryActor.lifecycleState());
+        assertSame(
+                ordinary,
+                ordinaryActor.currentBehavior().orElseThrow());
     }
 
     @Test

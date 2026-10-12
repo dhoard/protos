@@ -110,11 +110,6 @@ public final class ProtosDetachedExecutionValue {
                     || value == ProtosBooleanValue.FALSE) {
                 return remember(value, value);
             }
-            Object copiedNumber =
-                    ProtosNumericValueSupport.copyCurrentNumberOrNull(value, prelude);
-            if (copiedNumber != null) {
-                return remember(value, copiedNumber);
-            }
             // I091: Core Fraction and Complex are authority-free exact values.
             // Reuse their inert transfer descriptors so no source Prelude,
             // prototype, or sealed family state crosses the detached boundary.
@@ -131,6 +126,11 @@ public final class ProtosDetachedExecutionValue {
                         ProtosComplexNumericSupport.materializeTransferDescriptor(
                                 ProtosComplexNumericSupport.transferDescriptor(value),
                                 prelude));
+            }
+            Object copiedNumber =
+                    ProtosNumericValueSupport.copyCurrentNumberOrNull(value, prelude);
+            if (copiedNumber != null) {
+                return remember(value, copiedNumber);
             }
             if (value instanceof ProtosStringValue string) {
                 return remember(value, string.copyForRuntime());
@@ -189,7 +189,7 @@ public final class ProtosDetachedExecutionValue {
                 return;
             }
             if (!(value instanceof ProtosObjectValue source)
-                    || ProtosNumericValueSupport.isLargeInteger(value)
+                    || ProtosNumericValueSupport.isCurrentNumber(value)
                     || isSharedStandardObject(source)
                     || nonTransferableRuntimeValue(value)) {
                 populated.add(value);

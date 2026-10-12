@@ -73,6 +73,19 @@ tests: [
         Assertions.signals(Error, () => large.slotValue("parent"))
         Assertions.signals(Error, () => small.removeSlot("parent"))
         Assertions.signals(Error, () => large.removeSlot("parent"))
+    }),
+    Test("integer magnitudes reject inherited Object mutators symmetrically", () => {
+        small: 7
+        large: 100000000000000000000
+
+        Assertions.signals(Error, () => small.close())
+        Assertions.signals(Error, () => large.close())
+        Assertions.signals(Error, () => small.freeze())
+        Assertions.signals(Error, () => large.freeze())
+        Assertions.signals(Error, () => small.without("missing"))
+        Assertions.signals(Error, () => large.without("missing"))
+        Assertions.signals(Error, () => small.alias("source", "alias"))
+        Assertions.signals(Error, () => large.alias("source", "alias"))
     })
 ]
 tests.freeze()

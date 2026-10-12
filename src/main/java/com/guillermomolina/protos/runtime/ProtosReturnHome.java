@@ -32,7 +32,7 @@ public final class ProtosReturnHome {
     private static final ProtosReturnHome UNOBSERVABLE = new ProtosReturnHome(false);
     /*
      * I091: frame-ABI-only variant of UNOBSERVABLE written by a fused direct
-     * source send whose caller accepts a primitive numeric result. The frame
+     * source call or send whose caller accepts a primitive numeric result. The frame
      * argument accessors normalize it to UNOBSERVABLE, so no activation,
      * non-local return or guest observer ever sees it.
      */

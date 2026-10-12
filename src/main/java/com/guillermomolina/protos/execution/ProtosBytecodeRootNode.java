@@ -1761,7 +1761,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object target) {
             // I091: a large Integer is a frozen object physically but an immutable Integer value.
             if (target instanceof ProtosObjectValue object
-                    && !ProtosNumericValueSupport.isLargeInteger(target)) {
+                    && !ProtosNumericValueSupport.isCurrentNumber(target)) {
                 return object;
             }
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
@@ -2197,7 +2197,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object sourceValue,
                 ComposeReservedNames reservedNames) {
             if (!(sourceValue instanceof ProtosObjectValue source)
-                    || ProtosNumericValueSupport.isLargeInteger(sourceValue)) {
+                    || ProtosNumericValueSupport.isCurrentNumber(sourceValue)) {
                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
             }
 
@@ -3156,7 +3156,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                 activation));
             }
             if (receiver instanceof ProtosObjectValue prototype
-                    && !ProtosNumericValueSupport.isLargeInteger(receiver)) {
+                    && !ProtosNumericValueSupport.isCurrentNumber(receiver)) {
                 ProtosObjectValue instance = new ProtosObjectValue(prototype);
                 return PreparedStandardObjectCall.construction(
                         prepareSend(

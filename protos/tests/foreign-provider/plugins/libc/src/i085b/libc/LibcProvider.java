@@ -28,7 +28,6 @@ import java.lang.foreign.Linker;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
-import java.math.BigInteger;
 import java.util.List;
 import java.util.Set;
 
@@ -107,7 +106,7 @@ public final class LibcProvider implements ProtosForeignProviderPlugin {
             public ProtosForeignValueClass classify(
                     ProtosForeignPluginSession session, Object handle) {
                 if (handle instanceof Long number) {
-                    return ProtosForeignValueClass.integral(BigInteger.valueOf(number));
+                    return ProtosForeignValueClass.integral(number);
                 }
                 if (handle instanceof Bound) {
                     return ProtosForeignValueClass.handle(

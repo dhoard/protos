@@ -42,13 +42,14 @@ public final class ProtosNumericHashKey {
     /** Key of a value admitted by {@link ProtosNumericValueSupport#isCurrentInteger}. */
     public static ProtosNumericHashKey fromSemanticInteger(Object value) {
         Objects.requireNonNull(value, "value");
-        if (value instanceof ProtosIntegerValue small) {
+        // The numeric boundary owns guest representation recognition.
+        // Hash keys retain only normalized inert host scalars, never a
+        // guest Integer, prototype, Prelude or execution-domain state.
+        Object scalar = ProtosNumericValueSupport.hostInteger(value);
+        if (scalar instanceof Long small) {
             return ofLong(small.longValue());
         }
-        if (value instanceof ProtosLargeIntegerValue large) {
-            return new ProtosNumericHashKey(0L, large.exactValue());
-        }
-        throw new IllegalArgumentException("value is not a current exact-integer family");
+        return new ProtosNumericHashKey(0L, (BigInteger) scalar);
     }
 
     public static ProtosNumericHashKey fromIdentity(Object value) {
