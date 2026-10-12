@@ -271,6 +271,33 @@ final class ProtosI091PrimitiveCarrierPropagationTest {
     }
 
     @Test
+    void numericProxyRetainsCanonicalDispatchAcrossGenericMisses() {
+        try (Context context = context()) {
+            // All calls execute the same syntactic x + y site.
+            // The first and later large operands require the D013 path;
+            // small and mixed operands must remain semantically canonical.
+            assertTrue(eval(context,
+                    "add: (x, y) => x + y\n"
+                            + "bigFirst: add(9223372036854775808, 1)\n"
+                            + "i: 0\n"
+                            + "(() => i < 50).whileTrue(() => { i = add(i, 1) })\n"
+                            + "rejected: false\n"
+                            + "Error.handle(() => { add(1, \"text\") }, error => {\n"
+                            + "    rejected = true\n"
+                            + "})\n"
+                            + "afterMiss: add(i, 1)\n"
+                            + "mixed: add(1.5, 2)\n"
+                            + "bigAgain: add(9223372036854775808, 2)\n"
+                            + "last: add(10, 20)\n"
+                            + "rejected && (bigFirst == 9223372036854775809)"
+                            + " && (afterMiss == 51) && (mixed == 3.5)"
+                            + " && (bigAgain == 9223372036854775810)"
+                            + " && (last == 30)")
+                    .asBoolean());
+        }
+    }
+
+    @Test
     void carrierMaterializationIsTheOnlyRecognition() {
         Object integer = ProtosNumericValueSupport.guestValue(41L);
         Object floating = ProtosNumericValueSupport.guestValue(0.5d);

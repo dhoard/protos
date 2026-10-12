@@ -81,6 +81,71 @@ final class ProtosI091PrimitiveIntegerSendTest {
         }
     }
 
+    @Test
+    void overflowGeneralizationRetainsFastSmallSumAndExactBigSemantics() {
+        try (Context context = context()) {
+            assertTrue(context.eval(ProtosLanguage.ID, """
+                    add: (a, b) => { a + b }
+                    first: add(1, 2)
+                    positive: add(9223372036854775807, 1)
+                    afterPositive: add(40, 2)
+                    negative: add(-9223372036854775808, -1)
+                    afterNegative: add(40, 2)
+                    bigOperand: add(positive, 1)
+                    floatOperand: add(1, 2.5)
+                    afterFallback: add(40, 2)
+                    SmallInteger.recognizes(first) && first == 3 && BigInteger.recognizes(positive) && positive == 9223372036854775808 && SmallInteger.recognizes(afterPositive) && afterPositive == 42 && BigInteger.recognizes(negative) && positive + negative == -1 && SmallInteger.recognizes(afterNegative) && afterNegative == 42 && BigInteger.recognizes(bigOperand) && bigOperand - positive == 1 && floatOperand == 3.5 && SmallInteger.recognizes(afterFallback) && afterFallback == 42
+                    """).asBoolean());
+        }
+    }
+
+    @Test
+    void graalPyLongArithmeticGeneralizationPreservesSubtractionAndMultiplication() {
+        try (Context context = context()) {
+            assertTrue(context.eval(ProtosLanguage.ID, """
+                    sub: (a, b) => { a - b }
+                    mul: (a, b) => { a * b }
+                    firstSub: sub(11, 4)
+                    negativeOverflow: sub(-9223372036854775808, 1)
+                    afterNegative: sub(11, 4)
+                    positiveOverflow: sub(9223372036854775807, -1)
+                    afterPositive: sub(11, 4)
+                    firstMul: mul(6, 7)
+                    positiveProduct: mul(9223372036854775807, 2)
+                    afterProduct: mul(6, 7)
+                    minProduct: mul(-9223372036854775808, -1)
+                    zeroProduct: mul(-9223372036854775808, 0)
+                    minIdentity: mul(-9223372036854775808, 1)
+                    bigOperand: mul(positiveProduct, 2)
+                    afterBig: mul(6, 7)
+                    subtractionFromBig: sub(1, 9223372036854775808)
+                    afterAll: sub(11, 4)
+                    """
+                    + "firstSub == 7"
+                    + " && BigInteger.recognizes(negativeOverflow)"
+                    + " && negativeOverflow == -9223372036854775809"
+                    + " && afterNegative == 7"
+                    + " && BigInteger.recognizes(positiveOverflow)"
+                    + " && positiveOverflow == 9223372036854775808"
+                    + " && afterPositive == 7"
+                    + " && firstMul == 42"
+                    + " && BigInteger.recognizes(positiveProduct)"
+                    + " && positiveProduct == 18446744073709551614"
+                    + " && afterProduct == 42"
+                    + " && BigInteger.recognizes(minProduct)"
+                    + " && minProduct == 9223372036854775808"
+                    + " && zeroProduct == 0"
+                    + " && minIdentity == -9223372036854775808"
+                    + " && BigInteger.recognizes(bigOperand)"
+                    + " && bigOperand == 36893488147419103228"
+                    + " && afterBig == 42"
+                    + " && SmallInteger.recognizes(subtractionFromBig)"
+                    + " && subtractionFromBig == -9223372036854775807"
+                    + " && afterAll == 7"
+                    ).asBoolean());
+        }
+    }
+
     private static final BigInteger TWO_POW_63 = BigInteger.ONE.shiftLeft(63);
 
     @Test

@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -97,6 +98,109 @@ final class ProtosI091PrimitiveFloatSendTest {
                     ProtosStandardFloatProtocol.canonicalOperationForSelection(
                             selected, prelude.numberPrototype(), selector, prelude));
         }
+    }
+
+
+    @Test
+    void allPrimitiveFloatOperations() {
+        try (Context context = context()) {
+            assertEquals(9.5d, evaluate(context, "7.5 + 2.0"));
+            assertEquals(5.5d, evaluate(context, "7.5 - 2.0"));
+            assertEquals(15.0d, evaluate(context, "7.5 * 2.0"));
+            assertEquals(3.75d, evaluate(context, "7.5 / 2.0"));
+
+            assertEquals(
+                    10.0d,
+                    evaluate(context, "((2.5 + 1.5) * 3.0) - 2.0"));
+        }
+    }
+
+    @Test
+    void primitiveMixedOperationsRespectBothOperandOrders() {
+        try (Context context = context()) {
+            assertEquals(7.0d, evaluate(context, "5.0 + 2"));
+            assertEquals(7.0d, evaluate(context, "5 + 2.0"));
+
+            assertEquals(3.0d, evaluate(context, "5.0 - 2"));
+            assertEquals(3.0d, evaluate(context, "5 - 2.0"));
+
+            assertEquals(10.0d, evaluate(context, "5.0 * 2"));
+            assertEquals(10.0d, evaluate(context, "5 * 2.0"));
+
+            assertEquals(2.5d, evaluate(context, "5.0 / 2"));
+            assertEquals(2.5d, evaluate(context, "5 / 2.0"));
+
+            assertEquals(-3.0d, evaluate(context, "2.0 - 5"));
+            assertEquals(3.0d, evaluate(context, "5 - 2.0"));
+            assertEquals(0.4d, evaluate(context, "2 / 5.0"));
+        }
+    }
+
+    @Test
+    void ieeeExceptionalArithmeticPreservesSignedZeroAndNaN() {
+        try (Context context = context()) {
+            double negativeZero =
+                    evaluate(context, "0.0 / (0.0 - 1.0)");
+            assertEquals(
+                    Double.doubleToRawLongBits(-0.0d),
+                    Double.doubleToRawLongBits(negativeZero));
+
+            assertEquals(
+                    Double.POSITIVE_INFINITY,
+                    evaluate(context, "1.0 / 0.0"));
+            assertEquals(
+                    Double.NEGATIVE_INFINITY,
+                    evaluate(
+                            context,
+                            "1.0 / (0.0 * (0.0 - 1.0))"));
+
+            assertTrue(Double.isNaN(
+                    evaluate(context, "0.0 / 0.0")));
+            assertTrue(Double.isNaN(
+                    evaluate(context, "(1.0 / 0.0) * 0.0")));
+        }
+    }
+
+    @Test
+    void largeIntegersAndFractionsPreserveFallbackConversion() {
+        try (Context context = context()) {
+            assertEquals(
+                    0x1.0p63,
+                    evaluate(context, "9223372036854775807 + 0.0"));
+            assertEquals(
+                    -0x1.0p63,
+                    evaluate(context, "-9223372036854775808 + 0.0"));
+
+            assertEquals(
+                    0x1.0p63,
+                    evaluate(context, "9223372036854775808 + 0.0"));
+            assertEquals(
+                    0x1.0p63,
+                    evaluate(context, "0.0 + 9223372036854775808"));
+
+            assertEquals(
+                    2.0d + (1.0d / 3.0d),
+                    evaluate(context, "2.0 + (1 / 3)"));
+            assertEquals(
+                    2.0d / (1.0d / 3.0d),
+                    evaluate(context, "2.0 / (1 / 3)"));
+        }
+    }
+
+    @Test
+    void polymorphicCallSiteAlternatesNumericShapes() {
+        try (Context context = context()) {
+            String source =
+                    "sum: (a, b) => a + b\n"
+                    + "sum(1.0, 2.0) + sum(1.0, 2)"
+                    + " + sum(1, 2.0) + sum(1.0, 2.0)";
+
+            assertEquals(12.0d, evaluate(context, source));
+        }
+    }
+
+    private static double evaluate(Context context, String source) {
+        return context.eval(ProtosLanguage.ID, source).asDouble();
     }
 
     private static Context context() {

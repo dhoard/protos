@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.342-SNAPSHOT
+
+- `PERF040` (#862): specialize canonical primitive numeric arithmetic without
+  changing D013 message-selection semantics.
+  - Split Integer `+`, `-`, and `*` into independent primitive signed-64 and
+    overflow-generalized specializations, preserving exact large results and
+    small arithmetic after overflow.
+  - Separate Float `double/double` and `double/long` specializations for `+`,
+    `-`, `*`, and `/`; retain the primitive Integer/Float path and IEEE 754
+    binary64 division, NaN, infinity, and signed-zero semantics.
+  - Preserve the exact canonical Closure, Prelude, Context and Assumption guards,
+    primitive-carrier propagation, and generic D013 fallbacks for other values.
+  - Extend Java regression coverage for overflow, polymorphic sites, mixed
+    operand orders, Fraction/BigInteger conversion, and exceptional Float values.
+
 ## 0.3.341-SNAPSHOT
 
 - `I091` (#869): strengthen PLAT056 numeric boundary conformance and

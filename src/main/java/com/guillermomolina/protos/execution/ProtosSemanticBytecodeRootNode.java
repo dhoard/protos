@@ -6590,14 +6590,15 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("canonicalGuard(selector, prelude, enteredContext)")
-                        GuardedIntegerSend cachedInteger) {
+                        GuardedIntegerSend cachedInteger,
+                @Cached(inline = false)
+                    ProtosPrimitiveNumericSendFastPathsBase.IntegerArithmeticNode arithmetic) {
             long left = smallValue(receiver);
             long right = smallValue(argument);
             try {
                 return switch (cachedInteger.operation()) {
-                    case ADD -> Math.addExact(left, right);
-                    case SUBTRACT -> Math.subtractExact(left, right);
-                    case MULTIPLY -> Math.multiplyExact(left, right);
+                    case ADD, SUBTRACT, MULTIPLY ->
+                            arithmetic.execute(cachedInteger.operation(), left, right, prelude);
                     // D197-C: Integer / Integer is the canonical exact quotient. Only an
                     // integral signed-64 quotient stays primitive; a zero divisor, the
                     // Long.MIN_VALUE / -1 promotion and every Fraction belong to the
@@ -6659,7 +6660,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization(
                 guards = {
                     "smallFloat(receiver, receiverCarrier)",
-                    "smallNumeric(argument, argumentCarrier)",
+                    "smallFloat(argument, argumentCarrier)",
                     "selector.equals(cachedSelector)",
                     "enteredContext != null",
                     "enteredContext == cachedContext",
@@ -6668,7 +6669,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 },
                 assumptions = "cachedFloat.stability()",
                 limit = "3")
-        public static Object canonicalFloat(
+        public static double canonicalFloatDD(
                 Object receiver, String selector, Object caller, Object argument,
                 boolean receiverCarrier, boolean argumentCarrier,
                 @Bind("currentEnteredContext($node)")
@@ -6680,8 +6681,40 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Cached("canonicalFloatGuard(selector, prelude, enteredContext)")
                         GuardedFloatSend cachedFloat) {
             double left = floatValue(receiver);
-            double right = smallFloat(argument, argumentCarrier)
-                    ? floatValue(argument) : (double) smallValue(argument);
+            double right = floatValue(argument);
+            return switch (cachedFloat.operation()) {
+                case ADD -> left + right;
+                case SUBTRACT -> left - right;
+                case MULTIPLY -> left * right;
+                case DIVIDE -> left / right;
+            };
+        }
+
+        @Specialization(
+                guards = {
+                    "smallFloat(receiver, receiverCarrier)",
+                    "smallInteger(argument, argumentCarrier)",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedFloat != null"
+                },
+                assumptions = "cachedFloat.stability()",
+                limit = "3")
+        public static double canonicalFloatDL(
+                Object receiver, String selector, Object caller, Object argument,
+                boolean receiverCarrier, boolean argumentCarrier,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)") ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("canonicalFloatGuard(selector, prelude, enteredContext)")
+                        GuardedFloatSend cachedFloat) {
+            double left = floatValue(receiver);
+            double right = (double) smallValue(argument);
             return switch (cachedFloat.operation()) {
                 case ADD -> left + right;
                 case SUBTRACT -> left - right;
@@ -6767,7 +6800,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
 
         @Specialization(
-                replaces = {"canonical", "canonicalMixedInteger", "canonicalFloat",
+                replaces = {"canonical", "canonicalMixedInteger", "canonicalFloatDD", "canonicalFloatDL",
                     "canonicalIntegerOrdering", "canonicalFloatOrdering"})
         public static Object generic(
                 Object receiver, String selector, Object caller, Object argument,
