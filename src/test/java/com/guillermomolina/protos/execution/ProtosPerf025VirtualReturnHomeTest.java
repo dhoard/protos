@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -36,7 +35,6 @@ import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Context;
@@ -341,8 +339,6 @@ final class ProtosPerf025VirtualReturnHomeTest {
     }
 
     private static void assertInteger(long expected, Object value) {
-        assertEquals(
-                BigInteger.valueOf(expected),
-                ProtosTestIntegers.exact(value));
+        assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
     }
 }

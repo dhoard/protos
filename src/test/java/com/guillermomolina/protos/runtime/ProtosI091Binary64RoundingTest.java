@@ -346,7 +346,7 @@ final class ProtosI091Binary64RoundingTest {
 
     private static double divide(BigInteger numerator, BigInteger denominator) {
         return ProtosBinary64Rounding.divideExactIntegers(
-                ProtosTestIntegers.integer(numerator), ProtosTestIntegers.integer(denominator));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(numerator, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(denominator, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()));
     }
 
     /*

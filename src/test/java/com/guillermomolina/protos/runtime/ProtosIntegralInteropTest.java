@@ -50,7 +50,7 @@ final class ProtosIntegralInteropTest {
                 () -> interop.asByte(byteOverflow));
 
         BigInteger huge = BigInteger.ONE.shiftLeft(200).add(BigInteger.ONE);
-        Object hugeValue = ProtosTestIntegers.integer(huge);
+        Object hugeValue = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(huge, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         assertTrue(interop.fitsInBigInteger(hugeValue));
         assertEquals(huge, interop.asBigInteger(hugeValue));
         assertFalse(interop.fitsInLong(hugeValue));
@@ -62,9 +62,9 @@ final class ProtosIntegralInteropTest {
     @Test
     void floatingWidthClaimsRequireExactMathematicalRoundTrip() throws Exception {
         Object floatExact =
-                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(24));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(24), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         Object floatRounded =
-                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(24).add(BigInteger.ONE));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(24).add(BigInteger.ONE), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         assertTrue(interop.fitsInFloat(floatExact));
         assertEquals((float) (1 << 24), interop.asFloat(floatExact));
         assertFalse(interop.fitsInFloat(floatRounded));
@@ -73,9 +73,9 @@ final class ProtosIntegralInteropTest {
                 () -> interop.asFloat(floatRounded));
 
         BigInteger doubleBoundary = BigInteger.ONE.shiftLeft(53);
-        Object doubleExact = ProtosTestIntegers.integer(doubleBoundary);
+        Object doubleExact = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(doubleBoundary, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         Object doubleRounded =
-                ProtosTestIntegers.integer(doubleBoundary.add(BigInteger.ONE));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(doubleBoundary.add(BigInteger.ONE), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         assertTrue(interop.fitsInDouble(doubleExact));
         assertEquals(Math.scalb(1.0, 53), interop.asDouble(doubleExact));
         assertFalse(interop.fitsInDouble(doubleRounded));
@@ -84,14 +84,14 @@ final class ProtosIntegralInteropTest {
                 () -> interop.asDouble(doubleRounded));
 
         Object largeExact =
-                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(80));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(80), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         Object largeRounded =
-                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(80).add(BigInteger.ONE));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(80).add(BigInteger.ONE), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         assertTrue(interop.fitsInDouble(largeExact));
         assertFalse(interop.fitsInDouble(largeRounded));
 
         Object decimalTrap =
-                ProtosTestIntegers.integer(new BigInteger("100000000000000000000000"));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(new BigInteger("100000000000000000000000"), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         assertFalse(interop.fitsInDouble(decimalTrap));
     }
 
@@ -142,7 +142,7 @@ final class ProtosIntegralInteropTest {
     }
 
     private static Object large(BigInteger value) {
-        return ProtosTestIntegers.integer(value);
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(value, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
     }
 
     @Test
@@ -277,24 +277,24 @@ final class ProtosIntegralInteropTest {
     @Test
     void bigFloatingClaimsUseExactSignificandAndRange() throws Exception {
         BigInteger floatMax = BigInteger.ONE.shiftLeft(24).subtract(BigInteger.ONE).shiftLeft(104);
-        assertTrue(interop.fitsInFloat(ProtosTestIntegers.integer(floatMax)));
-        assertEquals(Float.MAX_VALUE, interop.asFloat(ProtosTestIntegers.integer(floatMax)));
-        assertTrue(interop.fitsInFloat(ProtosTestIntegers.integer(floatMax.negate())));
-        assertFalse(interop.fitsInFloat(ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(128))));
+        assertTrue(interop.fitsInFloat(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(floatMax, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
+        assertEquals(Float.MAX_VALUE, interop.asFloat(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(floatMax, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
+        assertTrue(interop.fitsInFloat(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(floatMax.negate(), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
+        assertFalse(interop.fitsInFloat(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(128), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
 
         BigInteger doubleMax = BigInteger.ONE.shiftLeft(53).subtract(BigInteger.ONE).shiftLeft(971);
-        assertTrue(interop.fitsInDouble(ProtosTestIntegers.integer(doubleMax)));
-        assertEquals(Double.MAX_VALUE, interop.asDouble(ProtosTestIntegers.integer(doubleMax)));
-        assertFalse(interop.fitsInDouble(ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(1024))));
+        assertTrue(interop.fitsInDouble(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(doubleMax, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
+        assertEquals(Double.MAX_VALUE, interop.asDouble(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(doubleMax, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
+        assertFalse(interop.fitsInDouble(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(1024), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
         assertTrue(interop.fitsInDouble(
-                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(1023).negate())));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(1023).negate(), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
     }
 
     @Test
     void integralDisplayIsValueBasedHostOpaqueAndOtherFacetsStayAbsent()
             throws Exception {
         BigInteger integer = BigInteger.ONE.shiftLeft(100).add(BigInteger.valueOf(7));
-        Object value = ProtosTestIntegers.integer(integer);
+        Object value = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(integer, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
 
         String display = String.valueOf(interop.toDisplayString(value, false));
         assertEquals(integer.toString(), display);
@@ -315,14 +315,14 @@ final class ProtosIntegralInteropTest {
         ProtosObjectValue object =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         Object integer =
-                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(90).add(BigInteger.valueOf(3)));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(90).add(BigInteger.valueOf(3)), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         object.createLocalSlot("number", integer);
 
         Object read = interop.readMember(object, "number");
 
         assertSame(integer, read);
         assertTrue(interop.isNumber(read));
-        assertEquals(ProtosTestIntegers.exact(integer), interop.asBigInteger(read));
+        assertEquals(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer), String.valueOf(interop.asBigInteger(read)));
     }
 
     @Test

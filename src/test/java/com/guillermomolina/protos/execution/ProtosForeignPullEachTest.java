@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -255,9 +254,7 @@ class ProtosForeignPullEachTest {
             assertSame(fixture.standardError("Error"), failure.parent().orElseThrow());
 
             fixture.provider.events.clear();
-            assertEquals(
-                    BigInteger.valueOf(42),
-                    ProtosTestIntegers.exact(fixture.eval(
+            assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fixture.eval(
                                             s
                                                     + "f: () => {\n"
                                                     + "    s.each((x) => { log(x)\n ^42 })\n"
@@ -274,9 +271,7 @@ class ProtosForeignPullEachTest {
         // Integer elements arrive as Protos Integers: the block computes with them.
         try (ProtosForeignValueFixture fixture =
                 fixture(iterable(new Integral(BigInteger.ONE), new Integral(BigInteger.TWO)))) {
-            assertEquals(
-                    BigInteger.valueOf(30),
-                    ProtosTestIntegers.exact(fixture.eval(
+            assertEquals(String.valueOf("30"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fixture.eval(
                                             M
                                                     + "s: m.seq\n"
                                                     + "total: 0\n"

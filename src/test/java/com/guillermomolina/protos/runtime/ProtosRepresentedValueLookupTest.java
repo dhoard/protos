@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -72,7 +71,7 @@ class ProtosRepresentedValueLookupTest {
         assertFalse(prelude.smallIntegerPrototype().hasLocalSlot("call"));
 
         Object large =
-                ProtosTestIntegers.integer(BigInteger.TWO.pow(64), prelude);
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(com.guillermomolina.protos.runtime.ProtosNumberLiteral.parse("18446744073709551616"), prelude);
         assertSame(
                 prelude.bigIntegerPrototype(),
                 ProtosValueLookup.delegationParent(large, prelude).orElseThrow());

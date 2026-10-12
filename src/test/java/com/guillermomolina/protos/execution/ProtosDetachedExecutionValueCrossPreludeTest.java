@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
@@ -32,8 +33,9 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSealedValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -102,13 +104,12 @@ final class ProtosDetachedExecutionValueCrossPreludeTest {
             throws Exception {
         Pair pair = pair();
         BigInteger huge = BigInteger.ONE.shiftLeft(1000).add(BigInteger.ONE);
-        Object shared = ProtosTestIntegers.integer(huge, pair.sourcePrelude);
-        Object twin = ProtosTestIntegers.integer(huge, pair.sourcePrelude);
+        Object shared = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, pair.sourcePrelude);
+        Object twin = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, pair.sourcePrelude);
         Object positive =
-                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64), pair.sourcePrelude);
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), pair.sourcePrelude);
         Object negative =
-                ProtosTestIntegers.integer(
-                        BigInteger.ONE.shiftLeft(64).negate(), pair.sourcePrelude);
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).negate(), pair.sourcePrelude);
         long quietNaN = 0x7ff8000000000001L;
         ProtosObjectValue inner = new ProtosObjectValue(ProtosObjectValue.rootObject());
         inner.createLocalSlot("shared", shared);
@@ -133,13 +134,11 @@ final class ProtosDetachedExecutionValueCrossPreludeTest {
         ProtosObjectValue copiedInner =
                 assertInstanceOf(ProtosObjectValue.class, slot(copied, "inner"));
 
-        assertEquals(BigInteger.valueOf(Long.MAX_VALUE), ProtosTestIntegers.exact(slot(copied, "max")));
-        assertEquals(BigInteger.valueOf(Long.MIN_VALUE), ProtosTestIntegers.exact(slot(copied, "min")));
+        assertEquals(Long.toString(Long.MAX_VALUE), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(slot(copied, "max")));
+        assertEquals(Long.toString(Long.MIN_VALUE), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(slot(copied, "min")));
         assertTrue(ProtosNumericValueSupport.isIntegerInLongRange(slot(copied, "max")));
-        assertEquals(BigInteger.ONE.shiftLeft(64), ProtosTestIntegers.exact(slot(copied, "positive")));
-        assertEquals(
-                BigInteger.ONE.shiftLeft(64).negate(),
-                ProtosTestIntegers.exact(slot(copied, "negative")));
+        assertEquals((BigInteger.ONE.shiftLeft(64)).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(slot(copied, "positive")));
+        assertEquals((BigInteger.ONE.shiftLeft(64).negate()).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(slot(copied, "negative")));
         for (String name : new String[] {"positive", "negative", "shared"}) {
             ProtosObjectValue large = assertInstanceOf(ProtosObjectValue.class, slot(copied, name));
             assertTrue(ProtosNumericValueSupport.isLargeInteger(large));
@@ -150,7 +149,7 @@ final class ProtosDetachedExecutionValueCrossPreludeTest {
         assertSame(slot(copied, "shared"), slot(copiedInner, "shared"));
         assertNotSame(slot(copied, "shared"), slot(copiedInner, "twin"));
         assertTrue(ProtosIdentity.identical(slot(copied, "shared"), slot(copiedInner, "twin")));
-        assertEquals(huge, ProtosTestIntegers.exact(slot(copiedInner, "twin")));
+        assertEquals(String.valueOf(String.valueOf(huge)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(slot(copiedInner, "twin")));
         assertTrue(copiedInner.isFrozen());
         assertEquals(quietNaN, rawBits(slot(copied, "nan")));
         assertEquals(
@@ -160,9 +159,112 @@ final class ProtosDetachedExecutionValueCrossPreludeTest {
     }
 
     @Test
+    void fractionAndComplexCrossDetachedBoundaryWithoutLosingNumericIdentity()
+            throws Exception {
+        Pair pair = pair();
+        BigInteger magnitude = BigInteger.ONE.shiftLeft(95).add(BigInteger.ONE);
+
+        Object fraction =
+                ProtosNumericValueSupport.normalizeExactRational(
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(magnitude, pair.sourcePrelude),
+                        new ProtosIntegerValue(2L),
+                        pair.sourcePrelude);
+        Object twin =
+                ProtosNumericValueSupport.normalizeExactRational(
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(magnitude, pair.sourcePrelude),
+                        new ProtosIntegerValue(2L),
+                        pair.sourcePrelude);
+        Object complex =
+                ProtosComplexNumericSupport.normalize(
+                        fraction,
+                        new ProtosFloatValue(-0.0d),
+                        pair.sourcePrelude);
+
+        assertTrue(ProtosNumericValueSupport.isFraction(fraction));
+        assertTrue(ProtosComplexNumericSupport.isComplex(complex));
+
+        ProtosObjectValue graph =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        graph.createLocalSlot("fraction", fraction);
+        graph.createLocalSlot("alias", fraction);
+        graph.createLocalSlot("twin", twin);
+        graph.createLocalSlot("complex", complex);
+
+        ProtosObjectValue copied =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        ProtosDetachedExecutionValue.snapshot(
+                                graph,
+                                pair.sourcePrelude,
+                                pair.destinationActivation));
+
+        Object copiedFraction = slot(copied, "fraction");
+        Object copiedTwin = slot(copied, "twin");
+        Object copiedComplex = slot(copied, "complex");
+
+        assertTrue(ProtosNumericValueSupport.isFraction(copiedFraction));
+        assertNotSame(fraction, copiedFraction);
+        assertSame(copiedFraction, slot(copied, "alias"));
+        assertNotSame(copiedFraction, copiedTwin);
+        assertTrue(ProtosIdentity.identical(fraction, copiedFraction));
+        assertTrue(ProtosIdentity.identical(copiedFraction, copiedTwin));
+        assertEquals(
+                ProtosIdentity.identityHash(fraction),
+                ProtosIdentity.identityHash(copiedFraction));
+
+        assertSame(
+                pair.destinationPrelude.fractionPrototype(),
+                ((ProtosObjectValue) copiedFraction).parent().orElseThrow());
+        assertEquals(String.valueOf(String.valueOf(magnitude)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
+                        ProtosNumericValueSupport.fractionNumerator(copiedFraction)));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
+                        ProtosNumericValueSupport.fractionDenominator(copiedFraction)));
+
+        assertTrue(ProtosComplexNumericSupport.isComplex(copiedComplex));
+        assertNotSame(complex, copiedComplex);
+        assertTrue(ProtosIdentity.identical(complex, copiedComplex));
+        assertSame(
+                pair.destinationPrelude.complexPrototype(),
+                ((ProtosObjectValue) copiedComplex).parent().orElseThrow());
+
+        Object real = ProtosComplexNumericSupport.real(copiedComplex);
+        Object imaginary = ProtosComplexNumericSupport.imaginary(copiedComplex);
+
+        assertTrue(ProtosNumericValueSupport.isFraction(real));
+        assertTrue(ProtosIdentity.identical(fraction, real));
+        assertEquals(
+                Double.doubleToRawLongBits(-0.0d),
+                rawBits(imaginary));
+    }
+
+    @Test
+    void arbitrarySealedFamiliesRemainNonTransferable() throws Exception {
+        Pair pair = pair();
+        ProtosSealedValue unrelated =
+                ProtosSealedValue.seal(
+                        new Object(),
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()),
+                        new Object());
+
+        ProtosSignalException signal =
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> ProtosDetachedExecutionValue.snapshot(
+                                unrelated,
+                                pair.sourcePrelude,
+                                pair.destinationActivation));
+
+        assertSame(
+                ProtosCoreErrors.prototype(
+                        pair.destinationActivation,
+                        ProtosCoreErrors.StandardError.NON_TRANSFERABLE_VALUE),
+                signal.error().parent().orElseThrow());
+    }
+
+    @Test
     void hostNumericScalarsAndClosuresBesideNumbersAreNotTransferable() throws Exception {
         Pair pair = pair();
-        Object large = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64), pair.sourcePrelude);
+        Object large = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), pair.sourcePrelude);
         ProtosObjectValue graph = new ProtosObjectValue(ProtosObjectValue.rootObject());
         graph.createLocalSlot("large", large);
         graph.createLocalSlot("code", ProtosClosureValue.nativeClosure((a, x) -> large));

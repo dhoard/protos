@@ -16,14 +16,13 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
-import java.math.BigInteger;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -111,9 +110,7 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
             ProtosIntegerValue value =
                     (ProtosIntegerValue) result.outcome().value();
 
-            assertEquals(
-                    BigInteger.valueOf(22),
-                    ProtosTestIntegers.exact(value));
+            assertEquals(String.valueOf("22"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
 
             assertEquals(0, result.stdout().length);
             assertEquals(0, result.stderr().length);
@@ -430,15 +427,9 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
                             new ProtosTestLogicalCaseAttemptBridge.Request(
                                     suiteA, List.of("only"), "only"));
 
-            assertEquals(
-                    BigInteger.valueOf(11),
-                    ProtosTestIntegers.exact(first.outcome().value()));
-            assertEquals(
-                    BigInteger.valueOf(22),
-                    ProtosTestIntegers.exact(second.outcome().value()));
-            assertEquals(
-                    BigInteger.valueOf(11),
-                    ProtosTestIntegers.exact(firstAgain.outcome().value()));
+            assertEquals(String.valueOf("11"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(first.outcome().value()));
+            assertEquals(String.valueOf("22"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(second.outcome().value()));
+            assertEquals(String.valueOf("11"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(firstAgain.outcome().value()));
 
             assertSame(first.sourcePrelude(), second.sourcePrelude());
             assertSame(first.sourcePrelude(), firstAgain.sourcePrelude());

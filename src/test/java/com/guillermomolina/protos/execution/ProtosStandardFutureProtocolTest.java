@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -36,7 +35,7 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTask;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -291,9 +290,7 @@ class ProtosStandardFutureProtocolTest {
 
         assertTrue(ProtosTestExecutionSupport.dispatchOne(domain));
         assertEquals(ProtosFutureValue.State.RESOLVED, ownerResult.state());
-        assertEquals(
-                BigInteger.valueOf(42),
-                ProtosTestIntegers.exact(ownerResult.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ownerResult.resolvedValue().orElseThrow()));
         assertEquals(0, domain.liveTaskCount());
     }
 
@@ -339,7 +336,7 @@ class ProtosStandardFutureProtocolTest {
         assertEquals(ProtosFutureValue.State.RESOLVED, source.state());
         assertEquals(ProtosFutureValue.State.CANCELLED, destination.state());
         Object transforms = activation.context().readLocalSlot("transforms").orElseThrow();
-        assertEquals(BigInteger.ZERO, ProtosTestIntegers.exact(transforms));
+        assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(transforms));
         assertEquals(0, domain.liveTaskCount());
     }
 
@@ -387,7 +384,7 @@ class ProtosStandardFutureProtocolTest {
             assertSame(ProtosNullValue.INSTANCE, source.resolvedValue().orElseThrow());
         }
         Object transforms = activation.context().readLocalSlot("transforms").orElseThrow();
-        assertEquals(BigInteger.ZERO, ProtosTestIntegers.exact(transforms));
+        assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(transforms));
         assertFalse(ProtosTestExecutionSupport.dispatchOne(domain));
         assertEquals(0, domain.liveTaskCount());
     }
@@ -409,9 +406,7 @@ class ProtosStandardFutureProtocolTest {
 
         assertTrue(ProtosTestExecutionSupport.dispatchOne(domain));
         assertEquals(ProtosFutureValue.State.RESOLVED, destination.state());
-        assertEquals(
-                BigInteger.valueOf(42),
-                ProtosTestIntegers.exact(destination.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(destination.resolvedValue().orElseThrow()));
         assertEquals(0, domain.liveTaskCount());
     }
 

@@ -17,13 +17,11 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -157,6 +155,6 @@ final class ProtosPerf025C1ObjectBodyInlineControlTest {
                 () -> "outcome=" + outcome.state() + ", error=" + outcome.error());
         ProtosIntegerValue integer =
                 assertInstanceOf(ProtosIntegerValue.class, outcome.value());
-        assertEquals(BigInteger.valueOf(expected), ProtosTestIntegers.exact(integer));
+        assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
     }
 }

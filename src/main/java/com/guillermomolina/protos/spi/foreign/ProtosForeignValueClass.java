@@ -80,6 +80,11 @@ public final class ProtosForeignValueClass {
                 Kind.STRING, Objects.requireNonNull(value, "value"), null, Set.of());
     }
 
+    /** Signed-64 source Integer without arbitrary-precision allocation. */
+    public static ProtosForeignValueClass integral(long value) {
+        return new ProtosForeignValueClass(Kind.INTEGER, value, null, Set.of());
+    }
+
     public static ProtosForeignValueClass integral(BigInteger value) {
         return new ProtosForeignValueClass(
                 Kind.INTEGER, Objects.requireNonNull(value, "value"), null, Set.of());
@@ -104,7 +109,7 @@ public final class ProtosForeignValueClass {
         return kind;
     }
 
-    /** The scalar of a non-handle kind: Boolean, String, BigInteger, Double, or null. */
+    /** The scalar of a non-handle kind: Boolean, String, Long, BigInteger, Double, or null. */
     public Object scalar() {
         return scalar;
     }

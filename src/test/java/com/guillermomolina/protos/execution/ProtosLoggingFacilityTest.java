@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
@@ -185,10 +184,7 @@ final class ProtosLoggingFacilityTest {
                                 activation));
         assertTrue(result.isFrozen());
         assertEquals(2, result.indexedSize());
-        assertEquals(
-                coefficient,
-                ProtosTestIntegers.exact(result.indexedAt(0))
-                        .toString());
+        assertEquals(String.valueOf(coefficient), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(result.indexedAt(0)));
         assertEquals(
                 exponent,
                 ProtosNumericValueSupport.exactInt(

@@ -2,9 +2,9 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import com.guillermomolina.protos.runtime.*;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -14,7 +14,7 @@ final class ProtosTcpListenerLifecycleTest {
 
     @Test void localPortIsSynchronousSnapshotWithoutBackendEffect() throws Exception {
         Fixture x=fixture(43210); Object value=ProtosInvocation.invokeMessage(x.listener,"localPort",List.of(),x.activation);
-        assertEquals(BigInteger.valueOf(43210),ProtosTestIntegers.exact(value));
+        assertEquals(String.valueOf("43210"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         assertEquals(0,x.backend.closeStarts); assertTrue(x.listener.isOpen());
     }
 

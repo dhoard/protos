@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -27,7 +26,6 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -388,7 +386,7 @@ final class ProtosAsyncExactExecutionFacilityTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         observation.readLocalSlot("value").orElseThrow());
-        assertEquals(BigInteger.valueOf(expectedValue), ProtosTestIntegers.exact(value));
+        assertEquals(Long.toString(expectedValue), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         assertEquals(
                 expectedStdout,
                 bytesText(
@@ -410,7 +408,7 @@ final class ProtosAsyncExactExecutionFacilityTest {
                     assertInstanceOf(
                             ProtosIntegerValue.class,
                             bytes.indexedAt(index));
-            raw[index] = (byte) ProtosTestIntegers.exact(octet).intValueExact();
+            raw[index] = (byte) Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(octet));
         }
         return new String(raw, StandardCharsets.UTF_8);
     }

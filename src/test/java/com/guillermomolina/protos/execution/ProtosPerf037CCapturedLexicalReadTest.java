@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -43,7 +42,6 @@ import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.source.Source;
 import java.lang.reflect.Field;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Context;
@@ -83,12 +81,12 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                             single(instructionsOf(run, "ReadCapturedFallbackAtRoot")), "name"));
 
             for (int call = 0; call < WARM_UP_CALLS; call++) {
-                assertEquals(BigInteger.ONE, integerValue(call(run, module)));
+                assertEquals("1", integerValue(call(run, module)));
             }
             evaluate("holder.value = 5", module);
-            assertEquals(BigInteger.valueOf(5), integerValue(call(run, module)));
+            assertEquals("5", integerValue(call(run, module)));
             evaluate("holder = { value: 6 }", module);
-            assertEquals(BigInteger.valueOf(6), integerValue(call(run, module)));
+            assertEquals("6", integerValue(call(run, module)));
         });
         System.out.println("PERF037C_SLOT_READ_WORKLOAD=PASS");
     }
@@ -154,7 +152,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                     BytecodeTier.CACHED,
                     ownerRoot.getBytecodeNode().getTier(),
                     "A2 must have moved the owner root to the cached tier");
-            assertEquals(BigInteger.valueOf(10), integerValue(evaluate("observed", module)));
+            assertEquals("10", integerValue(evaluate("observed", module)));
             ProtosClosureValue second =
                     assertInstanceOf(ProtosClosureValue.class, call(secondMaker, module));
             assertSame(
@@ -167,8 +165,8 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                     () -> "the read must take the root-level materialized selection: " + names(first));
 
             for (int call = 0; call < WARM_UP_CALLS; call++) {
-                assertEquals(BigInteger.valueOf(10), integerValue(call(first, module)));
-                assertEquals(BigInteger.valueOf(10), integerValue(call(second, module)));
+                assertEquals("10", integerValue(call(first, module)));
+                assertEquals("10", integerValue(call(second, module)));
             }
             assertEquals(
                     BytecodeTier.CACHED,
@@ -180,11 +178,8 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                             .context();
             evaluate("other.value = 3", module);
             firstOwner.assignLocalSlot("holder", evaluate("other", module));
-            assertEquals(
-                    BigInteger.valueOf(3),
-                    integerValue(call(first, module)),
-                    "the current owner value is read, not a specialized copy");
-            assertEquals(BigInteger.valueOf(10), integerValue(call(second, module)));
+            assertEquals("3", integerValue(call(first, module)), "the current owner value is read, not a specialized copy");
+            assertEquals("10", integerValue(call(second, module)));
 
             /*
              * The nearer maker Context is materialized only now, through the
@@ -199,25 +194,16 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             ProtosObjectValue nearerHolder = assertInstanceOf(
                     ProtosObjectValue.class, evaluate("{ value: 7 }", module));
             firstNearer.createLocalSlot("holder", nearerHolder);
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(call(first, module)),
-                    "a later nearer binding shadows the owner");
-            assertEquals(
-                    BigInteger.valueOf(10),
-                    integerValue(call(second, module)),
-                    "another activation of the same root keeps its own scopes");
+            assertEquals("7", integerValue(call(first, module)), "a later nearer binding shadows the owner");
+            assertEquals("10", integerValue(call(second, module)), "another activation of the same root keeps its own scopes");
 
             assertSame(nearerHolder, firstNearer.removeLocalSlot("holder"));
-            assertEquals(BigInteger.valueOf(3), integerValue(call(first, module)));
+            assertEquals("3", integerValue(call(first, module)));
 
             // Removing the owner's binding retargets to the farther module binding.
             firstOwner.removeLocalSlot("holder");
-            assertEquals(
-                    BigInteger.ONE,
-                    integerValue(call(first, module)),
-                    "D179 C0: an ABSENT owner reveals the farther lexical binding");
-            assertEquals(BigInteger.valueOf(10), integerValue(call(second, module)));
+            assertEquals("1", integerValue(call(first, module)), "D179 C0: an ABSENT owner reveals the farther lexical binding");
+            assertEquals("10", integerValue(call(second, module)));
 
             // With the lexical chain exhausted and no receiver slot: SlotNotFound.
             Object moduleHolder = module.context().removeLocalSlot("holder");
@@ -230,9 +216,9 @@ final class ProtosPerf037CCapturedLexicalReadTest {
 
             // Recreating the original owner binding makes it the selection again.
             firstOwner.createLocalSlot("holder", nearerHolder);
-            assertEquals(BigInteger.valueOf(7), integerValue(call(first, module)));
+            assertEquals("7", integerValue(call(first, module)));
             module.context().createLocalSlot("holder", moduleHolder);
-            assertEquals(BigInteger.valueOf(7), integerValue(call(first, module)));
+            assertEquals("7", integerValue(call(first, module)));
         });
         System.out.println("PERF037C_NEARER_LATE_CREATION=PASS");
         System.out.println("PERF037C_OWNER_REMOVAL_RETARGETING_AND_RECREATION=PASS");
@@ -250,7 +236,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                     module);
             ProtosClosureValue reader = closure("reader", module);
             for (int call = 0; call < WARM_UP_CALLS; call++) {
-                assertEquals(BigInteger.ONE, integerValue(call(reader, module)));
+                assertEquals("1", integerValue(call(reader, module)));
             }
 
             ProtosObjectValue nearer = reader.capturedLexicalEnvironmentForRuntime().context();
@@ -299,13 +285,13 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                     bytecodeNode(readerB),
                     "both readers share one read site");
             for (int call = 0; call < WARM_UP_CALLS; call++) {
-                assertEquals(BigInteger.ONE, integerValue(call(readerA, module)));
-                assertEquals(BigInteger.TWO, integerValue(call(readerB, module)));
+                assertEquals("1", integerValue(call(readerA, module)));
+                assertEquals("2", integerValue(call(readerB, module)));
             }
 
             ProtosObjectValue ownerA = readerA.capturedLexicalEnvironmentForRuntime().context();
-            assertEquals(BigInteger.ONE, integerValue(call(readerA, module)));
-            assertEquals(BigInteger.TWO, integerValue(call(readerB, module)));
+            assertEquals("1", integerValue(call(readerA, module)));
+            assertEquals("2", integerValue(call(readerB, module)));
 
             ownerA.removeLocalSlot("slot");
             ProtosSignalException absent =
@@ -313,16 +299,13 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             assertSame(
                     ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
                     absent.error().parent().orElse(null));
-            assertEquals(
-                    BigInteger.TWO,
-                    integerValue(call(readerB, module)),
-                    "the other activation's owner is unaffected");
+            assertEquals("2", integerValue(call(readerB, module)), "the other activation's owner is unaffected");
 
             ownerA.createLocalSlot("slot", ProtosNullValue.INSTANCE);
             assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
             for (int call = 0; call < WARM_UP_CALLS; call++) {
                 assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
-                assertEquals(BigInteger.TWO, integerValue(call(readerB, module)));
+                assertEquals("2", integerValue(call(readerB, module)));
             }
 
             // Later removals, with the no-selection outcome already seen, stay exact.
@@ -335,11 +318,11 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                             ProtosCoreErrors.prototype(
                                     module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
                             again.error().parent().orElse(null));
-                    assertEquals(BigInteger.TWO, integerValue(call(readerB, module)));
+                    assertEquals("2", integerValue(call(readerB, module)));
                 }
                 ownerA.createLocalSlot("slot", ProtosNullValue.INSTANCE);
                 assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
-                assertEquals(BigInteger.TWO, integerValue(call(readerB, module)));
+                assertEquals("2", integerValue(call(readerB, module)));
             }
         });
         System.out.println("PERF037D_OWNER_REPRESENTATION_PROFILES=PASS");
@@ -457,7 +440,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             ProtosClosureValue readerA = closure("readerA", module);
             ProtosClosureValue readerB = closure("readerB", module);
             for (int call = 0; call < WARM_UP_CALLS; call++) {
-                assertEquals(BigInteger.ONE, integerValue(call(readerA, module)));
+                assertEquals("1", integerValue(call(readerA, module)));
             }
             ProtosBytecodeRootNode.CapturedOwnerFrameCache cache = ownerFrameCache(readerA);
             assertTrue(cache.isRecordedForTesting(), "the PRESENT owner was recorded");
@@ -466,8 +449,8 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                     continuity != null && continuity.isValid(),
                     "a PRESENT binding admits its valid continuity token");
             for (int call = 0; call < WARM_UP_CALLS; call++) {
-                assertEquals(BigInteger.ONE, integerValue(call(readerA, module)));
-                assertEquals(BigInteger.TWO, integerValue(call(readerB, module)));
+                assertEquals("1", integerValue(call(readerA, module)));
+                assertEquals("2", integerValue(call(readerB, module)));
             }
             assertTrue(continuity.isValid(), "reads never invalidate the token");
 
@@ -475,10 +458,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             ProtosObjectValue ownerB = readerB.capturedLexicalEnvironmentForRuntime().context();
             ownerB.removeLocalSlot("slot");
             assertFalse(continuity.isValid(), "the token is shared by the layout");
-            assertEquals(
-                    BigInteger.ONE,
-                    integerValue(call(readerA, module)),
-                    "a still PRESENT owner is read through the physical check");
+            assertEquals("1", integerValue(call(readerA, module)), "a still PRESENT owner is read through the physical check");
             assertSlotNotFound(module, () -> call(readerB, module));
 
             ProtosObjectValue ownerA = readerA.capturedLexicalEnvironmentForRuntime().context();
@@ -493,7 +473,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                 assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
             }
             ownerB.createLocalSlot("slot", evaluate("10", module));
-            assertEquals(BigInteger.TEN, integerValue(call(readerB, module)));
+            assertEquals("10", integerValue(call(readerB, module)));
         });
         System.out.println("PERF037D_PRESENT_CONTINUITY_CACHE=PASS");
     }
@@ -518,10 +498,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             ProtosObjectValue owner = reader.capturedLexicalEnvironmentForRuntime().context();
             owner.removeLocalSlot("slot");
             for (int call = 0; call < WARM_UP_CALLS; call++) {
-                assertEquals(
-                        BigInteger.ZERO,
-                        integerValue(call(reader, module)),
-                        "D179 C0: an ABSENT owner reveals the farther binding");
+                assertEquals("0", integerValue(call(reader, module)), "D179 C0: an ABSENT owner reveals the farther binding");
             }
             ProtosBytecodeRootNode.CapturedOwnerFrameCache cache = ownerFrameCache(reader);
             if (cache.isRecordedForTesting()) {
@@ -534,7 +511,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                 assertSame(ProtosNullValue.INSTANCE, call(reader, module));
             }
             owner.removeLocalSlot("slot");
-            assertEquals(BigInteger.ZERO, integerValue(call(reader, module)));
+            assertEquals("0", integerValue(call(reader, module)));
         });
         System.out.println("PERF037D_ABSENT_ADMITS_NO_CONTINUITY=PASS");
     }
@@ -676,8 +653,8 @@ final class ProtosPerf037CCapturedLexicalReadTest {
         };
     }
 
-    private static BigInteger integerValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 
     private static void assertSlotNotFound(ProtosActivation module, Executable read) {

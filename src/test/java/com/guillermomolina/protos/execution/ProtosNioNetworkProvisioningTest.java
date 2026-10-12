@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
@@ -268,8 +267,7 @@ final class ProtosNioNetworkProvisioningTest {
         ArrayList<Integer> result = new ArrayList<>();
         for (Object value : bytes.indexedSnapshot()) {
             result.add(
-                    ProtosTestIntegers.exact(value)
-                            .intValueExact());
+                    Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value)));
         }
         return result;
     }

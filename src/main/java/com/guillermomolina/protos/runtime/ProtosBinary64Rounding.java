@@ -320,31 +320,77 @@ public final class ProtosBinary64Rounding {
      * rational: negative, zero or positive as the rational is below, equal to or above it. The
      * rational is never rounded; normal, subnormal, signed-zero and infinite values are exact.
      */
-    @TruffleBoundary
     public static int compareRationalToBinary64(
             Object numerator, Object denominator, double value) {
         if (Double.isNaN(value)) {
             throw new IllegalArgumentException("NaN has no order");
         }
-        BigInteger n = ProtosNumericValueSupport.exactBigInteger(numerator);
-        BigInteger d = ProtosNumericValueSupport.exactBigInteger(denominator);
-        if (d.signum() <= 0) {
+        if (ProtosNumericValueSupport.integerSignum(denominator) <= 0) {
             throw new IllegalArgumentException("denominator must be positive");
         }
         if (Double.isInfinite(value)) {
             return value > 0.0d ? -1 : 1;
         }
         if (value == 0.0d) {
-            return n.signum();
+            return ProtosNumericValueSupport.integerSignum(numerator);
         }
+
+        if (numerator instanceof ProtosIntegerValue compactNumerator
+                && denominator instanceof ProtosIntegerValue compactDenominator) {
+            long rawBits = Double.doubleToRawLongBits(value);
+            int exponentField = (int) ((rawBits >>> 52) & 0x7ffL);
+            long significand = exponentField == 0
+                    ? rawBits & 0x000fffffffffffffL
+                    : binary64Significand(rawBits);
+            int shift = exponentField == 0 ? -1074 : binary64Shift(rawBits);
+
+            if (shift < 0) {
+                int power = -shift;
+                int cancelled =
+                        Math.min(power, Long.numberOfTrailingZeros(significand));
+                significand >>>= cancelled;
+                power -= cancelled;
+
+                if (power <= 62) {
+                    long binaryNumerator =
+                            value < 0.0d ? -significand : significand;
+                    long binaryDenominator = 1L << power;
+
+                    return ProtosNumericValueSupport.compareSignedProducts(
+                            compactNumerator.longValue(), binaryDenominator,
+                            binaryNumerator, compactDenominator.longValue());
+                }
+            } else if (shift < Long.numberOfLeadingZeros(significand)) {
+                long integer = significand << shift;
+                long binaryInteger = value < 0.0d ? -integer : integer;
+
+                return ProtosNumericValueSupport.compareSignedProducts(
+                        compactNumerator.longValue(), 1L,
+                        binaryInteger, compactDenominator.longValue());
+            }
+        }
+
+        return compareLargeRationalToBinary64(numerator, denominator, value);
+    }
+
+    /**
+     * Rare arbitrary-magnitude or extreme-exponent fallback.
+     * Kept outside the ordinary primitive comparison compilation path.
+     */
+    @TruffleBoundary
+    private static int compareLargeRationalToBinary64(
+            Object numerator, Object denominator, double value) {
+        BigInteger n = ProtosNumericValueSupport.exactBigInteger(numerator);
+        BigInteger d = ProtosNumericValueSupport.exactBigInteger(denominator);
         long rawBits = Double.doubleToRawLongBits(value);
         int exponentField = (int) ((rawBits >>> 52) & 0x7ffL);
         long significand = exponentField == 0
                 ? rawBits & 0x000fffffffffffffL
                 : binary64Significand(rawBits);
         int shift = exponentField == 0 ? -1074 : binary64Shift(rawBits);
-        BigInteger represented = BigInteger.valueOf(value < 0.0d ? -significand : significand);
-        // n/d <=> m*2^shift with d > 0: scale both sides to integers without dividing.
+        BigInteger represented =
+                BigInteger.valueOf(value < 0.0d ? -significand : significand);
+
         BigInteger left = shift < 0 ? n.shiftLeft(-shift) : n;
         BigInteger right = represented.multiply(d);
         if (shift > 0) {

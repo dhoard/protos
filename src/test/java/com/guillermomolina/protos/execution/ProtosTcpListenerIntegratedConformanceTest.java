@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -43,7 +42,7 @@ import com.guillermomolina.protos.runtime.ProtosTcpListenerFlow;
 import com.guillermomolina.protos.runtime.ProtosTcpListenerValue;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -81,9 +80,7 @@ final class ProtosTcpListenerIntegratedConformanceTest {
         assertTrue(listener.isOpen());
         assertTrue(listener.hasAcceptForRuntime());
         assertEquals(0, listenerRelease.get());
-        assertEquals(
-                BigInteger.valueOf(51000),
-                ProtosTestIntegers.exact(ProtosInvocation.invokeMessage(
+        assertEquals(String.valueOf("51000"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosInvocation.invokeMessage(
                                         listener, "localPort", List.of(), x.activation)));
 
         ProtosIntegerValue marker = integer(7);

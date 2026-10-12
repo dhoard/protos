@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -199,7 +198,7 @@ final class ProtosNioTcpListenerBackendTest {
         ProtosObjectValue request = new ProtosObjectValue(ProtosObjectValue.rootObject());
         request.createLocalSlot("ipVersion", integer(version));
         request.createLocalSlot("address", address == null ? ProtosNullValue.INSTANCE : address);
-        request.createLocalSlot("port", port == null ? ProtosNullValue.INSTANCE : ProtosTestIntegers.integer(port, x.prelude));
+        request.createLocalSlot("port", port == null ? ProtosNullValue.INSTANCE : com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(port, x.prelude));
         return assertInstanceOf(
                 ProtosFutureValue.class,
                 ProtosInvocation.invokeMessage(
@@ -225,7 +224,7 @@ final class ProtosNioTcpListenerBackendTest {
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         factory,
-                        List.of(integer(version), ProtosTestIntegers.integer(bits, x.prelude)),
+                        List.of(integer(version), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(bits, x.prelude)),
                         x.activation);
     }
 
@@ -234,8 +233,7 @@ final class ProtosNioTcpListenerBackendTest {
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         endpoint.readLocalSlot("address").orElseThrow());
-        return ProtosTestIntegers.exact(address.readLocalSlot("version").orElseThrow())
-                .intValueExact();
+        return Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(address.readLocalSlot("version").orElseThrow()));
     }
 
     private static SocketChannel connect4(int port) throws Exception {

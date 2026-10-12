@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.execution.ProtosExecutionOutcome;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution;
 import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
@@ -28,7 +27,6 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,7 +57,7 @@ final class ProtosStandaloneHostedExecutionEmbeddingTest {
 
                 fibonacci(10)
                 """,
-                new BigInteger("55"));
+                55L);
     }
 
     @Test
@@ -78,7 +76,7 @@ final class ProtosStandaloneHostedExecutionEmbeddingTest {
 
                 factorial(8)
                 """,
-                new BigInteger("40320"));
+                40320L);
     }
 
     @Test
@@ -90,9 +88,7 @@ final class ProtosStandaloneHostedExecutionEmbeddingTest {
             ProtosExecutionOutcome outcome =
                     ProtosStandaloneHostedExecution.executeFile(CORE, source);
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-            assertEquals(
-                    BigInteger.valueOf(42),
-                    ProtosTestIntegers.exact(outcome.value()));
+            assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(outcome.value()));
         }
     }
 
@@ -139,14 +135,13 @@ final class ProtosStandaloneHostedExecutionEmbeddingTest {
         assertSame(result.indexedAt(1), network.representedDelegationParent(null));
     }
 
-    private void assertTerminalInteger(String source, BigInteger expected) throws Exception {
+    private void assertTerminalInteger(String source, long expected) throws Exception {
         Path file = directory.resolve("workload.protos");
         Files.writeString(file, source, StandardCharsets.UTF_8);
 
         ProtosExecutionOutcome outcome = ProtosStandaloneHostedExecution.executeFile(CORE, file);
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertEquals(
-                expected, ProtosTestIntegers.exact(outcome.value()));
+        assertEquals(String.valueOf(String.valueOf(expected)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(outcome.value()));
     }
 }

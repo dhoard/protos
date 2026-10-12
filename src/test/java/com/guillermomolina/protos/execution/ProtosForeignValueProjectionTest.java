@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -132,9 +131,7 @@ class ProtosForeignValueProjectionTest {
                     .member("cls", new Fake(false, Capability.INSTANTIABLE))
                     .member("obj", new Fake(false).member("method", adder(provider)));
 
-            assertEquals(
-                    BigInteger.valueOf(6),
-                    ProtosTestIntegers.exact(fixture.eval(M + "f: m.fn\nf(1, 2, 3, \"s\", 1.5, true, null)")));
+            assertEquals(String.valueOf("6"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fixture.eval(M + "f: m.fn\nf(1, 2, 3, \"s\", 1.5, true, null)")));
             List<ProtosForeignArgument> received = provider.executions.get(0);
             assertEquals(
                     List.of(
@@ -154,13 +151,9 @@ class ProtosForeignValueProjectionTest {
             assertEquals(1, provider.executions.size());
 
             provider.events.clear();
-            assertEquals(
-                    BigInteger.valueOf(5),
-                    ProtosTestIntegers.exact(fixture.eval(M + "m.obj.method(2, 3)")));
+            assertEquals(String.valueOf("5"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fixture.eval(M + "m.obj.method(2, 3)")));
             assertEquals(1, provider.count("read:method"));
-            assertEquals(
-                    BigInteger.valueOf(4),
-                    ProtosTestIntegers.exact(fixture.eval(M + "m.fn(4)")));
+            assertEquals(String.valueOf("4"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fixture.eval(M + "m.fn(4)")));
             assertEquals(1, provider.count("read:fn"));
         }
     }
@@ -174,9 +167,9 @@ class ProtosForeignValueProjectionTest {
         try (ProtosForeignValueFixture fixture =
                 fixture(new Fake(false).member("array", array).member("both", both))) {
             String a = M + "a: m.array\n";
-            assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(fixture.eval(a + "a[0]")));
+            assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fixture.eval(a + "a[0]")));
             assertEquals("two", ((ProtosStringValue) fixture.eval(a + "a.at(1)")).value());
-            assertEquals(BigInteger.valueOf(9), ProtosTestIntegers.exact(fixture.eval(a + "a[0] = 9")));
+            assertEquals(String.valueOf("9"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fixture.eval(a + "a[0] = 9")));
             assertEquals(BigInteger.valueOf(9), array.elements.get(0));
             assertMissing(fixture, fixture.failure(M + "b: m.both\nb[0]"));
             assertSame(ProtosObjectValue.rootObject(), fixture.eval(a + "a.parent()"));
@@ -265,7 +258,7 @@ class ProtosForeignValueProjectionTest {
                 TWO_POW_63.negate().subtract(BigInteger.ONE)};
             for (int index = 0; index < spellings.length; index++) {
                 Object admitted = fixture.eval(M + "m.echo(" + spellings[index] + ")");
-                assertEquals(values[index], ProtosTestIntegers.exact(admitted), spellings[index]);
+                assertEquals(String.valueOf(values[index]), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(admitted), spellings[index]);
                 Object outbound = fixture.provider.executions.get(index).get(0).value();
                 // Outbound: signed-64 as a Long, a BigInteger only beyond that range.
                 if (values[index].bitLength() < Long.SIZE) {
@@ -330,7 +323,7 @@ class ProtosForeignValueProjectionTest {
                     .member("viaCallback", viaCallback)
                     .member("other", new Fake(false));
             // The callback receives the admitted large Integer and returns a large one.
-            assertEquals(TWO_POW_63.add(BigInteger.ONE), ProtosTestIntegers.exact(
+            assertEquals((TWO_POW_63.add(BigInteger.ONE)).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                     fixture.eval(M + "m.viaCallback((x) => x + 1)")));
             assertSame(ProtosBooleanValue.TRUE, fixture.eval(
                     M + "m.viaCallback((x) => (x.parent() === BigInteger).ifTrue() { x })"
@@ -367,7 +360,7 @@ class ProtosForeignValueProjectionTest {
                     ((ProtosObjectValue) fromLeft).parent().orElseThrow());
             assertSame(right.prelude.bigIntegerPrototype(),
                     ((ProtosObjectValue) fromRight).parent().orElseThrow());
-            assertEquals(ProtosTestIntegers.exact(fromLeft), ProtosTestIntegers.exact(fromRight));
+            assertEquals(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fromLeft), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fromRight));
         }
     }
 

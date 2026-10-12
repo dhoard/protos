@@ -1,7 +1,6 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -22,7 +21,6 @@ import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
 import com.guillermomolina.protos.runtime.ProtosTcpListenerValue;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -213,7 +211,7 @@ final class ProtosNetworkingFoundationFinalConformanceTest {
         List<Object> actual = bytes.indexedSnapshot();
         assertEquals(expected.length, actual.size());
         for (int i = 0; i < expected.length; i++) {
-            assertEquals(BigInteger.valueOf(expected[i]), ProtosTestIntegers.exact(actual.get(i)));
+            assertEquals(Long.toString(expected[i]), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(actual.get(i)));
         }
     }
 

@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -165,9 +164,7 @@ class ProtosForeignInteropTest {
             // Not faithful for ordinary reads, yet reachable explicitly; results are D188-admitted.
             assertMissing(fixture, fixture.failure(h + "h.secret"));
             assertEquals(0, provider.count("read:secret"));
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    ProtosTestIntegers.exact(fixture.eval(h + "I.readMember(h, \"secret\")")));
+            assertEquals(String.valueOf("7"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fixture.eval(h + "I.readMember(h, \"secret\")")));
             assertInstanceOf(
                     ProtosRawForeignValue.class, fixture.eval(h + "I.readMember(h, \"child\")"));
         }
@@ -225,10 +222,7 @@ class ProtosForeignInteropTest {
                 assertEquals("constructed", text(fixture.eval(a + "I.instantiate(a)")), input);
                 assertEquals(
                         "foreign call", text(fixture.eval(a + "I.readMember(a, \"call\")")), input);
-                assertEquals(
-                        BigInteger.valueOf(3),
-                        ProtosTestIntegers.exact(fixture.eval(a + "I.writeMember(a, \"z\", 3)")),
-                        input);
+                assertEquals(String.valueOf("3"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fixture.eval(a + "I.writeMember(a, \"z\", 3)")), input);
             }
             assertEquals(2, fixture.provider.count("write:z"));
             // The facade keeps its Protos-facing identity and gains no slot from the write.
@@ -453,8 +447,11 @@ class ProtosForeignInteropTest {
         ProtosForeignValueClass large = integral.classify(null, Value.asValue(huge));
         assertEquals(ProtosForeignValueClass.Kind.INTEGER, large.kind());
         assertEquals(huge, large.scalar());
-        assertEquals(BigInteger.valueOf(Long.MIN_VALUE),
+        assertEquals(Long.MIN_VALUE,
                 integral.classify(null, Value.asValue(Long.MIN_VALUE)).scalar());
+        assertInstanceOf(Long.class,
+                integral.classify(null, Value.asValue(7L)).scalar());
+        assertTrue(integral.supportsLongIntegerArguments());
         // A declared integral family must actually be integral; a Float is never converted.
         assertThrows(IllegalStateException.class,
                 () -> integral.classify(null, Value.asValue(1.5d)));
@@ -497,7 +494,10 @@ class ProtosForeignInteropTest {
                     new ProtosPolyglotValueOperations("test", value -> ProtosForeignScalarFamily.INTEGRAL);
             operations.readElement(null, array, integerArgument(BigInteger.ZERO));
             operations.readElement(null, array, integerArgument(BigInteger.valueOf(Long.MAX_VALUE)));
-            assertEquals(List.of(0L, Long.MAX_VALUE), requested);
+            operations.readElement(null, array,
+                    new ProtosForeignArgumentValue(
+                            ProtosForeignValueClass.Kind.INTEGER, 0L));
+            assertEquals(List.of(0L, Long.MAX_VALUE, 0L), requested);
 
             for (BigInteger invalid : List.of(
                     TWO_POW_63, BigInteger.ONE.negate(), BigInteger.valueOf(Long.MIN_VALUE),
@@ -513,7 +513,11 @@ class ProtosForeignInteropTest {
             assertThrows(IllegalArgumentException.class,
                     () -> operations.readElement(null, array, new ProtosForeignArgumentValue(
                             ProtosForeignValueClass.Kind.BINARY64, 0.0d)));
-            assertEquals(List.of(0L, Long.MAX_VALUE), requested);
+            assertThrows(IllegalArgumentException.class,
+                    () -> operations.readElement(null, array,
+                            new ProtosForeignArgumentValue(
+                                    ProtosForeignValueClass.Kind.INTEGER, -1L)));
+            assertEquals(List.of(0L, Long.MAX_VALUE, 0L), requested);
         }
     }
 
@@ -531,12 +535,15 @@ class ProtosForeignInteropTest {
             operations.execute(null, executable, List.of(
                     integerArgument(BigInteger.valueOf(Long.MAX_VALUE)),
                     integerArgument(TWO_POW_63),
-                    integerArgument(huge.negate())));
+                    integerArgument(huge.negate()),
+                    new ProtosForeignArgumentValue(
+                            ProtosForeignValueClass.Kind.INTEGER, 7L)));
             assertTrue(received.get(0).fitsInLong());
             assertEquals(Long.MAX_VALUE, received.get(0).asLong());
             assertTrue(!received.get(1).fitsInLong() && received.get(1).fitsInBigInteger());
             assertEquals(TWO_POW_63, received.get(1).asBigInteger());
             assertEquals(huge.negate(), received.get(2).asBigInteger());
+            assertEquals(7L, received.get(3).asLong());
         }
     }
 

@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -31,7 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -55,20 +54,12 @@ class ProtosArrayConformanceCompletionTest {
                                 new ProtosIntegerValue(2L)));
         activation.context().createLocalSlot("xs", xs);
 
-        assertEquals(
-                BigInteger.TWO,
-                ProtosTestIntegers.exact(execute(activation, "xs.size()")));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(execute(activation, "xs.size()")));
 
         xs.close();
-        assertEquals(
-                BigInteger.TWO,
-                ProtosTestIntegers.exact(execute(activation, "xs[0] = 2")));
-        assertEquals(
-                BigInteger.TWO,
-                ProtosTestIntegers.exact(xs.indexedAt(0)));
-        assertEquals(
-                BigInteger.TWO,
-                ProtosTestIntegers.exact(execute(activation, "xs.size()")));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(execute(activation, "xs[0] = 2")));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(xs.indexedAt(0)));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(execute(activation, "xs.size()")));
 
         xs.freeze();
         ProtosSignalException signal =
@@ -76,12 +67,8 @@ class ProtosArrayConformanceCompletionTest {
                         ProtosSignalException.class,
                         () -> execute(activation, "xs[0] = 3"));
         assertSame(prelude.errorPrototype(), signal.error().parent().orElseThrow());
-        assertEquals(
-                BigInteger.TWO,
-                ProtosTestIntegers.exact(xs.indexedAt(0)));
-        assertEquals(
-                BigInteger.TWO,
-                ProtosTestIntegers.exact(execute(activation, "xs.size()")));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(xs.indexedAt(0)));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(execute(activation, "xs.size()")));
     }
 
     @Test
@@ -112,9 +99,7 @@ class ProtosArrayConformanceCompletionTest {
 
         assertSame(error, signal.error());
         assertEquals(1, seen.size());
-        assertEquals(
-                BigInteger.ONE,
-                ProtosTestIntegers.exact(seen.get(0)));
+        assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(seen.get(0)));
     }
 
     private static Object execute(ProtosActivation activation, String source) {

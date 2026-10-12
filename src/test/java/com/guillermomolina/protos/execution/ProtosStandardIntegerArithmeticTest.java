@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -178,9 +177,7 @@ class ProtosStandardIntegerArithmeticTest {
                                 ProtosIntegerValue.class,
                                 direct(prelude, "-", promotedAdd, new ProtosIntegerValue(1L)))
                         .longValue());
-        assertEquals(
-                BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE),
-                ProtosTestIntegers.exact(promotedAdd));
+        assertEquals((BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE)).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(promotedAdd));
 
         ProtosLargeIntegerValue promotedDivision =
                 assertInstanceOf(
@@ -190,41 +187,31 @@ class ProtosStandardIntegerArithmeticTest {
                                 "div",
                                 new ProtosIntegerValue(Long.MIN_VALUE),
                                 new ProtosIntegerValue(-1L)));
-        assertEquals(
-                BigInteger.valueOf(Long.MIN_VALUE).negate(),
-                ProtosTestIntegers.exact(promotedDivision));
+        assertEquals((BigInteger.valueOf(Long.MIN_VALUE).negate()).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(promotedDivision));
 
         Object add =
                 direct(prelude, "+",
-                        ProtosTestIntegers.integer(huge, prelude),
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude),
                         new ProtosIntegerValue(1L));
-        assertEquals(
-                huge.add(BigInteger.ONE),
-                ProtosTestIntegers.exact(add));
+        assertEquals((huge.add(BigInteger.ONE)).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(add));
 
         Object multiply =
                 direct(prelude, "*",
-                        ProtosTestIntegers.integer(huge, prelude),
-                        ProtosTestIntegers.integer(huge, prelude));
-        assertEquals(
-                huge.multiply(huge),
-                ProtosTestIntegers.exact(multiply));
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude),
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude));
+        assertEquals(String.valueOf(huge.multiply(huge)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(multiply));
 
         Object quotient =
                 direct(prelude, "div",
-                        ProtosTestIntegers.integer(huge, prelude),
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude),
                         new ProtosIntegerValue(7));
-        assertEquals(
-                huge.divide(BigInteger.valueOf(7)),
-                ProtosTestIntegers.exact(quotient));
+        assertEquals((huge.divide(BigInteger.valueOf(7))).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(quotient));
 
         Object remainder =
                 direct(prelude, "mod",
-                        ProtosTestIntegers.integer(huge, prelude),
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude),
                         new ProtosIntegerValue(7));
-        assertEquals(
-                huge.remainder(BigInteger.valueOf(7)),
-                ProtosTestIntegers.exact(remainder));
+        assertEquals((huge.remainder(BigInteger.valueOf(7))).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(remainder));
 
         assertNull(
                 direct(prelude, "+",
@@ -270,7 +257,7 @@ class ProtosStandardIntegerArithmeticTest {
         ProtosFloatValue invalidProduct = assertInstanceOf(
                 ProtosFloatValue.class,
                 direct(prelude, "*",
-                        ProtosTestIntegers.integer(huge, prelude),
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude),
                         new ProtosFloatValue(0.0)));
         assertTrue(Double.isNaN(invalidProduct.value()));
 

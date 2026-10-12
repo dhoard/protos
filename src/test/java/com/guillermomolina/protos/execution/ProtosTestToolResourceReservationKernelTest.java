@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -27,7 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -55,7 +54,7 @@ final class ProtosTestToolResourceReservationKernelTest {
         ProtosArrayValue held = arrayAt(observed, 0);
         assertEquals(0, held.indexedSize());
         assertTrue(held.isFrozen());
-        assertEquals(BigInteger.ZERO, ProtosTestIntegers.exact(integerAt(observed, 1)));
+        assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 1)));
         assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(2));
     }
 
@@ -85,12 +84,12 @@ final class ProtosTestToolResourceReservationKernelTest {
         assertInstanceOf(ProtosArrayValue.class, observed.indexedAt(0));
         assertInstanceOf(ProtosArrayValue.class, observed.indexedAt(1));
         assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(2));
-        assertEquals(BigInteger.valueOf(4), ProtosTestIntegers.exact(integerAt(observed, 3)));
-        assertEquals(BigInteger.valueOf(2), ProtosTestIntegers.exact(integerAt(observed, 4)));
+        assertEquals(String.valueOf("4"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 3)));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 4)));
         assertInstanceOf(
                 ProtosArrayValue.class, observed.indexedAt(5));
-        assertEquals(BigInteger.valueOf(3), ProtosTestIntegers.exact(integerAt(observed, 6)));
-        assertEquals(BigInteger.valueOf(2), ProtosTestIntegers.exact(integerAt(observed, 7)));
+        assertEquals(String.valueOf("3"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 6)));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 7)));
     }
 
     @Test
@@ -124,7 +123,7 @@ final class ProtosTestToolResourceReservationKernelTest {
         assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(2));
         assertInstanceOf(
                 ProtosArrayValue.class, observed.indexedAt(3));
-        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(integerAt(observed, 4)));
+        assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 4)));
     }
 
     @Test
@@ -167,9 +166,9 @@ final class ProtosTestToolResourceReservationKernelTest {
 
         ProtosArrayValue observed = completedArray(source);
         assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(0));
-        assertEquals(BigInteger.ZERO, ProtosTestIntegers.exact(integerAt(observed, 1)));
+        assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 1)));
         assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(2));
-        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(integerAt(observed, 3)));
+        assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 3)));
     }
 
     @Test
@@ -199,8 +198,8 @@ final class ProtosTestToolResourceReservationKernelTest {
 
         ProtosArrayValue observed = completedArray(source);
         assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(0));
-        assertEquals(BigInteger.valueOf(2), ProtosTestIntegers.exact(integerAt(observed, 1)));
-        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(integerAt(observed, 2)));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 1)));
+        assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 2)));
         assertInstanceOf(
                 ProtosArrayValue.class, observed.indexedAt(3));
     }

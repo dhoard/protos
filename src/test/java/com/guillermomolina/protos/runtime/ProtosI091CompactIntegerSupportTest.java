@@ -50,9 +50,7 @@ final class ProtosI091CompactIntegerSupportTest {
         ProtosLargeIntegerValue beyondLong = assertInstanceOf(
                 ProtosLargeIntegerValue.class,
                 ProtosNumericValueSupport.integerFromUnsignedBigEndian(allOnes, PROTOTYPE));
-        assertEquals(
-                BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE),
-                ProtosTestIntegers.exact(beyondLong));
+        assertEquals((BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE)).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(beyondLong));
         assertArrayEquals(allOnes, ProtosNumericValueSupport.unsignedBigEndianOrNull(beyondLong, 8));
 
         byte[] ipv6 = new byte[16];
@@ -104,7 +102,7 @@ final class ProtosI091CompactIntegerSupportTest {
                 } else {
                     assertInstanceOf(ProtosLargeIntegerValue.class, decoded);
                 }
-                assertEquals(expected, ProtosTestIntegers.exact(decoded), "width " + width);
+                assertEquals(String.valueOf(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(decoded), "width " + width);
                 assertArrayEquals(
                         octets, ProtosNumericValueSupport.unsignedBigEndianOrNull(decoded, width));
             }
@@ -114,7 +112,7 @@ final class ProtosI091CompactIntegerSupportTest {
         Object twoPow63 = ProtosNumericValueSupport.integerFromUnsignedBigEndian(
                 new byte[] {(byte) 0x80, 0, 0, 0, 0, 0, 0, 0}, PROTOTYPE);
         assertInstanceOf(ProtosLargeIntegerValue.class, twoPow63);
-        assertEquals(two63, ProtosTestIntegers.exact(twoPow63));
+        assertEquals(String.valueOf(two63), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(twoPow63));
         assertSmall(Long.MAX_VALUE, ProtosNumericValueSupport.integerFromUnsignedBigEndian(
                 new byte[] {0x7f, -1, -1, -1, -1, -1, -1, -1}, (ProtosPrelude) null));
     }
@@ -152,7 +150,7 @@ final class ProtosI091CompactIntegerSupportTest {
         BigInteger huge = BigInteger.ONE.shiftLeft(100).negate();
         assertEquals(
                 huge.hashCode(),
-                ProtosNumericValueSupport.integerHashCode(ProtosTestIntegers.integer(huge)));
+                ProtosNumericValueSupport.integerHashCode(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(huge, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
     }
 
     @Test
@@ -177,7 +175,7 @@ final class ProtosI091CompactIntegerSupportTest {
         assertTrue(interop.fitsInFloat(new ProtosIntegerValue(1L << 24)));
         assertFalse(interop.fitsInFloat(new ProtosIntegerValue((1L << 24) + 1L)));
 
-        Object twoPow64 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64));
+        Object twoPow64 = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(64), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         assertFalse(interop.fitsInLong(twoPow64));
         assertTrue(interop.fitsInDouble(twoPow64));
         assertEquals(0x1p64, interop.asDouble(twoPow64));
@@ -225,9 +223,9 @@ final class ProtosI091CompactIntegerSupportTest {
 
     @Test
     void smallDividedByBigNeedsNoArbitraryPrecisionAndStaysExact() {
-        Object twoPow63 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63));
-        Object twoPow70 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(70));
-        Object negativeTwoPow70 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(70).negate());
+        Object twoPow63 = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(63), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
+        Object twoPow70 = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(70), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
+        Object negativeTwoPow70 = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(70).negate(), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         ProtosIntegerValue minLong = new ProtosIntegerValue(Long.MIN_VALUE);
         ProtosIntegerValue five = new ProtosIntegerValue(5L);
         ProtosIntegerValue minusFive = new ProtosIntegerValue(-5L);
@@ -243,25 +241,23 @@ final class ProtosI091CompactIntegerSupportTest {
         assertSmall(Long.MIN_VALUE,
                 ProtosNumericValueSupport.remainderIntegers(minLong, negativeTwoPow70, null));
         assertSmall(0L, ProtosNumericValueSupport.quotientIntegers(
-                minLong, ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63).add(BigInteger.ONE)),
+                minLong, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(63).add(BigInteger.ONE), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()),
                 null));
 
         BigInteger big = BigInteger.ONE.shiftLeft(63).add(BigInteger.TWO);
         for (long dividend : new long[] {Long.MIN_VALUE, Long.MAX_VALUE, -1L, 0L, 7L}) {
             ProtosIntegerValue left = new ProtosIntegerValue(dividend);
-            Object right = ProtosTestIntegers.integer(big);
-            assertEquals(BigInteger.valueOf(dividend).divide(big),
-                    ProtosTestIntegers.exact(
+            Object right = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(big, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
+            assertEquals((BigInteger.valueOf(dividend).divide(big)).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                             ProtosNumericValueSupport.quotientIntegers(left, right, null)));
-            assertEquals(BigInteger.valueOf(dividend).remainder(big),
-                    ProtosTestIntegers.exact(
+            assertEquals((BigInteger.valueOf(dividend).remainder(big)).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                             ProtosNumericValueSupport.remainderIntegers(left, right, null)));
         }
     }
 
     @Test
     void arithmeticNormalizesInBothDirectionsAtTheSignedLongBoundary() {
-        Object large = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63));
+        Object large = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(63), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         assertInstanceOf(ProtosLargeIntegerValue.class, large);
         // Demotion: an exact result back inside the signed-64 range is a ProtosIntegerValue,
         // so no owner Prelude is needed for it.
@@ -288,7 +284,7 @@ final class ProtosI091CompactIntegerSupportTest {
         assertSmall(0L, ProtosNumericValueSupport.quotientIntegers(
                 new ProtosIntegerValue(5L), large, null));
         assertNull(ProtosNumericValueSupport.addIntegers(
-                large, ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63)), null));
+                large, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(63), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()), null));
         // A large operand whose exact result is back inside the range needs no Prelude.
         assertSmall(Long.MAX_VALUE,
                 ProtosNumericValueSupport.addIntegers(large, new ProtosIntegerValue(-1L), null));
@@ -301,7 +297,7 @@ final class ProtosI091CompactIntegerSupportTest {
         assertEquals("0", new ProtosIntegerValue(0L).decimalTextForRuntime());
         BigInteger huge = BigInteger.ONE.shiftLeft(100).negate();
         assertEquals(huge.toString(),
-                ProtosNumericValueSupport.integerDecimalText(ProtosTestIntegers.integer(huge)));
+                ProtosNumericValueSupport.integerDecimalText(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(huge, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
     }
 
     @Test

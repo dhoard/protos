@@ -35,7 +35,7 @@ import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -64,8 +64,8 @@ final class ProtosFractionSemanticsTest {
         assertThrows(ArithmeticException.class, () -> divide(1, 0, prelude));
 
         // Components beyond signed-64 normalize exactly and demote when they cancel.
-        Object big = ProtosTestIntegers.integer(TWO_POW_64.multiply(BigInteger.valueOf(3)), prelude);
-        Object bigDivisor = ProtosTestIntegers.integer(TWO_POW_64, prelude);
+        Object big = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_64.multiply(BigInteger.valueOf(3)), prelude);
+        Object bigDivisor = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_64, prelude);
         assertEquals(3L, small(ProtosNumericValueSupport.divideIntegersExactly(
                 big, bigDivisor, prelude)));
         Object wide = ProtosNumericValueSupport.divideIntegersExactly(
@@ -79,6 +79,50 @@ final class ProtosFractionSemanticsTest {
                 new ProtosIntegerValue(1L), new ProtosIntegerValue(3L), null));
         assertEquals(2L, small(ProtosNumericValueSupport.divideIntegersExactly(
                 new ProtosIntegerValue(6L), new ProtosIntegerValue(3L), null)));
+    }
+
+    @Test
+    void signed64ExtremesNormalizeWithoutUnnecessaryWideArithmetic()
+            throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        assertEquals(Long.MIN_VALUE / 2L,
+                small(divide(Long.MIN_VALUE, 2L, prelude)));
+        assertEquals(-(Long.MIN_VALUE / 2L),
+                small(divide(Long.MIN_VALUE, -2L, prelude)));
+        assertEquals(1L,
+                small(divide(Long.MIN_VALUE, Long.MIN_VALUE, prelude)));
+        assertEquals(0L,
+                small(divide(0L, Long.MIN_VALUE, prelude)));
+
+        assertFraction(
+                divide(Long.MIN_VALUE, 3L, prelude),
+                Long.MIN_VALUE, 3L, prelude);
+        assertFraction(
+                divide(2L, Long.MIN_VALUE, prelude),
+                -1L, 1L << 62, prelude);
+
+        Object widePositive =
+                divide(Long.MIN_VALUE, -3L, prelude);
+        assertTrue(ProtosNumericValueSupport.isFraction(widePositive));
+        assertInstanceOf(
+                ProtosLargeIntegerValue.class,
+                ProtosNumericValueSupport.fractionNumerator(widePositive));
+
+        Object wideDenominator =
+                divide(1L, Long.MIN_VALUE, prelude);
+        assertTrue(ProtosNumericValueSupport.isFraction(wideDenominator));
+        assertInstanceOf(
+                ProtosLargeIntegerValue.class,
+                ProtosNumericValueSupport.fractionDenominator(wideDenominator));
+
+        assertEquals(Long.MIN_VALUE / 2L,
+                small(divide(Long.MIN_VALUE, 2L, null)));
+        assertEquals(1L,
+                small(divide(Long.MIN_VALUE, Long.MIN_VALUE, null)));
+        assertNull(divide(Long.MIN_VALUE, 3L, null));
+        assertNull(divide(Long.MIN_VALUE, -1L, null));
+        assertNull(divide(1L, Long.MIN_VALUE, null));
     }
 
     @Test
@@ -136,10 +180,60 @@ final class ProtosFractionSemanticsTest {
         // A subnormal binary64 equals its exact dyadic rational.
         Object tiny = ProtosNumericValueSupport.divideIntegersExactly(
                 new ProtosIntegerValue(1L),
-                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(1074), prelude),
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(1074), prelude),
                 prelude);
         assertTrue(ProtosCurrentNumericRelations.numericEquals(
                 tiny, new ProtosFloatValue(Double.MIN_VALUE)));
+    }
+
+    @Test
+    void compactRationalComparisonsRemainExactAcrossWideProducts()
+            throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        Object half = divide(1, 2, prelude);
+        Object third = divide(1, 3, prelude);
+        Object negativeHalf = divide(-1, 2, prelude);
+        Object maximumHalf = divide(Long.MAX_VALUE, 2L, prelude);
+        Object almostMaximumHalf = divide(Long.MAX_VALUE - 2L, 2L, prelude);
+        Object minimumHalf = divide(Long.MIN_VALUE + 1L, 2L, prelude);
+
+        assertSame(Comparison.GREATER,
+                ProtosCurrentNumericRelations.compare(half, third));
+        assertSame(Comparison.LESS,
+                ProtosCurrentNumericRelations.compare(third, half));
+        assertSame(Comparison.LESS,
+                ProtosCurrentNumericRelations.compare(negativeHalf, third));
+        assertSame(Comparison.GREATER,
+                ProtosCurrentNumericRelations.compare(maximumHalf, almostMaximumHalf));
+        assertSame(Comparison.LESS,
+                ProtosCurrentNumericRelations.compare(minimumHalf, maximumHalf));
+
+        assertSame(Comparison.GREATER,
+                ProtosCurrentNumericRelations.compare(
+                        maximumHalf, new ProtosIntegerValue(Long.MAX_VALUE / 2L)));
+        assertSame(Comparison.LESS,
+                ProtosCurrentNumericRelations.compare(
+                        maximumHalf, new ProtosIntegerValue(Long.MAX_VALUE)));
+
+        assertSame(Comparison.EQUAL,
+                ProtosCurrentNumericRelations.compare(
+                        half, new ProtosFloatValue(0.5d)));
+        assertSame(Comparison.EQUAL,
+                ProtosCurrentNumericRelations.compare(
+                        divide(-3, 2, prelude), new ProtosFloatValue(-1.5d)));
+        assertSame(Comparison.GREATER,
+                ProtosCurrentNumericRelations.compare(
+                        third, new ProtosFloatValue(1.0d / 3.0d)));
+        assertSame(Comparison.GREATER,
+                ProtosCurrentNumericRelations.compare(
+                        half, new ProtosFloatValue(Double.MIN_VALUE)));
+        assertSame(Comparison.LESS,
+                ProtosCurrentNumericRelations.compare(
+                        half, new ProtosFloatValue(0x1p63)));
+        assertSame(Comparison.GREATER,
+                ProtosCurrentNumericRelations.compare(
+                        maximumHalf, new ProtosFloatValue(0x1p60)));
     }
 
     @Test
@@ -148,13 +242,9 @@ final class ProtosFractionSemanticsTest {
         Object half = divide(1, 2, prelude);
         Object twin = divide(2, 4, prelude);
 
-        assertEquals(
-                ProtosTestIntegers.exact(ProtosCurrentNumericRelations.normalHash(half, prelude)),
-                ProtosTestIntegers.exact(ProtosCurrentNumericRelations.normalHash(
+        assertEquals(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosCurrentNumericRelations.normalHash(half, prelude)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosCurrentNumericRelations.normalHash(
                         new ProtosFloatValue(0.5), prelude)));
-        assertEquals(
-                ProtosTestIntegers.exact(ProtosCurrentNumericRelations.normalHash(half, prelude)),
-                ProtosTestIntegers.exact(ProtosCurrentNumericRelations.normalHash(twin, prelude)));
+        assertEquals(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosCurrentNumericRelations.normalHash(half, prelude)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosCurrentNumericRelations.normalHash(twin, prelude)));
 
         assertNotSame(half, twin);
         assertTrue(ProtosIdentity.identical(half, twin));
@@ -181,8 +271,8 @@ final class ProtosFractionSemanticsTest {
         // Converting components separately would give Infinity / Infinity = NaN.
         BigInteger denominator = BigInteger.TEN.pow(400);
         Object nearOne = ProtosNumericValueSupport.divideIntegersExactly(
-                ProtosTestIntegers.integer(denominator.add(BigInteger.ONE), prelude),
-                ProtosTestIntegers.integer(denominator, prelude),
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(denominator.add(BigInteger.ONE), prelude),
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(denominator, prelude),
                 prelude);
         assertTrue(ProtosNumericValueSupport.isFraction(nearOne));
         assertEquals(1.0, ProtosNumericValueSupport.roundFractionToBinary64(nearOne));
@@ -194,7 +284,7 @@ final class ProtosFractionSemanticsTest {
         ProtosPrelude sourcePrelude = corePrelude();
         ProtosPrelude destinationPrelude = corePrelude();
         Object fraction = ProtosNumericValueSupport.divideIntegersExactly(
-                ProtosTestIntegers.integer(TWO_POW_64, sourcePrelude),
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_64, sourcePrelude),
                 new ProtosIntegerValue(3L),
                 sourcePrelude);
 

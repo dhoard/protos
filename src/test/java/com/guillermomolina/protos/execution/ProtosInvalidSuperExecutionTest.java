@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -31,7 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -83,9 +82,7 @@ final class ProtosInvalidSuperExecutionTest {
         assertSame(
                 ProtosCoreErrors.prototype(activation, StandardError.INVALID_SUPER),
                 signal.error().parent().orElseThrow());
-        assertEquals(
-                BigInteger.valueOf(12),
-                ProtosTestIntegers.exact(activation.context().readLocalSlot("order").orElseThrow()));
+        assertEquals(String.valueOf("12"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(activation.context().readLocalSlot("order").orElseThrow()));
     }
 
     @Test
@@ -123,9 +120,7 @@ final class ProtosInvalidSuperExecutionTest {
         assertSame(
                 ProtosCoreErrors.prototype(activation, StandardError.INVALID_SUPER),
                 signal.error().parent().orElseThrow());
-        assertEquals(
-                BigInteger.valueOf(125),
-                ProtosTestIntegers.exact(activation.context().readLocalSlot("order").orElseThrow()));
+        assertEquals(String.valueOf("125"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(activation.context().readLocalSlot("order").orElseThrow()));
     }
 
     @Test

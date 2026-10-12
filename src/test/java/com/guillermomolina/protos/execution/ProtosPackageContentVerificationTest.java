@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
@@ -229,8 +228,7 @@ final class ProtosPackageContentVerificationTest {
             for (Object octet : bytes.indexedSnapshot()) {
                 result.add(
                         (byte)
-                                ProtosTestIntegers.exact(octet)
-                                        .intValueExact());
+                                Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(octet)));
             }
         }
         ProtosFutureValue close =

@@ -1,11 +1,10 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.List;
@@ -94,9 +93,7 @@ class ProtosStandardFileProtocolTest {
 
         fixture.resource.readCompletions.remove().data(new byte[] {1, 2});
         assertEquals(ProtosFutureValue.State.RESOLVED, read.state());
-        assertEquals(
-                BigInteger.TWO,
-                ProtosTestIntegers.exact(positionAfterRead.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(positionAfterRead.resolvedValue().orElseThrow()));
 
         ProtosFutureValue write =
                 (ProtosFutureValue)
@@ -115,9 +112,7 @@ class ProtosStandardFileProtocolTest {
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
                                 fixture.file, "position", List.of(), fixture.activation);
-        assertEquals(
-                BigInteger.valueOf(5),
-                ProtosTestIntegers.exact(position.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("5"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(position.resolvedValue().orElseThrow()));
     }
 
     @Test
@@ -136,9 +131,7 @@ class ProtosStandardFileProtocolTest {
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
                                 fixture.file, "position", List.of(), fixture.activation);
-        assertEquals(
-                BigInteger.ZERO,
-                ProtosTestIntegers.exact(zero.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(zero.resolvedValue().orElseThrow()));
 
         ProtosFutureValue write =
                 (ProtosFutureValue)
@@ -156,9 +149,7 @@ class ProtosStandardFileProtocolTest {
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
                                 fixture.file, "position", List.of(), fixture.activation);
-        assertEquals(
-                BigInteger.TWO,
-                ProtosTestIntegers.exact(two.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(two.resolvedValue().orElseThrow()));
     }
 
     @Test
@@ -169,9 +160,7 @@ class ProtosStandardFileProtocolTest {
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
                                 fixture.file, "seek", List.of(integer(10)), fixture.activation);
-        assertEquals(
-                BigInteger.TEN,
-                ProtosTestIntegers.exact(seek.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("10"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(seek.resolvedValue().orElseThrow()));
 
         ProtosFutureValue invalidRelative =
                 (ProtosFutureValue)
@@ -184,18 +173,14 @@ class ProtosStandardFileProtocolTest {
                         ProtosInvocation.invokeMessage(
                                 fixture.file, "seekToEnd", List.of(), fixture.activation);
         fixture.resource.endCompletions.remove().succeeded(6);
-        assertEquals(
-                BigInteger.valueOf(6),
-                ProtosTestIntegers.exact(end.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("6"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(end.resolvedValue().orElseThrow()));
 
         ProtosFutureValue size =
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
                                 fixture.file, "size", List.of(), fixture.activation);
         fixture.resource.sizeCompletions.remove().succeeded(20);
-        assertEquals(
-                BigInteger.valueOf(20),
-                ProtosTestIntegers.exact(size.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("20"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(size.resolvedValue().orElseThrow()));
 
         ProtosFutureValue truncate =
                 (ProtosFutureValue)
@@ -210,9 +195,7 @@ class ProtosStandardFileProtocolTest {
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
                                 fixture.file, "position", List.of(), fixture.activation);
-        assertEquals(
-                BigInteger.valueOf(6),
-                ProtosTestIntegers.exact(position.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("6"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(position.resolvedValue().orElseThrow()));
 
         ProtosFutureValue sync =
                 (ProtosFutureValue)
@@ -244,9 +227,7 @@ class ProtosStandardFileProtocolTest {
         assertTrue(fixture.resource.writePositions.isEmpty());
 
         fixture.resource.endCompletions.remove().succeeded(6);
-        assertEquals(
-                BigInteger.valueOf(6),
-                ProtosTestIntegers.exact(end.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("6"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(end.resolvedValue().orElseThrow()));
 
         // The write uses the File's own logical position; it does not re-select the end.
         assertEquals(6L, fixture.resource.writePositions.remove());
@@ -260,9 +241,7 @@ class ProtosStandardFileProtocolTest {
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
                                 fixture.file, "position", List.of(), fixture.activation);
-        assertEquals(
-                BigInteger.valueOf(8),
-                ProtosTestIntegers.exact(position.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("8"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(position.resolvedValue().orElseThrow()));
     }
 
     @Test
@@ -322,9 +301,7 @@ class ProtosStandardFileProtocolTest {
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
                                 fixture.file, "position", List.of(), fixture.activation);
-        assertEquals(
-                BigInteger.ZERO,
-                ProtosTestIntegers.exact(position.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(position.resolvedValue().orElseThrow()));
     }
 
     private record Fixture(

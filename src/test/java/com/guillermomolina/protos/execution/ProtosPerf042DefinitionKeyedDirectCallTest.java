@@ -33,13 +33,12 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.source.Source;
 import java.lang.reflect.Field;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -597,6 +596,6 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
     }
 
     private static void assertInteger(long expected, Object actual) {
-        assertEquals(BigInteger.valueOf(expected), ProtosTestIntegers.exact(actual));
+        assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(actual));
     }
 }

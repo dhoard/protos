@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -42,7 +41,6 @@ import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -89,7 +87,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
             for (int index = 0; index < 4; index++) {
                 ProtosBytecodeRootNode.PreparedClosureCall prepared = fastDirect(one, module);
                 assertSame(target(one), prepared.bodyTarget());
-                assertEquals(BigInteger.ONE, integerValue(enter(prepared)));
+                assertEquals("1", integerValue(enter(prepared)));
                 assertSame(one, prepared.targetArguments()[0], "no activation was materialized");
                 assertNull(prepared.taskForRuntime(), "no Task was initialized");
             }
@@ -129,9 +127,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "g6-rich.protos", module);
             ProtosClosureExecutionPlan plan = one.executionPlan().orElseThrow();
 
-            assertEquals(
-                    BigInteger.ONE,
-                    integerValue(plan.executeBytecodeActivationForTesting(richActivation(one, module))));
+            assertEquals("1", integerValue(plan.executeBytecodeActivationForTesting(richActivation(one, module))));
             assertThrows(
                     ProtosSignalException.class,
                     () -> plan.executeBytecodeActivationForTesting(
@@ -170,7 +166,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), outcome::toString);
         List<Object> results = elements(outcome.value());
 
-        assertEquals(BigInteger.TWO, integerValue(results.get(0)), "only the valid calls ran");
+        assertEquals("2", integerValue(results.get(0)), "only the valid calls ran");
         ProtosObjectValue reference = assertInstanceOf(ProtosObjectValue.class, results.get(4));
         for (int index = 1; index <= 3; index++) {
             ProtosObjectValue caught = assertInstanceOf(ProtosObjectValue.class, results.get(index));
@@ -180,7 +176,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
                     "the same argument-count Error kind");
         }
         assertEquals(
-                List.of(BigInteger.ONE, BigInteger.TWO),
+                List.of("1", "2"),
                 elements(results.get(5)).stream()
                         .map(ProtosPerf032G6ZeroParameterGuestRootTest::integerValue)
                         .toList());
@@ -228,7 +224,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
             assertSame(root, planRoot(one), "the normal root identity survives the reparse");
             assertSame(rejection, root.arityRejectionTarget());
             assertNone(instructionNames(root), UPPER_BOUND_CHECK);
-            assertEquals(BigInteger.ONE, integerValue(enter(fastDirect(one, module))));
+            assertEquals("1", integerValue(enter(fastDirect(one, module))));
         });
         System.out.println("PERF032_G6_SOURCE_SECTION_AND_REPARSE=PASS");
     }
@@ -240,7 +236,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
 
             ProtosTask valid = runTaskOwned(one, module, List.of(), new AtomicReference<>());
             assertEquals(ProtosTask.State.COMPLETED, valid.state());
-            assertEquals(BigInteger.ONE, integerValue(valid.result().orElseThrow()));
+            assertEquals("1", integerValue(valid.result().orElseThrow()));
 
             AtomicReference<ProtosBytecodeRootNode.PreparedClosureCall> rejected =
                     new AtomicReference<>();
@@ -282,15 +278,13 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
                         """);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), outcome::toString);
         List<Object> results = elements(outcome.value());
-        assertEquals(BigInteger.valueOf(7), integerValue(results.get(0)));
-        assertEquals(BigInteger.valueOf(3), integerValue(results.get(1)));
-        assertEquals(BigInteger.ONE, integerValue(elements(results.get(2)).get(0)));
+        assertEquals("7", integerValue(results.get(0)));
+        assertEquals("3", integerValue(results.get(1)));
+        assertEquals("1", integerValue(elements(results.get(2)).get(0)));
         assertTrue(elements(elements(results.get(2)).get(1)).isEmpty());
-        assertEquals(BigInteger.TEN, integerValue(elements(results.get(3)).get(0)));
-        assertEquals(
-                BigInteger.valueOf(20),
-                integerValue(elements(elements(results.get(3)).get(1)).get(0)));
-        assertEquals(BigInteger.ZERO, integerValue(results.get(4)));
+        assertEquals("10", integerValue(elements(results.get(3)).get(0)));
+        assertEquals("20", integerValue(elements(elements(results.get(3)).get(1)).get(0)));
+        assertEquals("0", integerValue(results.get(4)));
         System.out.println("PERF032_G6_PARAMETER_CLOSURES_UNCHANGED=PASS");
         System.out.println("PERF032_G6_DEFAULTS_AND_REST_UNCHANGED=PASS");
     }
@@ -477,7 +471,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
         return new ProtosIntegerValue(value);
     }
 
-    private static BigInteger integerValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 }

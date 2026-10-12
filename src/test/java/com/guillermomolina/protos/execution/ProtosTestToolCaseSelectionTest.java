@@ -20,12 +20,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.HexFormat;
@@ -235,9 +234,7 @@ final class ProtosTestToolCaseSelectionTest {
                                 ProtosStringValue.class,
                                 observed.indexedAt(0))
                         .value());
-        assertEquals(
-                BigInteger.ZERO,
-                ProtosTestIntegers.exact(observed.indexedAt(1)));
+        assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(observed.indexedAt(1)));
     }
 
     /*
@@ -309,9 +306,7 @@ final class ProtosTestToolCaseSelectionTest {
                                 ProtosStringValue.class,
                                 observed.indexedAt(1))
                         .value());
-        assertEquals(
-                BigInteger.ZERO,
-                ProtosTestIntegers.exact(observed.indexedAt(2)));
+        assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(observed.indexedAt(2)));
     }
 
     /*

@@ -25,9 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import com.guillermomolina.protos.runtime.ProtosNullValue;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
@@ -561,8 +560,6 @@ final class ProtosI092CompactBooleanTest {
     }
 
     private static void assertInteger(long expected, Object value) {
-        assertEquals(
-                BigInteger.valueOf(expected),
-                ProtosTestIntegers.exact(value));
+        assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
     }
 }

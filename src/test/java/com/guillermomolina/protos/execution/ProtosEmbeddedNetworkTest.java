@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -175,8 +174,7 @@ final class ProtosEmbeddedNetworkTest {
 
     /** Reads from a module captured while live: a stopped Process selects no module. */
     private static long slot(ProtosObjectValue module, String name) {
-        return ProtosTestIntegers.exact(module.readLocalSlot(name).orElseThrow())
-                .longValueExact();
+        return Long.parseLong(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(module.readLocalSlot(name).orElseThrow()));
     }
 
     private static ProtosEmbeddedNetworkCustody custody(Context context) {

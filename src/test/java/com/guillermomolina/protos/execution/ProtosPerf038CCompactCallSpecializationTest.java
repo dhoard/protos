@@ -21,14 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Context;
@@ -141,8 +139,7 @@ final class ProtosPerf038CCompactCallSpecializationTest {
             long[] expected = {1, 2, 99, 99, 77, 5, 6, 7};
             assertEquals(expected.length, results.size());
             for (int index = 0; index < expected.length; index++) {
-                assertEquals(
-                        BigInteger.valueOf(expected[index]), integerValue(results.get(index)));
+                assertEquals(Long.toString(expected[index]), integerValue(results.get(index)));
             }
         });
         System.out.println("PERF038C_ERROR_INTERCEPTION=PASS");
@@ -153,8 +150,8 @@ final class ProtosPerf038CCompactCallSpecializationTest {
     private static void assertPair(Object array, long first, long second) {
         List<Object> pair = elements(array);
         assertEquals(2, pair.size());
-        assertEquals(BigInteger.valueOf(first), integerValue(pair.get(0)));
-        assertEquals(BigInteger.valueOf(second), integerValue(pair.get(1)));
+        assertEquals(Long.toString(first), integerValue(pair.get(0)));
+        assertEquals(Long.toString(second), integerValue(pair.get(1)));
     }
 
     private interface CoreTest {
@@ -187,7 +184,7 @@ final class ProtosPerf038CCompactCallSpecializationTest {
         return assertInstanceOf(ProtosArrayValue.class, array).indexedSnapshot();
     }
 
-    private static BigInteger integerValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 }

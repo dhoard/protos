@@ -31,7 +31,7 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
@@ -122,16 +122,14 @@ final class ProtosNetworkingIpEndpointsModuleTest {
     void endpointHashIsExactForIpv4AndLargeIpv6() throws Exception {
         ProtosPrelude prelude = prelude();
         BigInteger ipv4 = BigInteger.valueOf(0xc0a80001L);
-        assertEquals(expectedHash(4, ipv4, 1),
-                ProtosTestIntegers.exact(endpointHash(prelude, 4, ipv4, 1)));
-        assertEquals(expectedHash(4, ipv4, 65535),
-                ProtosTestIntegers.exact(endpointHash(prelude, 4, ipv4, 65535)));
+        assertEquals(String.valueOf(expectedHash(4, ipv4, 1)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(endpointHash(prelude, 4, ipv4, 1)));
+        assertEquals(String.valueOf(expectedHash(4, ipv4, 65535)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(endpointHash(prelude, 4, ipv4, 65535)));
         for (BigInteger bits : List.of(
                 BigInteger.ONE.shiftLeft(57),
                 BigInteger.ONE.shiftLeft(127),
                 BigInteger.ONE.shiftLeft(128).subtract(BigInteger.ONE))) {
             Object hash = endpointHash(prelude, 6, bits, 443);
-            assertEquals(expectedHash(6, bits, 443), ProtosTestIntegers.exact(hash));
+            assertEquals(String.valueOf(expectedHash(6, bits, 443)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(hash));
             assertSame(prelude.bigIntegerPrototype(),
                     ((ProtosObjectValue) hash).parent().orElseThrow());
         }
@@ -171,14 +169,13 @@ final class ProtosNetworkingIpEndpointsModuleTest {
         Object hash = ProtosInvocation.invokeMessage(copy, "hash", List.of(), activation);
         assertTrue(ProtosNumericValueSupport.sameInteger(
                 ProtosInvocation.invokeMessage(endpoint, "hash", List.of(), activation), hash));
-        assertEquals(expectedHash(6, BigInteger.ONE.shiftLeft(128).subtract(BigInteger.ONE), 1),
-                ProtosTestIntegers.exact(hash));
+        assertEquals((expectedHash(6, BigInteger.ONE.shiftLeft(128).subtract(BigInteger.ONE), 1)).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(hash));
 
         // The same endpoint state built in another Prelude hashes identically, in its own domain.
         ProtosPrelude other = prelude();
         Object otherHash = endpointHash(
                 other, 6, BigInteger.ONE.shiftLeft(128).subtract(BigInteger.ONE), 1);
-        assertEquals(ProtosTestIntegers.exact(hash), ProtosTestIntegers.exact(otherHash));
+        assertEquals(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(hash), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(otherHash));
         assertSame(other.bigIntegerPrototype(),
                 ((ProtosObjectValue) otherHash).parent().orElseThrow());
     }

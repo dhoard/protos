@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.execution.ProtosHostJavaFixtureTypes.Denied;
 import com.guillermomolina.protos.execution.ProtosHostJavaFixtureTypes.Greeter;
 import com.guillermomolina.protos.execution.ProtosHostJavaFixtureTypes.Lazy;
@@ -133,15 +132,13 @@ class ProtosHostJavaProviderTest {
     @Test
     void javaScalarsAdmitThroughD188AndArgumentsCrossOnlyLosslessly() throws Exception {
         try (Fixture fixture = new Fixture()) {
-            assertEquals(BigInteger.valueOf(5), integer(fixture.eval(G + "G.add(2, 3)")));
+            assertEquals("5", integer(fixture.eval(G + "G.add(2, 3)")));
             assertEquals(1.5, ((ProtosFloatValue) fixture.eval(G + "G.half(3.0)")).value());
             assertEquals(0.25, ((ProtosFloatValue) fixture.eval(G + "G.widen(0.25)")).value());
             assertSame(ProtosBooleanValue.FALSE, fixture.eval(G + "G.negate(true)"));
-            assertEquals(
-                    BigInteger.TEN.pow(40),
-                    integer(fixture.eval(G + "G.square(100000000000000000000)")));
+            assertEquals(String.valueOf(BigInteger.TEN.pow(40)), integer(fixture.eval(G + "G.square(100000000000000000000)")));
             assertSame(ProtosNullValue.INSTANCE, fixture.eval(G + "G.nothing()"));
-            assertEquals(BigInteger.valueOf(-128), integer(fixture.eval(G + "G.tiny(-128)")));
+            assertEquals("-128", integer(fixture.eval(G + "G.tiny(-128)")));
             assertEquals("null", text(fixture.eval(G + "G(null).join(\"\")")));
 
             // Lossy or unsupported conversions fail before the exact Java member runs.
@@ -190,9 +187,7 @@ class ProtosHostJavaProviderTest {
             // Greeter.equals is total; distinct objects still stay distinct.
             assertSame(ProtosBooleanValue.FALSE, fixture.eval(G + "G(\"a\") === G(\"a\")"));
             assertSame(ProtosBooleanValue.FALSE, fixture.eval(G + "G(\"a\") == G(\"a\")"));
-            assertEquals(
-                    BigInteger.TWO,
-                    integer(
+            assertEquals("2", integer(
                             fixture.eval(
                                     G + "mp: Map()\nmp[G(\"a\")] = 1\nmp[G(\"a\")] = 2\nmp.size()")));
             Object first = fixture.eval(G + "G.saved: G(\"keep\")\nG.saved.self()");
@@ -460,7 +455,7 @@ class ProtosHostJavaProviderTest {
                 assertEquals("NonParallel", parallelCopyFailure(value, fixture));
             }
             // The Java state stays owned by its Actor session and was never copied.
-            assertEquals(BigInteger.TWO, integer(fixture.eval(G + "G.counter.increment()")));
+            assertEquals("2", integer(fixture.eval(G + "G.counter.increment()")));
         }
     }
 
@@ -470,7 +465,7 @@ class ProtosHostJavaProviderTest {
         ProtosModuleRuntimeTest.MemoryResolver resolver =
                 new ProtosModuleRuntimeTest.MemoryResolver().module("lib", "value: 42");
         try (Fixture fixture = new Fixture(resolver)) {
-            assertEquals(BigInteger.valueOf(42), integer(fixture.eval("import(\"lib\").value")));
+            assertEquals("42", integer(fixture.eval("import(\"lib\").value")));
             assertEquals(
                     ProtosExecutionOutcome.State.FAILED,
                     fixture.run("import(\"test:foo\")").state());
@@ -508,8 +503,8 @@ class ProtosHostJavaProviderTest {
         return assertInstanceOf(ProtosStringValue.class, value).value();
     }
 
-    private static BigInteger integer(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integer(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 
     private static void assertForeign(Fixture fixture, ProtosObjectValue error) {

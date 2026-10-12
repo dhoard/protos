@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -25,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.io.IOException;
-import java.math.BigInteger;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -75,7 +74,7 @@ final class ProtosPackageRunDriverMixedApplicationTest extends ProtosPackageRunD
                 ProtosPackageRunDriver.execute(request(project, stdout), provider, stages);
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertEquals(BigInteger.valueOf(1026), ProtosTestIntegers.exact(outcome.value()));
+        assertEquals(String.valueOf("1026"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(outcome.value()));
         assertEquals("argument-value\n", stdout.utf8());
 
         // One complete exact identity per lookup, in requirement order, never deduplicated by
@@ -117,9 +116,7 @@ final class ProtosPackageRunDriverMixedApplicationTest extends ProtosPackageRunD
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         ProtosArrayValue result = assertNetworkOfThisApplication(outcome);
-        assertEquals(
-                BigInteger.valueOf(1026),
-                ProtosTestIntegers.exact(result.indexedAt(2)));
+        assertEquals(String.valueOf("1026"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(result.indexedAt(2)));
         assertMixedLifecycleUnchanged(provider, stages);
     }
 

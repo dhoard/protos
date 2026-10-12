@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -29,7 +28,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
+
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -40,7 +39,7 @@ class ProtosSourceCompilerTest {
 
         ProtosIntegerValue integer =
                 assertInstanceOf(ProtosIntegerValue.class, result);
-        assertEquals(BigInteger.valueOf(2), ProtosTestIntegers.exact(integer));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
     }
 
     @Test
@@ -53,7 +52,7 @@ class ProtosSourceCompilerTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         object.readLocalSlot("value").orElseThrow());
-        assertEquals(BigInteger.valueOf(7), ProtosTestIntegers.exact(value));
+        assertEquals(String.valueOf("7"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         assertSame(
                 ProtosObjectValue.rootObject(),
                 object.parent().orElseThrow());

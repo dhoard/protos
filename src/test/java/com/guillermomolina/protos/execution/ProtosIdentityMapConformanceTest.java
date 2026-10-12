@@ -18,7 +18,7 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.List;
@@ -61,8 +61,8 @@ class ProtosIdentityMapConformanceTest {
         ProtosActivation a = prelude.newModuleActivation();
         ProtosIdentityMapValue map = new ProtosIdentityMapValue(prelude.identityMapPrototype());
         BigInteger huge = BigInteger.ONE.shiftLeft(1000).add(BigInteger.ONE);
-        Object stored = ProtosTestIntegers.integer(huge, prelude);
-        Object equal = ProtosTestIntegers.integer(new BigInteger(huge.toString()), prelude);
+        Object stored = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude);
+        Object equal = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(new BigInteger(huge.toString()), prelude);
 
         put(map, stored, "huge", a);
         put(map, equal, "replaced", a);
@@ -70,7 +70,7 @@ class ProtosIdentityMapConformanceTest {
         assertNotSame(stored, equal);
         assertEquals(1, map.keyedSnapshot().size());
         assertSame(stored, map.keyedSnapshot().get(0).key());
-        assertEquals("replaced", at(map, ProtosTestIntegers.integer(huge, prelude), a));
+        assertEquals("replaced", at(map, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude), a));
         assertEquals(
                 ProtosNumericHashKey.fromIdentity(equal),
                 map.keyedSnapshot().get(0).recordedIdentityHash());
@@ -79,12 +79,12 @@ class ProtosIdentityMapConformanceTest {
                 ProtosInvocation.invokeMessage(
                         map,
                         "containsKey",
-                        List.of(ProtosTestIntegers.integer(huge.add(BigInteger.ONE), prelude)),
+                        List.of(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge.add(BigInteger.ONE), prelude)),
                         a));
         assertSame(
                 ProtosBooleanValue.FALSE,
                 ProtosInvocation.invokeMessage(
-                        map, "containsKey", List.of(ProtosTestIntegers.integer(huge.negate(), prelude)), a));
+                        map, "containsKey", List.of(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge.negate(), prelude)), a));
     }
 
     @Test
@@ -95,8 +95,8 @@ class ProtosIdentityMapConformanceTest {
         // Magnitudes [1, 0, 31] and [1, 1, 0] share the exact hash 31 * (31 + 0) + 31 = 992.
         BigInteger first = BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(31));
         BigInteger second = BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE.shiftLeft(32));
-        Object firstKey = ProtosTestIntegers.integer(first, prelude);
-        Object secondKey = ProtosTestIntegers.integer(second, prelude);
+        Object firstKey = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(first, prelude);
+        Object secondKey = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(second, prelude);
         assertEquals(first.hashCode(), second.hashCode());
         assertEquals(ProtosIdentity.identityHash(firstKey), ProtosIdentity.identityHash(secondKey));
 
@@ -104,8 +104,8 @@ class ProtosIdentityMapConformanceTest {
         put(map, secondKey, "second", a);
 
         assertEquals(2, map.keyedSnapshot().size());
-        assertEquals("first", at(map, ProtosTestIntegers.integer(first, prelude), a));
-        assertEquals("second", at(map, ProtosTestIntegers.integer(second, prelude), a));
+        assertEquals("first", at(map, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(first, prelude), a));
+        assertEquals("second", at(map, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(second, prelude), a));
     }
 
     @Test
@@ -119,7 +119,7 @@ class ProtosIdentityMapConformanceTest {
         put(map, new ProtosFloatValue(-0.0d), "negativeZero", a);
         put(map, new ProtosIntegerValue(1), "integer", a);
         put(map, new ProtosFloatValue(1.0d), "float", a);
-        put(map, ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64), prelude), "large", a);
+        put(map, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), prelude), "large", a);
         put(map, new ProtosFloatValue(0x1p64), "largeFloat", a);
 
         assertEquals(7, map.keyedSnapshot().size());
@@ -131,7 +131,7 @@ class ProtosIdentityMapConformanceTest {
         assertEquals("integer", at(map, new ProtosIntegerValue(1), a));
         assertEquals("float", at(map, new ProtosFloatValue(1.0d), a));
         assertEquals(
-                "large", at(map, ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64), prelude), a));
+                "large", at(map, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), prelude), a));
         assertEquals("largeFloat", at(map, new ProtosFloatValue(0x1p64), a));
     }
 
@@ -141,7 +141,7 @@ class ProtosIdentityMapConformanceTest {
         ProtosActivation a = prelude.newModuleActivation();
         ProtosIdentityMapValue map = new ProtosIdentityMapValue(prelude.identityMapPrototype());
         BigInteger negative = BigInteger.ONE.shiftLeft(64).negate();
-        put(map, ProtosTestIntegers.integer(negative, prelude), "negative", a);
+        put(map, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(negative, prelude), "negative", a);
         put(map, new ProtosFloatValue(Double.NaN), "nan", a);
 
         ProtosIdentityMapValue copied =
@@ -153,7 +153,7 @@ class ProtosIdentityMapConformanceTest {
             assertEquals(
                     ProtosNumericHashKey.fromIdentity(entry.key()), entry.recordedIdentityHash());
         }
-        assertEquals("negative", at(copied, ProtosTestIntegers.integer(negative, prelude), a));
+        assertEquals("negative", at(copied, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(negative, prelude), a));
         assertEquals(
                 "nan",
                 at(copied, new ProtosFloatValue(Double.longBitsToDouble(0x7ff8000000000077L)), a));

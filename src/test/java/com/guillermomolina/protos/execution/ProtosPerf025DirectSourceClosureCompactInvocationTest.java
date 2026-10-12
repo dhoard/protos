@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -43,7 +42,6 @@ import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.source.Source;
 import java.lang.reflect.Field;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -97,7 +95,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 assertThrows(IllegalStateException.class, prepared::activation);
 
                 Object result = enter(prepared);
-                assertEquals(BigInteger.valueOf(5), integerValue(result));
+                assertEquals("5", integerValue(result));
 
                 ProtosActivation callee =
                         assertInstanceOf(ProtosActivation.class, targetArguments[0]);
@@ -150,8 +148,8 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                         fastDirect(identity, module, integer(1));
                 ProtosBytecodeRootNode.PreparedClosureCall second =
                         fastDirect(identity, module, integer(2));
-                assertEquals(BigInteger.ONE, integerValue(enter(first)));
-                assertEquals(BigInteger.TWO, integerValue(enter(second)));
+                assertEquals("1", integerValue(enter(first)));
+                assertEquals("2", integerValue(enter(second)));
 
                 /*
                  * PERF025-H1: the ordinary parameter path never materializes
@@ -215,9 +213,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                                 "r: (first, ...rest) => { rest }\nr(1, 2, 3)\n",
                                 "perf025-rest-guest.protos",
                                 module);
-                assertEquals(
-                        bigIntegers(2, 3),
-                        integerValues(
+                assertEquals(bigIntegers(2, 3), integerValues(
                                 assertInstanceOf(ProtosArrayValue.class, guestResult)
                                         .indexedSnapshot()));
             } finally {
@@ -263,8 +259,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 assertTrue(module.executionDomain().dispatchOne());
 
                 assertEquals(ProtosTask.State.COMPLETED, task.state());
-                assertEquals(
-                        BigInteger.valueOf(9), integerValue(task.result().orElseThrow()));
+                assertEquals("9", integerValue(task.result().orElseThrow()));
                 ProtosActivation callee =
                         assertInstanceOf(
                                 ProtosActivation.class,
@@ -295,10 +290,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                                 module);
                 ProtosExecutionOutcome completed =
                         ProtosRootTaskExecution.executeClosure(outer, List.of(), module);
-                assertEquals(
-                        BigInteger.valueOf(7),
-                        integerValue(completed.value()),
-                        "a nested Closure's non-local return reaches its owning invocation");
+                assertEquals("7", integerValue(completed.value()), "a nested Closure's non-local return reaches its owning invocation");
 
                 ProtosClosureValue escaped =
                         assertInstanceOf(
@@ -331,23 +323,18 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
             try {
                 ProtosActivation module = coreModule();
 
-                assertEquals(
-                        BigInteger.TWO,
-                        integerValue(
+                assertEquals("2", integerValue(
                                 evaluate(
                                         "n: 0\ninc: () => { n = n + 1 }\ninc()\ninc()\nn\n",
                                         "perf025-capture.protos",
-                                        module)),
-                        "captured bindings are shared by reference");
+                                        module)), "captured bindings are shared by reference");
                 assertSame(
                         module.receiver(),
                         evaluate(
                                 "receiverOf: () => { this }\nreceiverOf()\n",
                                 "perf025-this.protos",
                                 module));
-                assertEquals(
-                        BigInteger.valueOf(7),
-                        integerValue(
+                assertEquals("7", integerValue(
                                 evaluate(
                                         "outer: () => {\n    inner: () => { ^ 7 }\n"
                                                 + "    inner()\n    99\n}\nouter()\n",
@@ -390,7 +377,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 ProtosReturnHome home =
                         ProtosFrameArguments.compactReturnHome(prepared.targetArguments());
                 assertTrue(home.isActive());
-                assertEquals(BigInteger.valueOf(5), integerValue(enter(prepared)));
+                assertEquals("5", integerValue(enter(prepared)));
                 assertFalse(home.isActive());
                 assertSame(
                         home,
@@ -470,18 +457,18 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
         return new ProtosIntegerValue(value);
     }
 
-    private static BigInteger integerValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 
-    private static List<BigInteger> integerValues(List<Object> values) {
+    private static List<String> integerValues(List<Object> values) {
         return values.stream()
                 .map(ProtosPerf025DirectSourceClosureCompactInvocationTest::integerValue)
                 .toList();
     }
 
-    private static List<BigInteger> bigIntegers(long... values) {
-        return java.util.Arrays.stream(values).mapToObj(BigInteger::valueOf).toList();
+    private static List<String> bigIntegers(long... values) {
+        return java.util.Arrays.stream(values).mapToObj(Long::toString).toList();
     }
 
     private static Object privateField(Object target, String name)

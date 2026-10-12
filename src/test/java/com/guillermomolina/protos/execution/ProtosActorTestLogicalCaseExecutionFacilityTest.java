@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -30,7 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -133,7 +132,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
             // A value of exactly 1 is only reachable if Actor.spawn("workers", ...) resolved
             // the Actor-flavored "workers" module (not the ordinary test resolver, which has
             // no such specifier) and the selected Test body actually executed exactly once.
-            assertEquals(BigInteger.valueOf(1), ProtosTestIntegers.exact(value));
+            assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         }
     }
 
@@ -176,7 +175,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
 
             // 0 -> 1 -> 2, combined as first * 10 + second: only reachable if both requests
             // were served by the same Actor incarnation within this one Case.
-            assertEquals(BigInteger.valueOf(12), ProtosTestIntegers.exact(value));
+            assertEquals(String.valueOf("12"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         }
     }
 
@@ -213,9 +212,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
                             "incrementsOnce");
             assertTrue(submission.runNext());
             assertTrue(activation.executionDomain().dispatchOne());
-            assertEquals(
-                    BigInteger.valueOf(1),
-                    ProtosTestIntegers.exact(assertCompletedIntegerObservation(firstCase)));
+            assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(assertCompletedIntegerObservation(firstCase)));
 
             ProtosFutureValue secondCase =
                     invoke(
@@ -230,9 +227,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
 
             // If the second Case reused the first Case's Actor graph/incarnation, the
             // counter would already be at 1 and this request would observe 2.
-            assertEquals(
-                    BigInteger.valueOf(1),
-                    ProtosTestIntegers.exact(assertCompletedIntegerObservation(secondCase)));
+            assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(assertCompletedIntegerObservation(secondCase)));
         }
     }
 

@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -27,7 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,7 +58,7 @@ final class ProtosTestToolResourceCatalogCompositionTest {
                         + "Array(calls, catalog, path)\n";
 
         ProtosArrayValue observed = completedArray(source);
-        assertEquals(BigInteger.ZERO, ProtosTestIntegers.exact(integerAt(observed, 0)));
+        assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 0)));
 
         ProtosArrayValue catalog = arrayAt(observed, 1);
         assertEquals(0, catalog.indexedSize());
@@ -105,7 +104,7 @@ final class ProtosTestToolResourceCatalogCompositionTest {
                         + "Catalog.entryProfile(entry))\n";
 
         ProtosArrayValue observed = completedArray(source);
-        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(integerAt(observed, 0)));
+        assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 0)));
         assertEquals("catalog.toml", stringAt(observed, 1).value());
 
         ProtosArrayValue catalog = arrayAt(observed, 2);
@@ -113,7 +112,7 @@ final class ProtosTestToolResourceCatalogCompositionTest {
         assertTrue(catalog.isFrozen());
 
         assertEquals("gpu", stringAt(observed, 3).value());
-        assertEquals(BigInteger.valueOf(4), ProtosTestIntegers.exact(integerAt(observed, 4)));
+        assertEquals(String.valueOf("4"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 4)));
         assertEquals("placement", stringAt(observed, 5).value());
         assertEquals("device/gpu", stringAt(observed, 6).value());
         assertEquals("a100", stringAt(observed, 7).value());

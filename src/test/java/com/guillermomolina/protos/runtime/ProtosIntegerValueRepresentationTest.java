@@ -25,6 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -86,6 +88,38 @@ final class ProtosIntegerValueRepresentationTest {
                 () -> large.createLocalSlot("mutated", ProtosNullValue.INSTANCE));
         assertThrows(NullPointerException.class,
                 () -> ProtosNumericValueSupport.integer(ABOVE_LONG, (ProtosPrelude) null));
+    }
+
+    @Test
+    void largeIntegerKeepsDelegationWithoutLeakingObjectMembersToInterop()
+            throws Exception {
+        ProtosLargeIntegerValue large =
+                assertInstanceOf(
+                        ProtosLargeIntegerValue.class,
+                        ProtosNumericValueSupport.integer(ABOVE_LONG, prelude));
+
+        // Ordinary Protos delegation is intact.
+        assertSame(prelude.bigIntegerPrototype(), large.parent().orElseThrow());
+        assertTrue(large.lookupSlot("parent").isPresent());
+        assertTrue(large.isFrozen());
+        assertTrue(large.localSlotsSnapshot().isEmpty());
+
+        // Polyglot observes an exact numeric value, not an ordinary mutable
+        // object's members or its Java payload.
+        InteropLibrary interop = InteropLibrary.getUncached();
+        assertTrue(interop.isNumber(large));
+        assertTrue(interop.fitsInBigInteger(large));
+        assertFalse(interop.fitsInLong(large));
+        assertEquals(ABOVE_LONG, interop.asBigInteger(large));
+        assertFalse(interop.hasMembers(large));
+        assertFalse(interop.isMemberReadable(large, "parent"));
+        assertThrows(
+                UnsupportedMessageException.class,
+                () -> interop.getMembers(large));
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> large.assignLocalSlot("payload", ProtosNullValue.INSTANCE));
     }
 
     @Test
@@ -244,7 +278,7 @@ final class ProtosIntegerValueRepresentationTest {
         assertSame(other.bigIntegerPrototype(), copy.parent().orElseThrow());
         assertFalse(copy.parent().orElseThrow() == prelude.bigIntegerPrototype());
         assertTrue(copy.isFrozen());
-        assertEquals(value, ProtosTestIntegers.exact(copy));
+        assertEquals(String.valueOf(value), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(copy));
         assertTrue(ProtosIdentity.identical(first, copy));
         assertEquals(ProtosIdentity.identityHash(first), ProtosIdentity.identityHash(copy));
     }
@@ -263,12 +297,12 @@ final class ProtosIntegerValueRepresentationTest {
         ProtosIntegerValue small = assertInstanceOf(ProtosIntegerValue.class, actual);
         assertEquals(expected, small.longValue());
         assertSame(prelude.smallIntegerPrototype(), small.representedDelegationParent(prelude));
-        assertEquals(BigInteger.valueOf(expected), ProtosTestIntegers.exact(actual));
+        assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(actual));
     }
 
     private static void assertLarge(BigInteger expected, Object actual) {
         ProtosLargeIntegerValue large = assertInstanceOf(ProtosLargeIntegerValue.class, actual);
         assertSame(prelude.bigIntegerPrototype(), large.parent().orElseThrow());
-        assertEquals(expected, ProtosTestIntegers.exact(large));
+        assertEquals(String.valueOf(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(large));
     }
 }

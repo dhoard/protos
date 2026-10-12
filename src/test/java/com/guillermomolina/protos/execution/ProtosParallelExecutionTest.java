@@ -15,10 +15,10 @@
  * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.execution;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.*;
-import java.math.BigInteger;import java.nio.file.Path;import java.util.*;
+import java.nio.file.Path;import java.util.*;
 import org.junit.jupiter.api.Test;
 class ProtosParallelExecutionTest{
  private static ProtosPrelude core()throws Exception{return new ProtosCoreBootstrap().bootstrap(Path.of("protos","lib","core"));}
@@ -27,7 +27,7 @@ class ProtosParallelExecutionTest{
  @Test void closedPublicSurface()throws Exception{var p=core();assertFalse(p.bindings().hasLocalSlot("P"));assertFalse(p.arrayPrototype().hasLocalSlot("parallelEach"));assertTrue(ProtosObjectValue.rootObject().hasLocalSlot("parallel"));for(String n:List.of("parallelMap","parallelFilter","parallelFindIndex","parallelReduce","parallelSort"))assertFalse(p.arrayPrototype().hasLocalSlot(n),n+" is Standard Library policy (D160), not Core Array");}
  @Test void standardPublicationFreezesSharedPrototypesWithoutFreezingChildren()throws Exception{var p=core();assertTrue(ProtosObjectValue.rootObject().isFrozen());assertTrue(p.integerPrototype().isFrozen());ProtosObjectValue child=new ProtosObjectValue(p.integerPrototype());assertFalse(child.isFrozen());child.createLocalSlot("probe",ProtosNullValue.INSTANCE);assertTrue(child.hasLocalSlot("probe"));}
  @Test void executorBounded()throws Exception{core();assertTrue(ProtosParallelRuntime.configuredCarrierLimit()>=2);assertTrue(ProtosParallelRuntime.liveCarrierCountForTesting()<=ProtosParallelRuntime.configuredCarrierLimit());}
- @Test void parallelReturnsCallerDomainFuture()throws Exception{var p=core();try(var h=ProtosHostedExecutionTestFixture.open(p)){var a=h.activation();var d=a.executionDomain();var f=(ProtosFutureValue)evalHosted(h,"((x) => x).parallel(42)");assertSame(d,f.domain());while(f.isPending()){dispatchHosted(h,d);Thread.onSpinWait();}assertEquals(BigInteger.valueOf(42),ProtosTestIntegers.exact(f.resolvedValue().orElseThrow()));}}
+ @Test void parallelReturnsCallerDomainFuture()throws Exception{var p=core();try(var h=ProtosHostedExecutionTestFixture.open(p)){var a=h.activation();var d=a.executionDomain();var f=(ProtosFutureValue)evalHosted(h,"((x) => x).parallel(42)");assertSame(d,f.domain());while(f.isPending()){dispatchHosted(h,d);Thread.onSpinWait();}assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(f.resolvedValue().orElseThrow()));}}
 
  @Test void identityMapSnapshotCaptureIsIsolatedFromLaterSourceMutation()throws Exception{
   var p=core();
@@ -40,17 +40,13 @@ class ProtosParallelExecutionTest{
            "m: IdentityMap()\n"
                + "m[1] = 10\n"
                + "((copy) => copy[1]).parallel(m)"));
-   assertEquals(
-       BigInteger.valueOf(20),
-       ProtosTestIntegers.exact(evalHosted(h,"m[1] = 20")));
+   assertEquals(String.valueOf("20"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(evalHosted(h,"m[1] = 20")));
    while(f.isPending()){
     dispatchHosted(h,d);
     Thread.onSpinWait();
    }
    assertEquals(ProtosFutureValue.State.RESOLVED,f.state());
-   assertEquals(
-       BigInteger.TEN,
-       ProtosTestIntegers.exact(f.resolvedValue().orElseThrow()));
+   assertEquals(String.valueOf("10"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(f.resolvedValue().orElseThrow()));
    dispatchHosted(h,d);
    assertEquals(0,d.liveTaskCount());
   }
@@ -96,7 +92,7 @@ class ProtosParallelExecutionTest{
    dispatchHosted(h,d);
    assertEquals(1,observedPending[0]);
    assertEquals(ProtosFutureValue.State.RESOLVED,f.state());
-   assertEquals(BigInteger.valueOf(42),ProtosTestIntegers.exact(f.resolvedValue().orElseThrow()));
+   assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(f.resolvedValue().orElseThrow()));
    assertEquals(ProtosTask.State.COMPLETED,producer.state());
    assertEquals(0,d.liveTaskCount());
   }

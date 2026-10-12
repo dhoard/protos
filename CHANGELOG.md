@@ -7,6 +7,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.339-SNAPSHOT
+
+- `I091` (#869): consolidate exact Integer boundaries and retire redundant BigInteger-based test infrastructure.
+  - Update exact Integer representation and conversion paths across numeric rounding,
+    detached/semantic transfer, foreign and polyglot adapters, and bytecode lowering.
+  - Normalize guest Integer expectations to exact decimal text where appropriate,
+    retaining Java BigInteger oracles for arbitrary precision and typed host interop.
+  - Remove the obsolete `ProtosTestIntegers` fixture and add semantic-transfer
+    payload coverage; simplify redundant test wrappers and bounded integer helpers.
+
 ## 0.3.338-SNAPSHOT
 
 - `I090` (#868): I090-C1 introduces the D197-C canonical Core `Complex`

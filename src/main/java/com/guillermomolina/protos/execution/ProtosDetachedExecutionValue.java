@@ -115,6 +115,23 @@ public final class ProtosDetachedExecutionValue {
             if (copiedNumber != null) {
                 return remember(value, copiedNumber);
             }
+            // I091: Core Fraction and Complex are authority-free exact values.
+            // Reuse their inert transfer descriptors so no source Prelude,
+            // prototype, or sealed family state crosses the detached boundary.
+            if (ProtosNumericValueSupport.isFraction(value)) {
+                return remember(
+                        value,
+                        ProtosNumericValueSupport.materializeFractionTransferDescriptor(
+                                ProtosNumericValueSupport.fractionTransferDescriptor(value),
+                                prelude));
+            }
+            if (ProtosComplexNumericSupport.isComplex(value)) {
+                return remember(
+                        value,
+                        ProtosComplexNumericSupport.materializeTransferDescriptor(
+                                ProtosComplexNumericSupport.transferDescriptor(value),
+                                prelude));
+            }
             if (value instanceof ProtosStringValue string) {
                 return remember(value, string.copyForRuntime());
             }

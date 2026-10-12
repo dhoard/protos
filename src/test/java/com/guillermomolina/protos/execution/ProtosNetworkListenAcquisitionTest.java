@@ -1,7 +1,6 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.*;
 import java.math.BigInteger;
@@ -26,7 +25,7 @@ final class ProtosNetworkListenAcquisitionTest {
         invocation.completion.succeeded(new Object(),51000,listenerBackend,release::incrementAndGet);
         ProtosTcpListenerValue listener=assertInstanceOf(ProtosTcpListenerValue.class,future.resolvedValue().orElseThrow());
         assertEquals(0,release.get()); assertTrue(listener.hasAcceptForRuntime());
-        assertEquals(BigInteger.valueOf(51000),ProtosTestIntegers.exact(ProtosInvocation.invokeMessage(listener,"localPort",List.of(),x.activation)));
+        assertEquals(String.valueOf("51000"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosInvocation.invokeMessage(listener,"localPort",List.of(),x.activation)));
         ProtosFutureValue accept=assertInstanceOf(ProtosFutureValue.class,ProtosInvocation.invokeMessage(listener,"accept",List.of(),x.activation));
         assertEquals(ProtosFutureValue.State.PENDING,accept.state()); assertEquals(1,listenerBackend.accepts.size());
     }
@@ -57,8 +56,8 @@ final class ProtosNetworkListenAcquisitionTest {
     // I091: bounded fields admit only exact Integers in their domain; nothing truncates into it.
     @Test void numericFieldsOutsideTheirExactDomainFailBeforeBackendEffect() throws Exception {
         Fixture x=fixture(); Object nul=ProtosNullValue.INSTANCE;
-        Object twoTo64Plus4=ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(4)),x.prelude);
-        Object twoTo64Plus80=ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(80)),x.prelude);
+        Object twoTo64Plus4=com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(4)), x.prelude);
+        Object twoTo64Plus80=com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(80)), x.prelude);
         Object[] badVersions={integer(-1),integer((1L<<32)+4),twoTo64Plus4,new ProtosFloatValue(4.0d),Long.valueOf(4L),nul};
         for(Object version:badVersions) assertFailedAs(listen(x,request(version,nul,nul)),x.prelude,"InvalidIOArgument");
         Object[] badPorts={integer(-1),integer(65536),integer((1L<<32)+80),twoTo64Plus80,new ProtosFloatValue(80.0d),new ProtosStringValue("80")};
@@ -73,7 +72,7 @@ final class ProtosNetworkListenAcquisitionTest {
         assertEquals(2,x.backend.invocations.size());
         ProtosNetworkListenFlow.ListenRequest first=x.backend.invocations.get(0).request;
         assertEquals(6,first.ipVersion()); assertEquals(1,first.portConstraint()); assertSame(address,first.addressConstraint());
-        assertEquals(high,ProtosTestIntegers.exact(first.addressConstraint().readLocalSlot("bits").orElseThrow()));
+        assertEquals(String.valueOf(String.valueOf(high)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(first.addressConstraint().readLocalSlot("bits").orElseThrow()));
         ProtosNetworkListenFlow.ListenRequest second=x.backend.invocations.get(1).request;
         assertEquals(4,second.ipVersion()); assertEquals(65535,second.portConstraint());
     }
@@ -123,7 +122,7 @@ final class ProtosNetworkListenAcquisitionTest {
     private static ProtosFutureValue future(Object receiver,String selector,List<?> args,ProtosActivation a){ return assertInstanceOf(ProtosFutureValue.class,ProtosInvocation.invokeMessage(receiver,selector,args,a)); }
     private static ProtosObjectValue request(Object version,Object address,Object port){ ProtosObjectValue r=new ProtosObjectValue(ProtosObjectValue.rootObject()); r.createLocalSlot("ipVersion",version); r.createLocalSlot("address",address); r.createLocalSlot("port",port); return r; }
     private static ProtosObjectValue ipAddress(Fixture x,int version,long bits){ return ipAddress(x,version,BigInteger.valueOf(bits)); }
-    private static ProtosObjectValue ipAddress(Fixture x,int version,BigInteger bits){ Object factory=x.prelude.ipAddressPrototypeForRuntime(); return (ProtosObjectValue)ProtosInvocation.invoke(factory,List.of(integer(version),ProtosTestIntegers.integer(bits,x.prelude)),x.activation); }
+    private static ProtosObjectValue ipAddress(Fixture x,int version,BigInteger bits){ Object factory=x.prelude.ipAddressPrototypeForRuntime(); return (ProtosObjectValue)ProtosInvocation.invoke(factory,List.of(integer(version),com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(bits, x.prelude)),x.activation); }
     private static ProtosIntegerValue integer(long v){ return new ProtosIntegerValue(v); }
     private static void assertFailedAs(ProtosFutureValue f,ProtosPrelude p,String name){ assertEquals(ProtosFutureValue.State.FAILED,f.state()); assertSame(p.bindings().readLocalSlot(name).orElseThrow(),f.failedError().orElseThrow().parent().orElseThrow()); }
 

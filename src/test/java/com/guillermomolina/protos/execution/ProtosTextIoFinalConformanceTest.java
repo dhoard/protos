@@ -3,9 +3,8 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.*;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -389,9 +388,8 @@ final class ProtosTextIoFinalConformanceTest {
             List<Object> values = bytes.indexedSnapshot();
             byte[] result = new byte[values.size()];
             for (int index = 0; index < values.size(); index++) {
-                BigInteger value =
-                        ProtosTestIntegers.exact(values.get(index));
-                result[index] = (byte) value.intValueExact();
+                int value = Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(values.get(index)));
+                result[index] = (byte) value;
             }
             return result;
         }

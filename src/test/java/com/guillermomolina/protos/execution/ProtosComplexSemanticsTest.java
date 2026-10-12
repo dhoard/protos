@@ -41,7 +41,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSealedValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -94,7 +94,7 @@ final class ProtosComplexSemanticsTest {
                 new ProtosIntegerValue(1L),
                 divide(1, 2, prelude),
                 new ProtosFloatValue(1.0),
-                ProtosTestIntegers.integer(TWO_POW_100, prelude),
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_100, prelude),
                 new ProtosStringValue("Complex"))) {
             assertFalse(recognizes(prototype, candidate, caller));
             assertFalse(ProtosComplexNumericSupport.isComplex(candidate));
@@ -139,7 +139,7 @@ final class ProtosComplexSemanticsTest {
     @Test
     void componentsKeepTheirExactFamilies() throws IOException {
         ProtosPrelude prelude = corePrelude();
-        Object big = ProtosTestIntegers.integer(TWO_POW_100, prelude);
+        Object big = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_100, prelude);
         Object third = divide(1, 3, prelude);
 
         Object exact = complex(big, third, prelude);
@@ -209,8 +209,8 @@ final class ProtosComplexSemanticsTest {
         assertEquality(false, exactHalf, half, caller);
 
         // Arbitrarily large exact components are not rounded.
-        Object big = ProtosTestIntegers.integer(TWO_POW_100, prelude);
-        Object bigPlusOne = ProtosTestIntegers.integer(TWO_POW_100.add(BigInteger.ONE), prelude);
+        Object big = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_100, prelude);
+        Object bigPlusOne = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_100.add(BigInteger.ONE), prelude);
         assertEquality(true, complex(big, half, prelude),
                 complex(new ProtosFloatValue(0x1p100), new ProtosFloatValue(0.5), prelude), caller);
         assertEquality(false, complex(bigPlusOne, half, prelude),
@@ -233,8 +233,8 @@ final class ProtosComplexSemanticsTest {
         assertTrue(ProtosIdentity.identical(a, b));
         assertEquals(ProtosIdentity.identityHash(a), ProtosIdentity.identityHash(b));
 
-        Object big = complex(ProtosTestIntegers.integer(TWO_POW_100, prelude), half, prelude);
-        Object bigTwin = complex(ProtosTestIntegers.integer(TWO_POW_100, prelude),
+        Object big = complex(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_100, prelude), half, prelude);
+        Object bigTwin = complex(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_100, prelude),
                 divide(1, 2, prelude), prelude);
         assertTrue(ProtosIdentity.identical(big, bigTwin));
         assertEquals(ProtosIdentity.identityHash(big), ProtosIdentity.identityHash(bigTwin));
@@ -273,7 +273,7 @@ final class ProtosComplexSemanticsTest {
         assertSameNormalHash(complex(one, new ProtosFloatValue(-0.0), prelude), one, prelude);
         assertSameNormalHash(
                 complex(half, new ProtosFloatValue(-0.0), prelude), new ProtosFloatValue(0.5), prelude);
-        Object big = ProtosTestIntegers.integer(TWO_POW_100, prelude);
+        Object big = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_100, prelude);
         assertSameNormalHash(complex(big, new ProtosFloatValue(0.0), prelude), big, prelude);
 
         // A nonzero imaginary part combines both component hashes.
@@ -283,7 +283,7 @@ final class ProtosComplexSemanticsTest {
         assertNotEquals(normalHash(withHalf, prelude), normalHash(one, prelude));
 
         // The guest Number.hash answers the same normal hash.
-        assertEquals(normalHash(withHalf, prelude), ProtosTestIntegers.exact(
+        assertEquals(normalHash(withHalf, prelude), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                 ProtosInvocation.invokeMessage(withHalf, "hash", List.of(), caller)));
     }
 
@@ -334,7 +334,7 @@ final class ProtosComplexSemanticsTest {
         ProtosPrelude sourcePrelude = corePrelude();
         ProtosPrelude destinationPrelude = sourcePrelude;
         Object exact = complex(
-                ProtosTestIntegers.integer(TWO_POW_100, sourcePrelude),
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_100, sourcePrelude),
                 divide(-1, 3, sourcePrelude),
                 sourcePrelude);
         Object signedZero = complex(
@@ -375,7 +375,7 @@ final class ProtosComplexSemanticsTest {
         ProtosPrelude destinationPrelude = corePrelude();
 
         Object exact = complex(
-                ProtosTestIntegers.integer(TWO_POW_100, sourcePrelude),
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_100, sourcePrelude),
                 divide(-1, 3, sourcePrelude),
                 sourcePrelude);
         Object signedZero = complex(
@@ -421,7 +421,7 @@ final class ProtosComplexSemanticsTest {
         ProtosPrelude destinationPrelude = corePrelude();
         Object value = complex(
                 divide(5, 7, sourcePrelude),
-                ProtosTestIntegers.integer(TWO_POW_100.negate(), sourcePrelude),
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_100.negate(), sourcePrelude),
                 sourcePrelude);
 
         boolean[] records = new boolean[1];
@@ -554,7 +554,7 @@ final class ProtosComplexSemanticsTest {
         ProtosActivation destination = destinationPrelude.newModuleActivation();
 
         Object key = complex(
-                ProtosTestIntegers.integer(TWO_POW_100, sourcePrelude),
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_100, sourcePrelude),
                 divide(1, 2, sourcePrelude),
                 sourcePrelude);
 
@@ -601,7 +601,7 @@ final class ProtosComplexSemanticsTest {
                 new ProtosFloatValue(0.5),
                 destinationPrelude);
         Object identityTwin = complex(
-                ProtosTestIntegers.integer(TWO_POW_100, destinationPrelude),
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_100, destinationPrelude),
                 divide(2, 4, destinationPrelude),
                 destinationPrelude);
 
@@ -658,8 +658,9 @@ final class ProtosComplexSemanticsTest {
                 ProtosInvocation.invokeMessage(right, "==", List.of(left), caller));
     }
 
-    private static BigInteger normalHash(Object value, ProtosPrelude prelude) {
-        return ProtosTestIntegers.exact(ProtosCurrentNumericRelations.normalHash(value, prelude));
+    private static String normalHash(Object value, ProtosPrelude prelude) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
+                ProtosCurrentNumericRelations.normalHash(value, prelude));
     }
 
     private static void assertSameNormalHash(Object left, Object right, ProtosPrelude prelude) {

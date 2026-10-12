@@ -3,7 +3,6 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.*;
 import com.guillermomolina.protos.semantic.Canonicalizer;
@@ -11,7 +10,6 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -356,9 +354,7 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
                 assertInstanceOf(ProtosBytesValue.class, value);
         assertEquals(expected.length, bytes.indexedSize());
         for (int index = 0; index < expected.length; index++) {
-            assertEquals(
-                    BigInteger.valueOf(expected[index]),
-                    ProtosTestIntegers.exact(bytes.indexedAt(index)));
+            assertEquals(Long.toString(expected[index]), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(bytes.indexedAt(index)));
         }
     }
 

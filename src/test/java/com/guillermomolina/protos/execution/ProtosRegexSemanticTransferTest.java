@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
@@ -272,17 +271,17 @@ final class ProtosRegexSemanticTransferTest {
 
             ProtosSemanticTransferPayload matchPayload = family.extract(match);
             assertEquals("Match", matchPayload.get(0));
-            assertEquals(BigInteger.valueOf(3), matchPayload.get(1));
+            assertEquals(3L, matchPayload.get(1));
             ProtosSemanticTransferPayload groups = (ProtosSemanticTransferPayload) matchPayload.get(2);
             assertEquals(4, groups.size());
-            assertEquals(List.of(true, "Été", BigInteger.TWO, BigInteger.valueOf(5)), leaves(groups.get(0)));
-            assertEquals(List.of(true, "Été", BigInteger.TWO, BigInteger.valueOf(5)), leaves(groups.get(1)));
+            assertEquals(List.of(true, "Été", 2L, 5L), leaves(groups.get(0)));
+            assertEquals(List.of(true, "Été", 2L, 5L), leaves(groups.get(1)));
             assertEquals(List.of(false), leaves(groups.get(2)), "nonparticipating");
-            assertEquals(List.of(true, "", BigInteger.valueOf(5), BigInteger.valueOf(5)), leaves(groups.get(3)),
+            assertEquals(List.of(true, "", 5L, 5L), leaves(groups.get(3)),
                     "participating empty");
             ProtosSemanticTransferPayload names = (ProtosSemanticTransferPayload) matchPayload.get(3);
             assertEquals(1, names.size());
-            assertEquals(List.of("w", BigInteger.ONE), leaves(names.get(0)));
+            assertEquals(List.of("w", 1L), leaves(names.get(0)));
             assertTrue(family.acceptsPayload(matchPayload));
             assertFalse(allLeaves(matchPayload).contains(SUBJECT), "the subject never crosses");
             for (Object leaf : allLeaves(matchPayload)) {
@@ -382,10 +381,8 @@ final class ProtosRegexSemanticTransferTest {
         Path holder = Files.writeString(dir.resolve("holder.protos"), HOLDER_SOURCE);
         try (ProtosHostedExecutionTestFixture hosted = ProtosHostedExecutionTestFixture.open(prelude(holder))) {
             ProtosActivation root = hosted.activation();
-            assertEquals(BigInteger.valueOf(7),
-                    ProtosTestIntegers.exact(await(hosted, "((v) => { v }).parallel(7)")));
-            assertEquals(BigInteger.valueOf(42),
-                    ProtosTestIntegers.exact(await(hosted,
+            assertEquals(String.valueOf("7"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(await(hosted, "((v) => { v }).parallel(7)")));
+            assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(await(hosted,
                                     "worker: Actor.spawn(\"plat051b-holder\", \"holder\", 0)\n"
                                             + "worker.request(\"echo\", 42)")));
             assertTrue(root.actorModuleState().lookup(ProtosRegexUnicodeFacility.MODULE_KEY).isEmpty());
@@ -483,7 +480,7 @@ final class ProtosRegexSemanticTransferTest {
             return string.value();
         }
         if (value instanceof ProtosIntegerValue integer) {
-            return ProtosTestIntegers.exact(integer).longValueExact();
+            return Long.parseLong(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
         }
         if (value == ProtosBooleanValue.TRUE || value == ProtosBooleanValue.FALSE) {
             return value == ProtosBooleanValue.TRUE;

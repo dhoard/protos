@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.cli.ProtosCli;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -141,7 +140,7 @@ class ProtosExternalForeignProviderTest {
             assertInstanceOf(ProtosForeignPluginValueAdapter.class, descriptor.values());
             assertEquals(0, counter(fixture, "invented.Invented", "SESSIONS"));
 
-            assertEquals(BigInteger.valueOf(42), integer(fixture.eval(DEMO + "lib.double(21)")));
+            assertEquals("42", integer(fixture.eval(DEMO + "lib.double(21)")));
             ProtosForeignModuleFacadeValue facade =
                     assertInstanceOf(
                             ProtosForeignModuleFacadeValue.class,
@@ -169,9 +168,7 @@ class ProtosExternalForeignProviderTest {
             ProtosActivation other = fixture.newActorActivation();
             Object otherFacade = fixture.eval(other, "import(\"inventado:demo\")");
             assertNotSame(facade, otherFacade);
-            assertEquals(
-                    BigInteger.valueOf(8),
-                    integer(fixture.eval(other, "import(\"inventado:demo\").double(4)")));
+            assertEquals("8", integer(fixture.eval(other, "import(\"inventado:demo\").double(4)")));
             assertEquals(1, fixture.context.foreignProviderCompartmentCountForTesting());
             assertEquals(2, fixture.context.foreignProviderSessionCountForTesting());
             assertEquals(2, counter(fixture, "invented.Invented", "SESSIONS"));
@@ -234,13 +231,9 @@ class ProtosExternalForeignProviderTest {
                 twoPow63.negate().subtract(BigInteger.ONE), BigInteger.ONE.shiftLeft(100)};
             for (int index = 0; index < spellings.length; index++) {
                 // The plugin rejects any non-BigInteger Integer argument, so success proves it.
-                assertEquals(values[index],
-                        integer(fixture.eval(DEMO + "lib.echo(" + spellings[index] + ")")),
-                        spellings[index]);
-                assertEquals(values[index],
-                        integer(fixture.eval(
-                                DEMO + "lib.echo(lib.echo(" + spellings[index] + "))")),
-                        spellings[index]);
+                assertEquals(String.valueOf(values[index]), integer(fixture.eval(DEMO + "lib.echo(" + spellings[index] + ")")), spellings[index]);
+                assertEquals(String.valueOf(values[index]), integer(fixture.eval(
+                                DEMO + "lib.echo(lib.echo(" + spellings[index] + "))")), spellings[index]);
             }
             assertSame(ProtosBooleanValue.TRUE, fixture.eval(
                     DEMO + "lib.echo(9223372036854775808).parent() === BigInteger"));
@@ -248,9 +241,9 @@ class ProtosExternalForeignProviderTest {
 
             // An independent session (another Actor) has the same exact contract.
             ProtosActivation other = fixture.newActorActivation();
-            assertEquals(twoPow63, integer(fixture.eval(
+            assertEquals(String.valueOf(twoPow63), integer(fixture.eval(
                     other, "import(\"inventado:demo\").echo(9223372036854775808)")));
-            assertEquals(BigInteger.valueOf(-2), integer(fixture.eval(
+            assertEquals("-2", integer(fixture.eval(
                     other, "import(\"inventado:demo\").double(0 - 1)")));
             assertEquals(2, counter(fixture, "invented.Invented", "SESSIONS"));
             assertEquals(2, fixture.context.foreignProviderSessionCountForTesting());
@@ -258,17 +251,32 @@ class ProtosExternalForeignProviderTest {
     }
 
     @Test
+    void optedInProviderReceivesLongAndRetainsLargeIntegers() throws Exception {
+        BigInteger huge = BigInteger.ONE.shiftLeft(100);
+        try (Fixture fixture = new Fixture(second)) {
+            String module = "import(\"otro:demo\")";
+
+            assertEquals("7", integer(fixture.eval(module + ".echo(7)")));
+            assertEquals(Long.toString(Long.MAX_VALUE), integer(fixture.eval(
+                            module + ".echo(9223372036854775807)")));
+            assertEquals(Long.toString(Long.MIN_VALUE), integer(fixture.eval(
+                            module + ".echo(-9223372036854775808)")));
+            assertEquals(String.valueOf(huge), integer(fixture.eval(
+                            module + ".echo(0x1" + "0".repeat(25) + ")")));
+            assertEquals("42", integer(fixture.eval(module + ".double(21)")));
+        }
+    }
+
+    @Test
     void secondExternalSchemeRegistersAndUnusedProvidersStayUninitialized() throws Exception {
         try (Fixture fixture = new Fixture(invented, second)) {
             assertEquals(2, fixture.host.foreignProvidersForRuntime().size());
-            assertEquals(BigInteger.valueOf(42), integer(fixture.eval(DEMO + "lib.double(21)")));
+            assertEquals("42", integer(fixture.eval(DEMO + "lib.double(21)")));
             assertEquals(1, counter(fixture, "invented.Invented", "SESSIONS"));
             assertEquals(0, counter(fixture, "second.Second", "SESSIONS"));
             assertEquals(1, fixture.context.foreignProviderCompartmentCountForTesting());
 
-            assertEquals(
-                    BigInteger.valueOf(10),
-                    integer(fixture.eval("import(\"otro:demo\").double(5)")));
+            assertEquals("10", integer(fixture.eval("import(\"otro:demo\").double(5)")));
             assertEquals(1, counter(fixture, "second.Second", "SESSIONS"));
             assertEquals(2, fixture.context.foreignProviderCompartmentCountForTesting());
         }
@@ -398,11 +406,17 @@ class ProtosExternalForeignProviderTest {
                         return new ProtosForeignValueOperations() {
                             public String language() { return "%3$s"; }
 
+                            public boolean supportsLongIntegerArguments() {
+                                return %5$s;
+                            }
+
                             public ProtosForeignValueClass classify(
                                     ProtosForeignPluginSession session, Object handle) {
                                 if (handle instanceof Long number) {
-                                    return ProtosForeignValueClass.integral(
-                                            BigInteger.valueOf(number));
+                                    return %5$s
+                                            ? ProtosForeignValueClass.integral(number)
+                                            : ProtosForeignValueClass.integral(
+                                                    BigInteger.valueOf(number));
                                 }
                                 if (handle instanceof BigInteger exact) {
                                     return ProtosForeignValueClass.integral(exact);
@@ -435,9 +449,19 @@ class ProtosExternalForeignProviderTest {
                                     Object handle,
                                     List<ProtosForeignArgumentValue> arguments) {
                                 Object argument = arguments.get(0).value();
+                                if (%5$s && argument instanceof Long small) {
+                                    if (handle instanceof Echo) {
+                                        return small;
+                                    }
+                                    return ((Bound) handle).receiver().twice(small);
+                                }
                                 if (!(argument instanceof BigInteger exact)) {
                                     throw new IllegalStateException(
                                             "D188 Integer argument is not a BigInteger");
+                                }
+                                if (%5$s && exact.bitLength() < Long.SIZE) {
+                                    throw new IllegalStateException(
+                                            "small Integer boxed despite primitive SPI");
                                 }
                                 if (handle instanceof Echo) {
                                     return exact;
@@ -448,7 +472,7 @@ class ProtosExternalForeignProviderTest {
                     }
                 }
                 """
-                        .formatted(pkg, name, id, scheme);
+                        .formatted(pkg, name, id, scheme, pkg.equals("second"));
         Path file = Files.createDirectories(sources.resolve(pkg)).resolve(name + ".java");
         Files.writeString(file, source);
         return file.toString();
@@ -495,8 +519,8 @@ class ProtosExternalForeignProviderTest {
         return ((java.util.concurrent.atomic.AtomicInteger) type.getField(field).get(null)).get();
     }
 
-    private static BigInteger integer(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integer(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 
     /** Hosted Process over a host configured with exactly the given external provider paths. */

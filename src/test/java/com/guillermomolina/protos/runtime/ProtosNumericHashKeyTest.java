@@ -37,7 +37,7 @@ final class ProtosNumericHashKeyTest {
             assertEquals(
                     ProtosNumericHashKey.ofLong(value),
                     ProtosNumericHashKey.fromSemanticInteger(
-                            ProtosTestIntegers.integer(BigInteger.valueOf(value))));
+                            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.valueOf(value), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
         }
     }
 
@@ -46,15 +46,15 @@ final class ProtosNumericHashKeyTest {
         BigInteger huge = BigInteger.ONE.shiftLeft(200).add(BigInteger.valueOf(7));
 
         ProtosNumericHashKey positive =
-                ProtosNumericHashKey.fromSemanticInteger(ProtosTestIntegers.integer(huge));
+                ProtosNumericHashKey.fromSemanticInteger(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(huge, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()));
         // A separately minted large Integer of the same value yields an equal key.
         ProtosNumericHashKey same =
                 ProtosNumericHashKey.fromSemanticInteger(
-                        ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(200).add(
-                                BigInteger.valueOf(7))));
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(200).add(
+                                BigInteger.valueOf(7)), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()));
         ProtosNumericHashKey opposite =
                 ProtosNumericHashKey.fromSemanticInteger(
-                        ProtosTestIntegers.integer(huge.negate()));
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(huge.negate(), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()));
 
         assertEquals(positive, same);
         assertEquals(positive.hashCode(), same.hashCode());
@@ -63,7 +63,7 @@ final class ProtosNumericHashKeyTest {
         assertNotEquals(ProtosNumericHashKey.ofLong(7), positive);
         assertNotEquals(
                 ProtosNumericHashKey.fromSemanticInteger(
-                        ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63))),
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(63), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())),
                 ProtosNumericHashKey.ofLong(Long.MIN_VALUE));
     }
 
@@ -97,9 +97,9 @@ final class ProtosNumericHashKeyTest {
         for (int shift : new int[] {64, 65, 128, 1000}) {
             BigInteger high = BigInteger.ONE.shiftLeft(shift);
             ProtosNumericHashKey above = ProtosNumericHashKey.fromSemanticInteger(
-                    ProtosTestIntegers.integer(high.add(low)));
+                    com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(high.add(low), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()));
             ProtosNumericHashKey below = ProtosNumericHashKey.fromSemanticInteger(
-                    ProtosTestIntegers.integer(high.negate().add(low)));
+                    com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(high.negate().add(low), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()));
             assertNotEquals(small, above);
             assertNotEquals(above, small);
             assertNotEquals(small, below);
@@ -118,7 +118,7 @@ final class ProtosNumericHashKeyTest {
                         field.getName());
             }
         }
-        Object large = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(90));
+        Object large = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(90), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         ProtosNumericHashKey byValue = ProtosNumericHashKey.fromSemanticInteger(large);
         ProtosNumericHashKey byIdentity = ProtosNumericHashKey.fromIdentity(large);
         assertNotEquals(byValue, byIdentity);

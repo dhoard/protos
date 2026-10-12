@@ -137,6 +137,7 @@ public final class ProtosNumericValueSupport {
                         ? null
                         : mintFraction(integer(n), integer(d), prelude);
             }
+            return normalizeExtremeSigned64Rational(x, y, prelude);
         }
         if (integerSignum(denominator) == 0) {
             throw new ArithmeticException("division by zero");
@@ -162,6 +163,54 @@ public final class ProtosNumericValueSupport {
             b = remainder;
         }
         return a;
+    }
+
+    /*
+     * Signed-64 extremes only. The magnitude of MIN_VALUE is 2^63,
+     * represented here as an unsigned long. The ordinary signed path
+     * above remains unchanged; it never pays for unsigned division.
+     */
+    private static Object normalizeExtremeSigned64Rational(
+            long numerator, long denominator, ProtosPrelude prelude) {
+        long absoluteNumerator = numerator < 0L ? -numerator : numerator;
+        long absoluteDenominator = denominator < 0L ? -denominator : denominator;
+
+        long a = absoluteNumerator;
+        long b = absoluteDenominator;
+        while (b != 0L) {
+            long remainder = Long.remainderUnsigned(a, b);
+            a = b;
+            b = remainder;
+        }
+
+        long reducedNumerator =
+                Long.divideUnsigned(absoluteNumerator, a);
+        long reducedDenominator =
+                Long.divideUnsigned(absoluteDenominator, a);
+        boolean negative = (numerator < 0L) != (denominator < 0L);
+
+        // A reduced positive magnitude of 2^63 cannot be a signed
+        // numerator; a denominator of 2^63 cannot be signed either.
+        // Only these genuinely wide cases enter the large fallback.
+        if (reducedDenominator < 0L
+                || (!negative && reducedNumerator < 0L)) {
+            return normalizeLargeRational(
+                    integer(numerator), integer(denominator), prelude);
+        }
+
+        // Negating the unsigned 2^63 representation yields MIN_VALUE,
+        // exactly the signed numerator required for a negative result.
+        long signedNumerator =
+                negative ? -reducedNumerator : reducedNumerator;
+        if (reducedDenominator == 1L) {
+            return integer(signedNumerator);
+        }
+        return prelude == null
+                ? null
+                : mintFraction(
+                        integer(signedNumerator),
+                        integer(reducedDenominator),
+                        prelude);
     }
 
     /* Rare arbitrary-precision normalization; BigInteger has no partial-evaluation value. */
@@ -209,7 +258,46 @@ public final class ProtosNumericValueSupport {
         if (isCurrentInteger(left) && isCurrentInteger(right)) {
             return compareIntegers(left, right);
         }
+
+        boolean leftFraction = isFraction(left);
+        boolean rightFraction = isFraction(right);
+
+        Object a = leftFraction ? fractionNumerator(left) : left;
+        Object b = leftFraction ? fractionDenominator(left) : null;
+        Object c = rightFraction ? fractionNumerator(right) : right;
+        Object d = rightFraction ? fractionDenominator(right) : null;
+
+        if (a instanceof ProtosIntegerValue compactA
+                && c instanceof ProtosIntegerValue compactC
+                && (b == null || b instanceof ProtosIntegerValue)
+                && (d == null || d instanceof ProtosIntegerValue)) {
+            long denominatorB =
+                    b == null ? 1L : ((ProtosIntegerValue) b).longValue();
+            long denominatorD =
+                    d == null ? 1L : ((ProtosIntegerValue) d).longValue();
+
+            return compareSignedProducts(
+                    compactA.longValue(), denominatorD,
+                    compactC.longValue(), denominatorB);
+        }
+
         return compareRationalsByCrossProduct(left, right);
+    }
+
+    /**
+     * Compares a*b and c*d exactly as signed 128-bit products.
+     * Neither product is allocated, narrowed or rounded.
+     */
+    static int compareSignedProducts(long a, long b, long c, long d) {
+        long firstHigh = Math.multiplyHigh(a, b);
+        long firstLow = a * b;
+        long secondHigh = Math.multiplyHigh(c, d);
+        long secondLow = c * d;
+
+        int upper = Long.compare(firstHigh, secondHigh);
+        return upper != 0
+                ? upper
+                : Long.compareUnsigned(firstLow, secondLow);
     }
 
     /* a/b <=> c/d with positive denominators compares a*d against c*b, without rounding. */

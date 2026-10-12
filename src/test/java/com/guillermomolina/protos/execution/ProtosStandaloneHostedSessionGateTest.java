@@ -22,12 +22,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.math.BigInteger;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -212,9 +211,7 @@ final class ProtosStandaloneHostedSessionGateTest {
 
     private static void assertZero(ProtosExecutionOutcome outcome) {
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertEquals(
-                BigInteger.ZERO,
-                ProtosTestIntegers.exact(outcome.value()));
+        assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(outcome.value()));
     }
 
     /** One public session operation running on its own named platform thread. */

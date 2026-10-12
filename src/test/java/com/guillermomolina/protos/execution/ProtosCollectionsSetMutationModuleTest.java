@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -31,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -58,7 +56,7 @@ class ProtosCollectionsSetMutationModuleTest {
                             """);
 
             assertSame(ProtosBooleanValue.TRUE, allowed.indexedAt(0), module);
-            assertInteger(BigInteger.ONE, allowed.indexedAt(1));
+            assertInteger(1L, allowed.indexedAt(1));
             assertSame(ProtosBooleanValue.TRUE, allowed.indexedAt(2), module);
             assertSame(
                     ProtosBooleanValue.TRUE,
@@ -118,9 +116,7 @@ class ProtosCollectionsSetMutationModuleTest {
                                 body + "\nArray()\n"));
     }
 
-    private static void assertInteger(BigInteger expected, Object value) {
-        assertEquals(
-                expected,
-                ProtosTestIntegers.exact(value));
+    private static void assertInteger(long expected, Object value) {
+        assertEquals(String.valueOf(String.valueOf(expected)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
     }
 }

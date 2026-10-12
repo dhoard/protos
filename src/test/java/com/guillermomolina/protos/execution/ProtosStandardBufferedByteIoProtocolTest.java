@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
@@ -306,9 +305,8 @@ class ProtosStandardBufferedByteIoProtocolTest {
             i(0),
             i((1L << 32) + 1),
             i(Long.MIN_VALUE),
-            ProtosTestIntegers.integer(java.math.BigInteger.ONE.shiftLeft(64), prelude),
-            ProtosTestIntegers.integer(
-                    java.math.BigInteger.ONE.shiftLeft(64).add(java.math.BigInteger.ONE), prelude),
+            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(java.math.BigInteger.ONE.shiftLeft(64), prelude),
+            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(java.math.BigInteger.ONE.shiftLeft(64).add(java.math.BigInteger.ONE), prelude),
             new ProtosFloatValue(2.0d),
             Long.valueOf(2L),
         };
@@ -892,8 +890,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ArrayList<Integer> result = new ArrayList<>();
         for (int j = 0, n = bytes.indexedSize(); j < n; j++) {
             result.add(
-                    ProtosTestIntegers.exact(bytes.indexedAt(j))
-                            .intValue());
+                    Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(bytes.indexedAt(j))));
         }
         return result;
     }

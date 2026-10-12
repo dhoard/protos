@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,7 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -164,9 +163,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                                     .readLocalSlot("value")
                                     .orElseThrow());
 
-            assertEquals(
-                    BigInteger.valueOf(22),
-                    ProtosTestIntegers.exact(value));
+            assertEquals(String.valueOf("22"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         }
     }
 
@@ -408,9 +405,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                                     .readLocalSlot("value")
                                     .orElseThrow());
 
-            assertEquals(
-                    BigInteger.valueOf(2),
-                    ProtosTestIntegers.exact(value));
+            assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         }
     }
 

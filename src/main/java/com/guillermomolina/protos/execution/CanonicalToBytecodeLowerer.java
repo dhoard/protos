@@ -873,6 +873,15 @@ final class CanonicalToBytecodeLowerer {
                     builder.emitLoadConstant(terminalClosurePlan);
                     endClosureCapture(builder);
                     builder.endReturn();
+                } else if (last instanceof CanonicalLiteral literal
+                        && primitiveNumberLiteralOrNull(literal) != null) {
+                    // I091: retain Long and Double literal carriers until the
+                    // caller requires an observable guest numeric value.
+                    builder.beginReturn();
+                    builder.beginMaterializeReturnCarrier();
+                    builder.emitLoadConstant(primitiveNumberLiteralOrNull(literal));
+                    builder.endMaterializeReturnCarrier();
+                    builder.endReturn();
                 } else if (last instanceof CanonicalLookup terminalRead) {
                     // I091: a retained carrier may return to an accepting caller.
                     builder.beginReturn();

@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -33,7 +32,6 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Context;
@@ -62,7 +60,7 @@ final class ProtosPerf038BCompactMethodCallTest {
                                     + "[run(1), run(2), run(3), run(4)]\n",
                             "perf038b-monomorphic.protos", module));
             for (int index = 0; index < 4; index++) {
-                assertEquals(BigInteger.valueOf(index + 1), integerValue(results.get(index)));
+                assertEquals(Long.toString(index + 1), integerValue(results.get(index)));
             }
         });
         System.out.println("PERF038B_MONOMORPHIC_METHOD_CALL=PASS");
@@ -84,10 +82,10 @@ final class ProtosPerf038BCompactMethodCallTest {
                                     + "run: (receiver, delta) => { receiver.read(delta) }\n"
                                     + "[run(leaf, 1), run(leaf, 2), run(base, 3), run(middle, 4)]\n",
                             "perf038b-super.protos", module));
-            assertEquals(BigInteger.valueOf(18), integerValue(results.get(0)));
-            assertEquals(BigInteger.valueOf(19), integerValue(results.get(1)));
-            assertEquals(BigInteger.valueOf(4), integerValue(results.get(2)));
-            assertEquals(BigInteger.valueOf(15), integerValue(results.get(3)));
+            assertEquals("18", integerValue(results.get(0)));
+            assertEquals("19", integerValue(results.get(1)));
+            assertEquals("4", integerValue(results.get(2)));
+            assertEquals("15", integerValue(results.get(3)));
         });
         System.out.println("PERF038B_INHERITANCE_AND_SUPER=PASS");
         System.out.println("PERF038B_RECEIVER_CHANGE=PASS");
@@ -104,10 +102,10 @@ final class ProtosPerf038BCompactMethodCallTest {
                                     + "receiver.pick = (value) => { value + 100 }\n"
                                     + "[before[0], before[1], run(3), run(4)]\n",
                             "perf038b-invalidation.protos", module));
-            assertEquals(BigInteger.valueOf(1), integerValue(results.get(0)));
-            assertEquals(BigInteger.valueOf(2), integerValue(results.get(1)));
-            assertEquals(BigInteger.valueOf(103), integerValue(results.get(2)));
-            assertEquals(BigInteger.valueOf(104), integerValue(results.get(3)));
+            assertEquals("1", integerValue(results.get(0)));
+            assertEquals("2", integerValue(results.get(1)));
+            assertEquals("103", integerValue(results.get(2)));
+            assertEquals("104", integerValue(results.get(3)));
         });
         System.out.println("PERF038B_SELECTED_METHOD_INVALIDATION=PASS");
         System.out.println("PERF038B_DYNAMIC_SEND_FALLBACK=PASS");
@@ -128,9 +126,7 @@ final class ProtosPerf038BCompactMethodCallTest {
                     ProtosSignalException.class,
                     () -> evaluate(
                             "receiver.identity(1, 2)\n", "perf038b-arity-many.protos", module));
-            assertEquals(
-                    BigInteger.valueOf(5),
-                    integerValue(evaluate("run(5)\n", "perf038b-arity-after.protos", module)));
+            assertEquals("5", integerValue(evaluate("run(5)\n", "perf038b-arity-after.protos", module)));
         });
         System.out.println("PERF038B_WRONG_ARITY=PASS");
     }
@@ -154,20 +150,20 @@ final class ProtosPerf038BCompactMethodCallTest {
                             "perf038b-late.protos", module));
 
             List<Object> first = elements(results.get(0));
-            assertEquals(BigInteger.ONE, integerValue(first.get(0)));
-            assertEquals(BigInteger.TWO, integerValue(first.get(1)));
-            assertEquals(BigInteger.TWO, integerValue(first.get(2)));
+            assertEquals("1", integerValue(first.get(0)));
+            assertEquals("2", integerValue(first.get(1)));
+            assertEquals("2", integerValue(first.get(2)));
             assertInstanceOf(ProtosExecutionContextValue.class, first.get(3));
 
             List<Object> late = elements(results.get(2));
-            assertEquals(BigInteger.valueOf(5), integerValue(late.get(0)));
+            assertEquals("5", integerValue(late.get(0)));
             ProtosExecutionContextValue observed =
                     assertInstanceOf(ProtosExecutionContextValue.class, late.get(1));
             assertSame(observed, late.get(2), "c is bound to the same observed Context");
             assertSame(observed, late.get(3), "one Context per invocation");
 
             List<Object> again = elements(results.get(3));
-            assertEquals(BigInteger.valueOf(7), integerValue(again.get(2)));
+            assertEquals("7", integerValue(again.get(2)));
             assertNotSame(observed, again.get(3), "a fresh Context per invocation");
         });
         System.out.println("PERF038B_LATE_MATERIALIZATION=PASS");
@@ -192,7 +188,7 @@ final class ProtosPerf038BCompactMethodCallTest {
             assertNotSame(first, assertInstanceOf(ProtosClosureValue.class, results.get(1)));
             assertSame(ProtosBooleanValue.FALSE, results.get(2));
             assertSame(ProtosBooleanValue.TRUE, results.get(4));
-            assertEquals(BigInteger.valueOf(9), integerValue(results.get(3)));
+            assertEquals("9", integerValue(results.get(3)));
         });
         System.out.println("PERF038B_EXTRACTED_CLOSURE_IDENTITY=PASS");
     }
@@ -200,9 +196,7 @@ final class ProtosPerf038BCompactMethodCallTest {
     @Test
     void nonLocalReturnFromAMethodArgumentBlock() throws Exception {
         withCore(module -> {
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(evaluate(
+            assertEquals("7", integerValue(evaluate(
                             "receiver: { apply: (block) => { block() + 1000 } }\n"
                                     + "outer: (n) => {\n"
                                     + "    receiver.apply(() => { ^ n })\n"
@@ -210,9 +204,7 @@ final class ProtosPerf038BCompactMethodCallTest {
                                     + "}\n"
                                     + "outer(6)\nouter(7)\n",
                             "perf038b-non-local.protos", module)));
-            assertEquals(
-                    BigInteger.valueOf(1001),
-                    integerValue(evaluate(
+            assertEquals("1001", integerValue(evaluate(
                             "receiver.apply(() => { 1 })\n", "perf038b-local.protos", module)));
         });
         System.out.println("PERF038B_NON_LOCAL_RETURN=PASS");
@@ -248,7 +240,7 @@ final class ProtosPerf038BCompactMethodCallTest {
         return assertInstanceOf(ProtosArrayValue.class, array).indexedSnapshot();
     }
 
-    private static BigInteger integerValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 }

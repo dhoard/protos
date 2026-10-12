@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -58,9 +57,7 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
             Object large =
                     hosted.evaluatePersistent(
                             "<perf006-b1-large-literal>", "92233720368547758081234567890");
-            assertEquals(
-                    new java.math.BigInteger("92233720368547758081234567890"),
-                    ProtosTestIntegers.exact(large));
+            assertEquals("92233720368547758081234567890", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(large));
             assertInstanceOf(
                     com.guillermomolina.protos.runtime.ProtosLargeIntegerValue.class, large);
         }
@@ -84,9 +81,7 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
                                 .value());
 
 
-                assertEquals(
-                        java.math.BigInteger.valueOf(255),
-                        ProtosTestIntegers.exact(executeBytecodeValue("0xFF")));
+                assertEquals(Long.toString(255), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(executeBytecodeValue("0xFF")));
 
                 assertEquals(
                         Double.doubleToRawLongBits(1.25d),
@@ -96,9 +91,7 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
                                                 executeBytecodeValue("1.25"))
                                         .value()));
 
-                assertEquals(
-                        java.math.BigInteger.valueOf(42),
-                        ProtosTestIntegers.exact(executeBytecodeValue(
+                assertEquals(Long.toString(42), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(executeBytecodeValue(
                                                 "\"discarded\"\nfalse\n0x2A")));
             } finally {
                 context.leave();

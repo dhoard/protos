@@ -247,9 +247,7 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
                 () -> "outcome=" + outcome.state() + ", error=" + outcome.error());
-        assertEquals(
-                java.math.BigInteger.valueOf(42),
-                com.guillermomolina.protos.runtime.ProtosTestIntegers.exact(outcome.value()));
+        assertEquals(Long.toString(42), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(outcome.value()));
         System.out.println("PERF025_C1C_COMPACT_METHOD_SEND_ACTIVATION=PASS");
     }
 

@@ -28,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.IdentityHashMap;
 import org.junit.jupiter.api.Test;
@@ -64,8 +63,11 @@ final class ProtosTcpConnectionFoundationTest {
 
         connection.createLocalSlot("label", new ProtosIntegerValue(7));
         assertEquals(
-                BigInteger.valueOf(7),
-                ProtosTestIntegers.exact(connection.readLocalSlot("label").orElseThrow()));
+                7L,
+                assertInstanceOf(
+                        ProtosIntegerValue.class,
+                        connection.readLocalSlot("label").orElseThrow())
+                        .longValue());
         assertNotSame(connection, new ProtosTcpConnectionValue(prelude, resourceState));
     }
 

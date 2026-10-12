@@ -789,7 +789,7 @@ final class ProtosGuardedLookupTest {
         var prelude = corePrelude();
         var first = integer(3);
         var second = integer(3);
-        var huge = ProtosTestIntegers.integer(BigInteger.TWO.pow(200), prelude);
+        var huge = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.TWO.pow(200), prelude);
         for (Object receiver : new Object[] {first, second, huge}) {
             assertTrue(ProtosValueLookup.isInteger(receiver));
             assertNotNull(ProtosValueLookup.lookupGuardedInteger(receiver, "-", prelude));
@@ -848,7 +848,7 @@ final class ProtosGuardedLookupTest {
     void concreteIntegerFamiliesShareInheritedGuardedSelections() throws IOException {
         var prelude = corePrelude();
         Object small = integer(10);
-        Object big = ProtosTestIntegers.integer(BigInteger.TWO.pow(70), prelude);
+        Object big = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.TWO.pow(70), prelude);
         assertSame(prelude.smallIntegerPrototype(),
                 ProtosValueLookup.delegationParent(small, prelude).orElseThrow());
         assertSame(prelude.bigIntegerPrototype(),
@@ -878,12 +878,12 @@ final class ProtosGuardedLookupTest {
     void integerGuardedSelectionRejectsAnotherPreludesLargeInteger() throws IOException {
         var prelude = corePrelude();
         var other = corePrelude();
-        Object foreignBig = ProtosTestIntegers.integer(BigInteger.TWO.pow(70), other);
+        Object foreignBig = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.TWO.pow(70), other);
         assertNull(ProtosValueLookup.lookupGuardedInteger(foreignBig, "-", prelude));
         assertNotNull(ProtosValueLookup.lookupGuardedInteger(foreignBig, "-", other));
         // A large value whose parent is not a concrete-family prototype is rejected too.
         assertNull(ProtosValueLookup.lookupGuardedInteger(
-                ProtosTestIntegers.integer(BigInteger.TWO.pow(70)), "-", prelude));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.TWO.pow(70), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()), "-", prelude));
     }
 
     /**

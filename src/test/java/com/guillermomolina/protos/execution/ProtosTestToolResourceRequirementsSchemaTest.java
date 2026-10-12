@@ -21,13 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -102,10 +101,7 @@ final class ProtosTestToolResourceRequirementsSchemaTest {
         assertEquals("gpu/matrix.protos", stringAt(observed, 5));
         assertEquals("gpu", stringAt(secondRequirement, 0));
         assertEquals("shared", stringAt(secondRequirement, 1));
-        assertEquals(
-                2,
-                ProtosTestIntegers.exact(secondRequirement.indexedAt(2))
-                        .intValueExact());
+        assertEquals(String.valueOf(2), String.valueOf(Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(secondRequirement.indexedAt(2)))));
     }
 
     @Test

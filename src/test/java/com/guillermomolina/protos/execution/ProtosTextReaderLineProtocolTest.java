@@ -156,7 +156,7 @@ final class ProtosTextReaderLineProtocolTest {
     void lineLimitsAreExactAtEveryMagnitudeAndExcludeTheTerminator() throws Exception {
         Fixture f = fixture("UTF8");
         Object beyondLong =
-                ProtosTestIntegers.integer(java.math.BigInteger.ONE.shiftLeft(64), f.prelude);
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(java.math.BigInteger.ONE.shiftLeft(64), f.prelude);
         // "é" is two UTF-8 octets; "a" one; the terminator never counts.
         f.source.bytes('a', '\n', 0xc3, 0xa9, '\n', 'x', 'y', '\n', 'z', '\n', 'w', '\n');
         assertEquals("a", stringResult(readLine(f.reader, f.activation, new ProtosIntegerValue(1L))));
@@ -180,7 +180,7 @@ final class ProtosTextReaderLineProtocolTest {
         Fixture f = fixture("UTF8");
         f.source.bytes('a', '\n');
         Object largeNegative =
-                ProtosTestIntegers.integer(java.math.BigInteger.ONE.shiftLeft(64).negate(), f.prelude);
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(java.math.BigInteger.ONE.shiftLeft(64).negate(), f.prelude);
         for (Object limit : List.of(
                 new ProtosIntegerValue(0L), new ProtosIntegerValue(-1L),
                 new ProtosIntegerValue(Long.MIN_VALUE), largeNegative, new ProtosFloatValue(1.0))) {
@@ -195,7 +195,7 @@ final class ProtosTextReaderLineProtocolTest {
         Fixture f = fixture("UTF8");
         Pending pending = f.source.pending(true);
         Object beyondLong =
-                ProtosTestIntegers.integer(java.math.BigInteger.ONE.shiftLeft(70), f.prelude);
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(java.math.BigInteger.ONE.shiftLeft(70), f.prelude);
         ProtosFutureValue cancelled = readLine(f.reader, f.activation, beyondLong);
         assertTrue(cancelled.cancelRequest());
         assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());

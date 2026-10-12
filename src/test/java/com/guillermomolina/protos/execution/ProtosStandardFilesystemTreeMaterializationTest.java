@@ -36,7 +36,6 @@ import com.guillermomolina.protos.runtime.ProtosPathComponents;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.LinkedHashMap;

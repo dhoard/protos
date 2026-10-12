@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -34,7 +33,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionFlow;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -122,8 +121,8 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
         backend.readCompletions.removeFirst().data(new byte[] {1, 2});
         assertEquals(2, backend.readStarts);
         ProtosBytesValue result = (ProtosBytesValue) read1.resolvedValue().orElseThrow();
-        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(result.indexedAt(0)));
-        assertEquals(BigInteger.valueOf(2), ProtosTestIntegers.exact(result.indexedAt(1)));
+        assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(result.indexedAt(0)));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(result.indexedAt(1)));
 
         backend.writeCompletions.removeFirst().succeeded();
         backend.readCompletions.removeFirst().eof();
@@ -150,8 +149,8 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
 
         ProtosFutureValue replay = future(connection, "read", List.of(integer(2)), activation);
         ProtosBytesValue replayed = (ProtosBytesValue) replay.resolvedValue().orElseThrow();
-        assertEquals(BigInteger.valueOf(4), ProtosTestIntegers.exact(replayed.indexedAt(0)));
-        assertEquals(BigInteger.valueOf(5), ProtosTestIntegers.exact(replayed.indexedAt(1)));
+        assertEquals(String.valueOf("4"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(replayed.indexedAt(0)));
+        assertEquals(String.valueOf("5"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(replayed.indexedAt(1)));
 
         backend.writeCompletions.removeFirst().succeeded();
         assertSame(connection, write.resolvedValue().orElseThrow());
@@ -179,9 +178,7 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
         assertSame(connection, close.resolvedValue().orElseThrow());
         assertTrue(connection.isOpen(), "resource close must not perform structural Object.close()");
         connection.createLocalSlot("afterResourceClose", integer(17));
-        assertEquals(
-                BigInteger.valueOf(17),
-                ProtosTestIntegers.exact(connection.readLocalSlot("afterResourceClose").orElseThrow()));
+        assertEquals(String.valueOf("17"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(connection.readLocalSlot("afterResourceClose").orElseThrow()));
 
         assertFailedAs(future(connection, "read", List.of(integer(1)), activation), prelude, "IOLifecycleError");
         assertFailedAs(future(connection, "write", List.of(bytes(prelude, 1)), activation), prelude, "IOLifecycleError");

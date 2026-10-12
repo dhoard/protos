@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -30,7 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.oracle.truffle.api.source.Source;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -165,9 +164,7 @@ final class ProtosParallelPolyglotContextRoutingTest {
         ProtosLanguageContext expected = hosted.currentLanguageContextForTesting();
         assertSame(expected, outerContext.get(), "outer P must use the Process Context");
         assertSame(expected, nestedContext.get(), "nested P must inherit the same Process placement");
-        assertEquals(
-                BigInteger.valueOf(73),
-                ProtosTestIntegers.exact(result.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("73"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(result.resolvedValue().orElseThrow()));
     }
 
     private static Object eval(

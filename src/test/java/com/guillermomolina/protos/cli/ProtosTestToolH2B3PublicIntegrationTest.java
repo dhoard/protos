@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.cli;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -45,7 +44,6 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -352,10 +350,7 @@ activation);
         if (outcome.state() != ProtosExecutionOutcome.State.COMPLETED) {
             return;
         }
-        assertEquals(
-                BigInteger.valueOf(expected),
-                ProtosTestIntegers.exact(outcome.value()),
-                "D069 checkpoint " + checkpoint + " integer value");
+        assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(outcome.value()), "D069 checkpoint " + checkpoint + " integer value");
     }
 
     private static void assertFailedError(OptionRun run, String checkpoint) {
@@ -431,7 +426,7 @@ activation);
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         observation.readLocalSlot("value").orElseThrow());
-        assertEquals(BigInteger.valueOf(expectedValue), ProtosTestIntegers.exact(value));
+        assertEquals(Long.toString(expectedValue), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
     }
 
     private static String guestErrorParentName(

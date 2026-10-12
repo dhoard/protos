@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -42,7 +41,6 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.source.Source;
 import java.lang.reflect.Field;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -69,7 +67,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "h1-zero.protos", module);
             ProtosBytecodeRootNode.PreparedClosureCall prepared = fastDirect(one, module);
 
-            assertEquals(BigInteger.ONE, integerValue(enter(prepared)));
+            assertEquals("1", integerValue(enter(prepared)));
             assertSame(one, prepared.targetArguments()[0], "no activation was materialized");
             assertOnlyCallerActivation(prepared.targetArguments(), module);
         });
@@ -99,7 +97,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
                     parsedClosure("(value = 7) => { value }", "h1-default.protos", module);
 
             ProtosBytecodeRootNode.PreparedClosureCall omitted = fastDirect(defaulted, module);
-            assertEquals(BigInteger.valueOf(7), integerValue(enter(omitted)));
+            assertEquals("7", integerValue(enter(omitted)));
             assertSame(defaulted, omitted.targetArguments()[0]);
 
             ProtosIntegerValue supplied = integer(3);
@@ -120,7 +118,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             for (int index = 0; index < 4; index++) {
                 ProtosBytecodeRootNode.PreparedClosureCall prepared =
                         fastDirect(identity, module, integer(index));
-                assertEquals(BigInteger.valueOf(index), integerValue(enter(prepared)));
+                assertEquals(Long.toString(index), integerValue(enter(prepared)));
                 assertSame(identity, prepared.targetArguments()[0]);
                 calls.add(prepared);
             }
@@ -158,7 +156,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
                     parsedClosure("(value) => { value + 1 }", "h1-send.protos", module);
             ProtosBytecodeRootNode.PreparedClosureCall send =
                     fastDirect(sending, module, integer(1));
-            assertEquals(BigInteger.TWO, integerValue(enter(send)));
+            assertEquals("2", integerValue(enter(send)));
             ProtosActivation callee =
                     assertInstanceOf(ProtosActivation.class, send.targetArguments()[0]);
             assertSame(callee, ProtosFrameArguments.activation(send.targetArguments()));
@@ -190,9 +188,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
     @Test
     void captureThisAndNonLocalReturnSemanticsArePreserved() throws Exception {
         withCore(module -> {
-            assertEquals(
-                    BigInteger.TWO,
-                    integerValue(evaluate(
+            assertEquals("2", integerValue(evaluate(
                             "n: 0\ninc: () => { n = n + 1 }\ninc()\ninc()\nn\n",
                             "h1-capture.protos", module)));
 
@@ -200,14 +196,10 @@ final class ProtosPerf025H1LazyRootActivationTest {
                     parsedClosure("() => { this }", "h1-this.protos", module);
             assertSame(receiverOf.capturedReceiver(), enter(fastDirect(receiverOf, module)));
 
-            assertEquals(
-                    BigInteger.valueOf(5),
-                    integerValue(enter(fastDirect(
+            assertEquals("5", integerValue(enter(fastDirect(
                             parsedClosure("() => { ^ 5 }", "h1-owned.protos", module),
                             module))));
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(evaluate(
+            assertEquals("7", integerValue(evaluate(
                             "outer: () => {\n    inner: () => { ^ 7 }\n    inner()\n    99\n}\n"
                                     + "outer()\n",
                             "h1-nested.protos", module)));
@@ -286,7 +278,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             assertTrue(module.executionDomain().dispatchOne());
 
             assertEquals(ProtosTask.State.COMPLETED, task.state());
-            assertEquals(BigInteger.valueOf(9), integerValue(task.result().orElseThrow()));
+            assertEquals("9", integerValue(task.result().orElseThrow()));
             Object[] arguments = preparedRef.get().targetArguments();
             assertSame(identity, arguments[0], "no activation was materialized");
             assertSame(task, ProtosFrameArguments.compactTask(arguments));
@@ -398,8 +390,8 @@ final class ProtosPerf025H1LazyRootActivationTest {
         return new ProtosIntegerValue(value);
     }
 
-    private static BigInteger integerValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 
     private static Object privateField(Object target, String name)

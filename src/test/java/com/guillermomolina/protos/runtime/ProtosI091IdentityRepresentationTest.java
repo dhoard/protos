@@ -33,8 +33,8 @@ final class ProtosI091IdentityRepresentationTest {
 
     @Test
     void independentlyMintedLargeIntegersAreIdenticalWithAWrapperIndependentHash() {
-        Object first = ProtosTestIntegers.integer(HUGE);
-        Object second = ProtosTestIntegers.integer(new BigInteger(HUGE.toString()));
+        Object first = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(HUGE, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
+        Object second = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(new BigInteger(HUGE.toString()), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
 
         assertNotSame(first, second);
         assertTrue(ProtosIdentity.identical(first, second));
@@ -47,9 +47,9 @@ final class ProtosI091IdentityRepresentationTest {
     @Test
     void largeIntegersSharingLowBitsAreDistinct() {
         BigInteger low = BigInteger.valueOf(5);
-        Object a = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).add(low));
-        Object b = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(65).add(low));
-        Object negated = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).add(low).negate());
+        Object a = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(64).add(low), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
+        Object b = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(65).add(low), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
+        Object negated = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(64).add(low).negate(), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
 
         assertFalse(ProtosIdentity.identical(a, b));
         assertFalse(ProtosIdentity.identical(a, negated));
@@ -60,7 +60,7 @@ final class ProtosI091IdentityRepresentationTest {
     void identityAndHashSurviveRematerializationIntoAnotherPrelude() throws Exception {
         ProtosPrelude source = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosPrelude destination = new ProtosCoreBootstrap().bootstrap(CORE);
-        Object original = ProtosTestIntegers.integer(HUGE, source);
+        Object original = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(HUGE, source);
 
         Object copy = ProtosNumericValueSupport.copyCurrentNumberOrNull(original, destination);
 
@@ -80,7 +80,7 @@ final class ProtosI091IdentityRepresentationTest {
         assertFalse(ProtosIdentity.identical(one, oneFloat));
         assertFalse(ProtosIdentity.identical(oneFloat, one));
         assertNotEquals(ProtosIdentity.identityHash(one), ProtosIdentity.identityHash(oneFloat));
-        Object twoTo64 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64));
+        Object twoTo64 = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(64), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         assertFalse(
                 ProtosIdentity.identical(twoTo64, new ProtosFloatValue(0x1p64)));
     }
@@ -114,7 +114,7 @@ final class ProtosI091IdentityRepresentationTest {
         assertFalse(
                 ProtosIdentity.identical(
                         BigInteger.ONE.shiftLeft(64),
-                        ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64))));
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(64), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
     }
 
     @Test

@@ -62,6 +62,11 @@ public final class ProtosPolyglotValueOperations implements ProtosForeignValueOp
     }
 
     @Override
+    public boolean supportsLongIntegerArguments() {
+        return true;
+    }
+
+    @Override
     public ProtosForeignValueClass classify(
             ProtosForeignPluginSession session, Object value) {
         if (value instanceof MemberInvocation) {
@@ -84,7 +89,9 @@ public final class ProtosPolyglotValueOperations implements ProtosForeignValueOp
                 }
                 case INTEGRAL -> {
                     requireDeclared(polyglot.fitsInBigInteger(), family);
-                    return ProtosForeignValueClass.integral(polyglot.asBigInteger());
+                    return polyglot.fitsInLong()
+                            ? ProtosForeignValueClass.integral(polyglot.asLong())
+                            : ProtosForeignValueClass.integral(polyglot.asBigInteger());
                 }
                 case BINARY_FLOATING -> {
                     requireDeclared(polyglot.fitsInDouble(), family);
@@ -229,6 +236,13 @@ public final class ProtosPolyglotValueOperations implements ProtosForeignValueOp
      * before the foreign value is touched, and never truncated or wrapped into that domain.
      */
     private static long index(ProtosForeignArgumentValue index) {
+        if (index.value() instanceof Long small) {
+            if (small < 0L) {
+                throw new IllegalArgumentException(
+                        "foreign element index is outside the Polyglot array index domain");
+            }
+            return small;
+        }
         if (!(index.value() instanceof BigInteger integer)) {
             throw new IllegalArgumentException("foreign element index is not an Integer");
         }

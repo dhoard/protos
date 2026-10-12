@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
@@ -24,7 +23,6 @@ import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -170,7 +168,7 @@ final class ProtosCapturedProcessExecutionTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         result.outcome().value());
-        assertEquals(BigInteger.valueOf(expected), ProtosTestIntegers.exact(integer));
+        assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
         assertNull(result.outcome().error());
     }
 

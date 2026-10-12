@@ -44,11 +44,11 @@ final class ProtosI091UnsignedWidthTest {
     void ipv6BoundaryPreservesArbitraryPrecision() {
         BigInteger upper = BigInteger.ONE.shiftLeft(128);
         assertTrue(ProtosNumericValueSupport.isUnsignedIntegerWithin(
-                ProtosTestIntegers.integer(upper.subtract(BigInteger.ONE)), 128));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(upper.subtract(BigInteger.ONE), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()), 128));
         assertFalse(ProtosNumericValueSupport.isUnsignedIntegerWithin(
-                ProtosTestIntegers.integer(upper), 128));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(upper, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()), 128));
         assertFalse(ProtosNumericValueSupport.isUnsignedIntegerWithin(
-                ProtosTestIntegers.integer(upper.negate()), 128));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(upper.negate(), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()), 128));
     }
 
     @Test
@@ -114,12 +114,12 @@ final class ProtosI091UnsignedWidthTest {
 
     @Test
     void largeEncodingRefusesAWidthItDoesNotFit() {
-        Object twoPow64 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64));
+        Object twoPow64 = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(64), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         ProtosLargeIntegerValue large = (ProtosLargeIntegerValue) twoPow64;
         assertThrows(ArithmeticException.class, () -> large.toUnsignedBigEndian(8));
         assertEquals(9, large.toUnsignedBigEndian(9).length);
         ProtosLargeIntegerValue negative = (ProtosLargeIntegerValue)
-                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).negate());
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(64).negate(), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         assertThrows(ArithmeticException.class, () -> negative.toUnsignedBigEndian(16));
     }
 }

@@ -1,7 +1,6 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.*;
 import java.math.BigInteger;
@@ -39,19 +38,19 @@ class ProtosStandardByteIoPositioningProtocolTest {
         b.completeHeldWrite();
         assertSame(r,write.resolvedValue().orElseThrow());
         assertEquals(1,b.flushCalls);assertSame(r,flush.resolvedValue().orElseThrow());
-        assertEquals(BigInteger.valueOf(3),ProtosTestIntegers.exact(size.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("3"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(size.resolvedValue().orElseThrow()));
     }
 
     @Test void seekReadWriteAndPositionObserveLogicalOrder()throws Exception{
         var p=core();var a=p.newModuleActivation();var bp=new ProtosObjectValue(ProtosObjectValue.rootObject());ProtosStandardBytesProtocol.install(bp);
         var r=new ProtosObjectValue(ProtosObjectValue.rootObject());var b=new MemoryBackend(new byte[]{10,11,12,13});
         ProtosStandardByteIoProtocol.installExtended(r,bp,a,b);
-        assertEquals(BigInteger.valueOf(2),value(ProtosInvocation.invokeMessage(r,"seek",List.of(i(2)),a)));
+        assertEquals("2", value(ProtosInvocation.invokeMessage(r,"seek",List.of(i(2)),a)));
         var read=(ProtosFutureValue)ProtosInvocation.invokeMessage(r,"read",List.of(i(1)),a);
-        assertEquals(12,ProtosTestIntegers.exact(((ProtosBytesValue)read.resolvedValue().orElseThrow()).indexedAt(0)).intValue());
-        assertEquals(BigInteger.valueOf(3),value(ProtosInvocation.invokeMessage(r,"position",List.of(),a)));
+        assertEquals(String.valueOf(12), String.valueOf(Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(((ProtosBytesValue)read.resolvedValue().orElseThrow()).indexedAt(0)))));
+        assertEquals("3", value(ProtosInvocation.invokeMessage(r,"position",List.of(),a)));
         ProtosInvocation.invokeMessage(r,"write",List.of(bytes(bp,99)),a);
-        assertEquals(BigInteger.valueOf(4),value(ProtosInvocation.invokeMessage(r,"position",List.of(),a)));
+        assertEquals("4", value(ProtosInvocation.invokeMessage(r,"position",List.of(),a)));
     }
 
     @Test void truncateShrinksDoesNotExtendAndPreservesPosition()throws Exception{
@@ -60,10 +59,10 @@ class ProtosStandardByteIoPositioningProtocolTest {
         ProtosStandardByteIoProtocol.installExtended(r,bp,a,b);
         ProtosInvocation.invokeMessage(r,"seek",List.of(i(4)),a);
         var t=(ProtosFutureValue)ProtosInvocation.invokeMessage(r,"truncate",List.of(i(2)),a);assertSame(r,t.resolvedValue().orElseThrow());
-        assertEquals(BigInteger.valueOf(2),value(ProtosInvocation.invokeMessage(r,"size",List.of(),a)));
-        assertEquals(BigInteger.valueOf(4),value(ProtosInvocation.invokeMessage(r,"position",List.of(),a)));
+        assertEquals("2", value(ProtosInvocation.invokeMessage(r,"size",List.of(),a)));
+        assertEquals("4", value(ProtosInvocation.invokeMessage(r,"position",List.of(),a)));
         ProtosInvocation.invokeMessage(r,"truncate",List.of(i(9)),a);
-        assertEquals(BigInteger.valueOf(2),value(ProtosInvocation.invokeMessage(r,"size",List.of(),a)));
+        assertEquals("2", value(ProtosInvocation.invokeMessage(r,"size",List.of(),a)));
     }
 
     @Test void cancelledQueuedSeekHasNoEffect()throws Exception{
@@ -74,7 +73,7 @@ class ProtosStandardByteIoPositioningProtocolTest {
         var seek=(ProtosFutureValue)ProtosInvocation.invokeMessage(r,"seek",List.of(i(20)),a);
         assertTrue(seek.cancelRequest());b.completeHeldWrite();
         assertEquals(ProtosFutureValue.State.CANCELLED,seek.state());
-        assertEquals(BigInteger.ONE,value(ProtosInvocation.invokeMessage(r,"position",List.of(),a)));
+        assertEquals("1", value(ProtosInvocation.invokeMessage(r,"position",List.of(),a)));
     }
 
     // I091: ProtosFileFlow keeps exact guest positions and hands its backend only host-representable ones.
@@ -98,33 +97,33 @@ class ProtosStandardByteIoPositioningProtocolTest {
         return f.resolvedValue().orElseThrow();
     }
 
-    private static BigInteger position(FileFixture x){return ProtosTestIntegers.exact(resolved(x.flow().position(x.activation())));}
+    private static String position(FileFixture x){return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(resolved(x.flow().position(x.activation())));}
 
     @Test void filePositionsStayExactAcrossTheSignedLongBoundary()throws Exception{
         FileFixture x=file();
-        assertEquals(BigInteger.valueOf(Long.MAX_VALUE),ProtosTestIntegers.exact(resolved(x.flow().seek(x.activation(),i(Long.MAX_VALUE)))));
+        assertEquals(Long.toString(Long.MAX_VALUE), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(resolved(x.flow().seek(x.activation(),i(Long.MAX_VALUE)))));
         Object crossed=resolved(x.flow().seekBy(x.activation(),i(1)));
-        assertEquals(TWO_POW_63,ProtosTestIntegers.exact(crossed));
+        assertEquals(String.valueOf(String.valueOf(TWO_POW_63)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(crossed));
         assertSame(x.prelude().bigIntegerPrototype(),((ProtosObjectValue)crossed).parent().orElseThrow());
-        assertEquals(TWO_POW_63,position(x));
-        assertEquals(BigInteger.valueOf(Long.MAX_VALUE),ProtosTestIntegers.exact(resolved(x.flow().seekBy(x.activation(),i(-1)))));
-        assertEquals(TWO_POW_63.shiftLeft(1),ProtosTestIntegers.exact(resolved(x.flow().seek(x.activation(),ProtosTestIntegers.integer(TWO_POW_63.shiftLeft(1),x.prelude())))));
-        assertEquals(TWO_POW_63,ProtosTestIntegers.exact(resolved(x.flow().seekBy(x.activation(),ProtosTestIntegers.integer(TWO_POW_63.negate(),x.prelude())))));
+        assertEquals(String.valueOf(TWO_POW_63), position(x));
+        assertEquals(Long.toString(Long.MAX_VALUE), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(resolved(x.flow().seekBy(x.activation(),i(-1)))));
+        assertEquals(String.valueOf(TWO_POW_63.shiftLeft(1)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(resolved(x.flow().seek(x.activation(),com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_63.shiftLeft(1), x.prelude())))));
+        assertEquals(String.valueOf(String.valueOf(TWO_POW_63)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(resolved(x.flow().seekBy(x.activation(),com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_63.negate(), x.prelude())))));
         // A relative seek below zero fails and leaves the exact position; an absolute negative seek is invalid.
-        assertEquals(ProtosFutureValue.State.FAILED,x.flow().seekBy(x.activation(),ProtosTestIntegers.integer(TWO_POW_63.negate().subtract(BigInteger.ONE),x.prelude())).state());
-        assertEquals(TWO_POW_63,position(x));
+        assertEquals(ProtosFutureValue.State.FAILED,x.flow().seekBy(x.activation(),com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_63.negate().subtract(BigInteger.ONE), x.prelude())).state());
+        assertEquals(String.valueOf(TWO_POW_63), position(x));
         assertEquals(ProtosFutureValue.State.FAILED,x.flow().seek(x.activation(),i(-1)).state());
-        assertEquals(TWO_POW_63,position(x));
+        assertEquals(String.valueOf(TWO_POW_63), position(x));
     }
 
     @Test void positionsBeyondTheBackendRangeNeverReachIt()throws Exception{
         FileFixture x=file();
-        resolved(x.flow().seek(x.activation(),ProtosTestIntegers.integer(TWO_POW_63,x.prelude())));
+        resolved(x.flow().seek(x.activation(),com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_63, x.prelude())));
         assertEquals(ProtosFutureValue.State.FAILED,x.flow().read(x.activation(),i(1)).state());
         assertEquals(ProtosFutureValue.State.FAILED,x.flow().write(x.activation(),bytes(x.bytesPrototype(),1)).state());
         assertTrue(x.resource().reads.isEmpty());
         assertTrue(x.resource().writes.isEmpty());
-        assertEquals(TWO_POW_63,position(x));
+        assertEquals(String.valueOf(TWO_POW_63), position(x));
     }
 
     @Test void partialReadAndWriteAdvanceExactlyPastSignedLong()throws Exception{
@@ -136,21 +135,21 @@ class ProtosStandardByteIoPositioningProtocolTest {
         assertTrue(written.commitFirstContribution());
         written.failed(2);
         assertEquals(ProtosFutureValue.State.FAILED,write.state());
-        assertEquals(TWO_POW_63,position(x));
+        assertEquals(String.valueOf(TWO_POW_63), position(x));
 
         resolved(x.flow().seek(x.activation(),i(Long.MAX_VALUE-1)));
         ProtosFutureValue read=x.flow().read(x.activation(),i(4));
         assertEquals(Long.MAX_VALUE-1,x.resource().reads.remove().longValue());
         x.resource().readCompletions.remove().data(new byte[]{9,8});
         assertEquals(2,((ProtosBytesValue)resolved(read)).indexedSize());
-        assertEquals(TWO_POW_63,position(x));
+        assertEquals(String.valueOf(TWO_POW_63), position(x));
     }
 
     @Test void truncateHandsTheBackendOnlyAnEquivalentHostSize()throws Exception{
         FileFixture x=file();
         resolved(x.flow().seek(x.activation(),i(7)));
         ProtosFutureValue small=x.flow().truncate(x.activation(),i(5));
-        ProtosFutureValue huge=x.flow().truncate(x.activation(),ProtosTestIntegers.integer(TWO_POW_63.shiftLeft(4),x.prelude()));
+        ProtosFutureValue huge=x.flow().truncate(x.activation(),com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(TWO_POW_63.shiftLeft(4), x.prelude()));
         ProtosFutureValue boundary=x.flow().truncate(x.activation(),i(Long.MAX_VALUE));
         for(int k=0;k<3;k++){
             ProtosFileFlow.ChangeCompletion change=x.resource().truncateCompletions.remove();
@@ -162,7 +161,7 @@ class ProtosStandardByteIoPositioningProtocolTest {
         assertEquals(ProtosFutureValue.State.RESOLVED,small.state());
         assertEquals(ProtosFutureValue.State.RESOLVED,huge.state());
         assertEquals(ProtosFutureValue.State.RESOLVED,boundary.state());
-        assertEquals(BigInteger.valueOf(7),position(x));
+        assertEquals("7", position(x));
         assertEquals(ProtosFutureValue.State.FAILED,x.flow().truncate(x.activation(),i(-1)).state());
     }
 
@@ -173,7 +172,7 @@ class ProtosStandardByteIoPositioningProtocolTest {
         x.activation().executionDomain().actorTerminated();
         assertEquals(ProtosFutureValue.State.CANCELLED,read.state());
         assertEquals(1,x.resource().cancellations);
-        assertEquals(BigInteger.valueOf(Long.MAX_VALUE),position(x));
+        assertEquals(Long.toString(Long.MAX_VALUE), position(x));
     }
 
     private static final class RecordingFile implements ProtosFileFlow.ReadableResource,ProtosFileFlow.WritableResource,
@@ -193,8 +192,8 @@ class ProtosStandardByteIoPositioningProtocolTest {
         public void close(ProtosFileFlow.CloseCompletion c){c.succeeded();}
     }
 
-    private static BigInteger value(Object x){
-        var f=(ProtosFutureValue)x;return ProtosTestIntegers.exact(f.resolvedValue().orElseThrow());
+    private static String value(Object x){
+        var f=(ProtosFutureValue)x;return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(f.resolvedValue().orElseThrow());
     }
 
     private static final class MemoryBackend implements ProtosByteIoFlow.ExtendedBackend{

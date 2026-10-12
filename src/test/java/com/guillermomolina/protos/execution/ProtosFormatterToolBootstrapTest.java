@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
 import com.guillermomolina.protos.analysis.ProtosSourceLayoutView;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore;
@@ -331,10 +330,7 @@ final class ProtosFormatterToolBootstrapTest {
                 "expression",
                 string(slot(firstStep, "role")));
 
-        assertEquals(
-                1,
-                ProtosTestIntegers.exact(slot(firstStep, "index"))
-                        .intValueExact());
+        assertEquals(String.valueOf(1), String.valueOf(Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(slot(firstStep, "index")))));
 
         List<String> separatorKinds =
                 array(slot(projected, "sequenceSeparators"))

@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -37,7 +36,6 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Context;
@@ -312,7 +310,7 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
                             + "reader\n",
                     "perf038f-cleared.protos", module);
             for (int call = 0; call < WARM_UP_CALLS; call++) {
-                assertEquals(BigInteger.ONE, integerValue(callReader(module, call)));
+                assertEquals("1", integerValue(callReader(module, call)));
             }
             ProtosObjectValue owner = reader.capturedLexicalEnvironmentForRuntime().context();
             owner.removeLocalSlot("slot");
@@ -328,7 +326,7 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
             owner.removeLocalSlot("slot");
             owner.createLocalSlot("slot", integer(5));
             for (int call = 0; call < WARM_UP_CALLS; call++) {
-                assertEquals(BigInteger.valueOf(5), integerValue(callReader(module, call)));
+                assertEquals("5", integerValue(callReader(module, call)));
             }
         });
         System.out.println("PERF038F_OWNER_CLEARED_REBINDING=PASS");
@@ -391,7 +389,7 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
     private static void assertIntegers(List<Object> results, long... expected) {
         assertEquals(expected.length, results.size());
         for (int index = 0; index < expected.length; index++) {
-            assertEquals(BigInteger.valueOf(expected[index]), integerValue(results.get(index)));
+            assertEquals(Long.toString(expected[index]), integerValue(results.get(index)));
         }
     }
 
@@ -434,7 +432,7 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
         return new ProtosIntegerValue(value);
     }
 
-    private static BigInteger integerValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 }

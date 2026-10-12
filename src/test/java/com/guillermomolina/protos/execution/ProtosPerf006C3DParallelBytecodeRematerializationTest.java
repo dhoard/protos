@@ -18,7 +18,6 @@ import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -84,9 +83,7 @@ final class ProtosPerf006C3DParallelBytecodeRematerializationTest {
                 }
 
                 assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
-                assertEquals(
-                        BigInteger.valueOf(42),
-                        com.guillermomolina.protos.runtime.ProtosTestIntegers.exact(
+                assertEquals("42", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                                 future.resolvedValue().orElseThrow()));
 
                 ProtosLanguageContext languageContext =

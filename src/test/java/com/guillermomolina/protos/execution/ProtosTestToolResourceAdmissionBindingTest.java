@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -27,7 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -111,9 +110,9 @@ final class ProtosTestToolResourceAdmissionBindingTest {
 
         assertEquals("gpu", stringAt(observed, 1).value());
         assertEquals("shared", stringAt(observed, 2).value());
-        assertEquals(BigInteger.valueOf(2), ProtosTestIntegers.exact(integerAt(observed, 3)));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 3)));
         assertEquals("gpu", stringAt(observed, 4).value());
-        assertEquals(BigInteger.valueOf(4), ProtosTestIntegers.exact(integerAt(observed, 5)));
+        assertEquals(String.valueOf("4"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integerAt(observed, 5)));
         assertEquals("placement", stringAt(observed, 6).value());
         assertEquals("device/gpu", stringAt(observed, 7).value());
         assertEquals("a100", stringAt(observed, 8).value());

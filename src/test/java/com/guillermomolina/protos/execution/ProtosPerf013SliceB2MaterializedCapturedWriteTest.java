@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -38,7 +37,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
+
 import java.util.List;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
@@ -207,7 +206,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
 
                 Object result = root.getCallTarget().call(module);
                 ProtosIntegerValue integer = assertInstanceOf(ProtosIntegerValue.class, result);
-                assertEquals(BigInteger.valueOf(99), ProtosTestIntegers.exact(integer));
+                assertEquals(String.valueOf("99"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
             } finally {
                 context.leave();
             }
@@ -544,7 +543,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
 
                 Object result = root.getCallTarget().call(module);
                 ProtosIntegerValue integer = assertInstanceOf(ProtosIntegerValue.class, result);
-                assertEquals(BigInteger.valueOf(99), ProtosTestIntegers.exact(integer));
+                assertEquals(String.valueOf("99"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
             } finally {
                 context.leave();
             }

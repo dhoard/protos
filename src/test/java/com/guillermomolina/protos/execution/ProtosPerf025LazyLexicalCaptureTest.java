@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -44,7 +43,6 @@ import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.source.Source;
 import java.lang.reflect.Field;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Context;
@@ -82,7 +80,7 @@ final class ProtosPerf025LazyLexicalCaptureTest {
                     captured.outer(),
                     "the outer chain is shared by reference, not copied");
 
-            assertEquals(BigInteger.ONE, integerValue(invokeDirect(trivial, module).result()));
+            assertEquals("1", integerValue(invokeDirect(trivial, module).result()));
             if (outer.callee() != null) {
                 assertNull(privateField(outer.callee(), "context"));
             }
@@ -146,33 +144,23 @@ final class ProtosPerf025LazyLexicalCaptureTest {
     @Test
     void captureByReferenceSemanticsArePreserved() throws Exception {
         withCore(module -> {
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(evaluate(
+            assertEquals("7", integerValue(evaluate(
                             "make: () => { x: 7\n () => x }\nf: make()\nf()",
                             "perf025-lazy-read.protos", freshModule(module))));
-            assertEquals(
-                    BigInteger.valueOf(2),
-                    integerValue(evaluate(
+            assertEquals("2", integerValue(evaluate(
                             "make: () => { x: 1\n f: () => x\n x = 2\n f() }\nmake()",
                             "perf025-lazy-mutation.protos", freshModule(module))));
-            assertEquals(
-                    List.of(BigInteger.ONE, BigInteger.valueOf(5)),
-                    integerValues(elements(evaluate(
+            assertEquals(List.of("1", "5"), integerValues(elements(evaluate(
                             "make: () => { x: 1\n [() => x, (v) => { x = v }] }\n"
                                     + "p: make()\n"
                                     + "before: p[0]()\n"
                                     + "p[1](5)\n"
                                     + "[before, p[0]()]",
                             "perf025-lazy-escaped.protos", freshModule(module)))));
-            assertEquals(
-                    BigInteger.valueOf(3),
-                    integerValue(evaluate(
+            assertEquals("3", integerValue(evaluate(
                             "a: () => { x: 3\n () => { () => x } }\nb: a()\nc: b()\nc()",
                             "perf025-lazy-depth.protos", freshModule(module))));
-            assertEquals(
-                    BigInteger.TEN,
-                    integerValue(evaluate(
+            assertEquals("10", integerValue(evaluate(
                             "make: () => {\n x: 10\n mid: () => { () => x }\n mid\n}\n"
                                     + "m: make()\ng: m()\ng()",
                             "perf025-lazy-transitive.protos", freshModule(module))));
@@ -187,16 +175,12 @@ final class ProtosPerf025LazyLexicalCaptureTest {
     @Test
     void d179PresenceSemanticsArePreservedThroughDeferredCaptures() throws Exception {
         withCore(module -> {
-            assertEquals(
-                    List.of(BigInteger.ONE, BigInteger.TWO),
-                    integerValues(elements(evaluate(
+            assertEquals(List.of("1", "2"), integerValues(elements(evaluate(
                             "outer: () => {\n x: 1\n"
                                     + " mid: () => { r: () => x\n before: r()\n x: 2\n [before, r()] }\n"
                                     + " mid()\n}\nouter()",
                             "perf025-lazy-late.protos", freshModule(module)))));
-            assertEquals(
-                    List.of(BigInteger.TWO, BigInteger.ONE, BigInteger.valueOf(3)),
-                    integerValues(elements(evaluate(
+            assertEquals(List.of("2", "1", "3"), integerValues(elements(evaluate(
                             "outer: () => {\n x: 1\n"
                                     + " mid: () => {\n  x: 2\n  r: () => x\n  before: r()\n"
                                     + "  context.removeSlot(\"x\")\n  removed: r()\n"
@@ -296,13 +280,9 @@ final class ProtosPerf025LazyLexicalCaptureTest {
             assertSame(receiver, secondExtraction.capturedReceiver());
             assertSame(receiver, firstExtraction.methodHome().orElseThrow());
             assertSame(receiver, secondExtraction.methodHome().orElseThrow());
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(
+            assertEquals("7", integerValue(
                             invokeDirect(firstExtraction, module).result()));
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(
+            assertEquals("7", integerValue(
                             invokeDirect(secondExtraction, module).result()));
 
             ProtosClosureValue polymorphicReader =
@@ -324,9 +304,7 @@ final class ProtosPerf025LazyLexicalCaptureTest {
             }
 
             for (int index = 0; index < receivers.size(); index++) {
-                assertEquals(
-                        BigInteger.valueOf(index + 10L),
-                        integerValue(
+                assertEquals(Long.toString(index + 10L), integerValue(
                                 invokeDirect(
                                                 polymorphicReader,
                                                 module,
@@ -334,9 +312,7 @@ final class ProtosPerf025LazyLexicalCaptureTest {
                                         .result()));
             }
 
-            assertEquals(
-                    BigInteger.TEN,
-                    integerValue(
+            assertEquals("10", integerValue(
                             invokeDirect(
                                             polymorphicReader,
                                             module,
@@ -486,7 +462,7 @@ final class ProtosPerf025LazyLexicalCaptureTest {
             Invocation outer = invokeDirect(make, module);
             List<Object> pair = elements(outer.result());
             ProtosClosureValue method = assertInstanceOf(ProtosClosureValue.class, pair.get(0));
-            assertEquals(BigInteger.ONE, integerValue(pair.get(1)));
+            assertEquals("1", integerValue(pair.get(1)));
             assertSame(
                     outer.callee().lexicalEnvironmentForClosureCapture(),
                     method.capturedLexicalEnvironmentForRuntime(),
@@ -515,9 +491,9 @@ final class ProtosPerf025LazyLexicalCaptureTest {
 
             InteropLibrary interop = InteropLibrary.getUncached();
             Object scope = debuggerScope(invocation);
-            assertEquals(BigInteger.ONE, integerValue(interop.readMember(scope, "x")));
+            assertEquals("1", integerValue(interop.readMember(scope, "x")));
             invokeDirect(writer, module, integer(9));
-            assertEquals(BigInteger.valueOf(9), integerValue(interop.readMember(scope, "x")));
+            assertEquals("9", integerValue(interop.readMember(scope, "x")));
         });
         System.out.println("DEBUGGER_SCOPE_PROJECTION=PASS");
     }
@@ -650,11 +626,11 @@ final class ProtosPerf025LazyLexicalCaptureTest {
         return new ProtosIntegerValue(value);
     }
 
-    private static BigInteger integerValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 
-    private static List<BigInteger> integerValues(List<Object> values) {
+    private static List<String> integerValues(List<Object> values) {
         return values.stream()
                 .map(ProtosPerf025LazyLexicalCaptureTest::integerValue)
                 .toList();

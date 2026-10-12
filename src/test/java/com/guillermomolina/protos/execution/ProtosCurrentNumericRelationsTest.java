@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -63,7 +63,7 @@ final class ProtosCurrentNumericRelationsTest {
         assertFalse(ProtosCurrentNumericRelations.numericEquals(nan, nan));
 
         assertEquals(hash(positive, null), hash(negative, null));
-        assertEquals(BigInteger.valueOf(2146959360L), hash(nan, null));
+        assertEquals("2146959360", hash(nan, null));
 
         assertEquals(
                 ProtosStandardNumberOrderingProtocol.Comparison.UNORDERED,
@@ -86,7 +86,7 @@ final class ProtosCurrentNumericRelationsTest {
                 ProtosStandardNumberOrderingProtocol.Comparison.GREATER,
                 ProtosStandardNumberOrderingProtocol.compare(rounded, max));
 
-        Object huge = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(130), prelude);
+        Object huge = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(130), prelude);
 
         assertEquals(
                 ProtosStandardNumberOrderingProtocol.Comparison.GREATER,
@@ -103,13 +103,13 @@ final class ProtosCurrentNumericRelationsTest {
     }
 
     @Test
-    void floatOrderingAgainstBigIntegersIsExactOnBothSidesOfTheLongRange() {
-        Object twoPow63 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63));
+    void floatOrderingAgainstBigIntegersIsExactOnBothSidesOfTheLongRange() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        Object twoPow63 = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(63), prelude);
         Object belowMinLong =
-                ProtosTestIntegers.integer(
-                        BigInteger.ONE.shiftLeft(63).negate().subtract(BigInteger.ONE));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(63).negate().subtract(BigInteger.ONE), prelude);
         Object twoPow70Plus1 =
-                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(70).add(BigInteger.ONE));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(70).add(BigInteger.ONE), prelude);
 
         assertTrue(ProtosCurrentNumericRelations.numericEquals(
                 twoPow63, new ProtosFloatValue(0x1p63)));
@@ -130,11 +130,12 @@ final class ProtosCurrentNumericRelationsTest {
     }
 
     @Test
-    void signed64EdgesAndOneHundredThirtyBitIntegersOrderExactly() {
+    void signed64EdgesAndOneHundredThirtyBitIntegersOrderExactly() throws IOException {
+        ProtosPrelude prelude = corePrelude();
         var less = ProtosStandardNumberOrderingProtocol.Comparison.LESS;
         var greater = ProtosStandardNumberOrderingProtocol.Comparison.GREATER;
         var equal = ProtosStandardNumberOrderingProtocol.Comparison.EQUAL;
-        Object twoPow63 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63));
+        Object twoPow63 = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(63), prelude);
         ProtosIntegerValue max = new ProtosIntegerValue(Long.MAX_VALUE);
         ProtosIntegerValue min = new ProtosIntegerValue(Long.MIN_VALUE);
         assertEquals(less, ProtosCurrentNumericRelations.compare(max, twoPow63));
@@ -149,8 +150,8 @@ final class ProtosCurrentNumericRelationsTest {
                 min, new ProtosFloatValue(-0x1.0000000000001p63)));
 
         BigInteger magnitude = BigInteger.ONE.shiftLeft(129).add(BigInteger.ONE);
-        Object positive = ProtosTestIntegers.integer(magnitude);
-        Object negative = ProtosTestIntegers.integer(magnitude.negate());
+        Object positive = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(magnitude, prelude);
+        Object negative = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(magnitude.negate(), prelude);
         assertComparison(less, new ProtosFloatValue(0x1p129), positive);
         assertComparison(greater, new ProtosFloatValue(0x1.0000000000001p129), positive);
         assertComparison(greater, new ProtosFloatValue(-0x1p129), negative);
@@ -165,7 +166,7 @@ final class ProtosCurrentNumericRelationsTest {
         assertFalse(ProtosCurrentNumericRelations.numericEquals(
                 negative, new ProtosFloatValue(Double.NaN)));
 
-        Object exactNegative = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(129).negate());
+        Object exactNegative = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(129).negate(), prelude);
         assertTrue(ProtosCurrentNumericRelations.numericEquals(
                 exactNegative, new ProtosFloatValue(-0x1p129)));
         assertTrue(ProtosCurrentNumericRelations.numericEquals(
@@ -193,8 +194,9 @@ final class ProtosCurrentNumericRelationsTest {
                 () -> ProtosCurrentNumericRelations.normalHash(BigInteger.ONE, null));
     }
 
-    private static BigInteger hash(Object number, ProtosPrelude prelude) {
-        return ProtosTestIntegers.exact(ProtosCurrentNumericRelations.normalHash(number, prelude));
+    private static String hash(Object number, ProtosPrelude prelude) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
+                ProtosCurrentNumericRelations.normalHash(number, prelude));
     }
 
     private static ProtosPrelude corePrelude() throws IOException {

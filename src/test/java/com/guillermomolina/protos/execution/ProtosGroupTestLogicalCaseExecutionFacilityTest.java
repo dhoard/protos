@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -30,7 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -135,7 +134,7 @@ final class ProtosGroupTestLogicalCaseExecutionFacilityTest {
             // request to the one member spawned through the Group-flavored "workers"
             // module overlay (not the ordinary test resolver, which has no such
             // specifier) and the selected Test body actually executed exactly once.
-            assertEquals(BigInteger.valueOf(1), ProtosTestIntegers.exact(value));
+            assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         }
     }
 
@@ -179,7 +178,7 @@ final class ProtosGroupTestLogicalCaseExecutionFacilityTest {
             // 5 then 5, combined as first * 10 + second: only reachable if both
             // requests were routed through the same Group/member acquisition within
             // this one Case.
-            assertEquals(BigInteger.valueOf(55), ProtosTestIntegers.exact(value));
+            assertEquals(String.valueOf("55"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         }
     }
 
@@ -216,9 +215,7 @@ final class ProtosGroupTestLogicalCaseExecutionFacilityTest {
                             "resolvesTag");
             assertTrue(submission.runNext());
             assertTrue(activation.executionDomain().dispatchOne());
-            assertEquals(
-                    BigInteger.valueOf(1),
-                    ProtosTestIntegers.exact(assertCompletedIntegerObservation(firstCase)));
+            assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(assertCompletedIntegerObservation(firstCase)));
 
             ProtosFutureValue secondCase =
                     invoke(
@@ -236,9 +233,7 @@ final class ProtosGroupTestLogicalCaseExecutionFacilityTest {
             // leftover state from the first Case's fresh Actor. Each Case spawns its
             // own worker and forms its own Group, so both Cases observe the same
             // freshly-tagged value of 1.
-            assertEquals(
-                    BigInteger.valueOf(1),
-                    ProtosTestIntegers.exact(assertCompletedIntegerObservation(secondCase)));
+            assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(assertCompletedIntegerObservation(secondCase)));
         }
     }
 

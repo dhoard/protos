@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -36,7 +35,7 @@ import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Context;
@@ -456,7 +455,6 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
     }
 
     private static long integer(Object value) {
-        BigInteger integer = ProtosTestIntegers.exact(value);
-        return integer.longValueExact();
+        return Long.parseLong(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
     }
 }

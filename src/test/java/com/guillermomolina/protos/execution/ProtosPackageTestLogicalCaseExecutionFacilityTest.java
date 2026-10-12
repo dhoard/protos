@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -33,7 +32,7 @@ import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -658,7 +657,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             ProtosIntegerValue value =
                     assertInstanceOf(
                             ProtosIntegerValue.class, assertCompletedObservationValue(future));
-            assertEquals(BigInteger.valueOf(2), ProtosTestIntegers.exact(value));
+            assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         }
     }
 
@@ -705,9 +704,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
                             "increments");
             assertTrue(submission.runNext());
             assertTrue(activation.executionDomain().dispatchOne());
-            assertEquals(
-                    BigInteger.valueOf(1),
-                    ProtosTestIntegers.exact(assertCompletedObservationValue(firstCase)));
+            assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(assertCompletedObservationValue(firstCase)));
 
             ProtosFutureValue secondCase =
                     invoke(
@@ -718,9 +715,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
 
             // If the second Case reused the first Case's Process/module state, the
             // counter would already be at 1 and this request would observe 2.
-            assertEquals(
-                    BigInteger.valueOf(1),
-                    ProtosTestIntegers.exact(assertCompletedObservationValue(secondCase)));
+            assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(assertCompletedObservationValue(secondCase)));
         }
     }
 

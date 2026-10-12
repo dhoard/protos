@@ -27,7 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import java.math.BigInteger;
 import org.junit.jupiter.api.Test;
 
@@ -36,20 +36,14 @@ class ProtosStandardNumericConversionTest {
     // numeric conversion/equality bridges, not observable source-level behavior.
     @Test
     void exactIntegralBinary64ExtractionUsesActualBinaryValue() throws java.io.IOException {
-        assertEquals(
-                new BigInteger("99999999999999991611392"),
-                ProtosTestIntegers.exact(
+        assertEquals((new BigInteger("99999999999999991611392")).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                         ProtosBinary64Rounding.integralBinary64(
                                 1e23,
                                 new ProtosCoreBootstrap()
                                         .bootstrap(java.nio.file.Path.of("protos", "lib", "core")))));
-        assertEquals(
-                BigInteger.ZERO,
-                ProtosTestIntegers.exact(
+        assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                         ProtosBinary64Rounding.integralBinary64(-0.0d, null)));
-        assertEquals(
-                BigInteger.ONE,
-                ProtosTestIntegers.exact(
+        assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                         ProtosBinary64Rounding.integralBinary64(1.0d, null)));
         assertEquals(
                 null,
@@ -84,8 +78,7 @@ class ProtosStandardNumericConversionTest {
                     ProtosStandardNumericConversionProtocol.convert(
                             toInteger, new ProtosFloatValue(value), prelude));
             assertSame(prelude.bigIntegerPrototype(), large.parent().orElseThrow());
-            assertEquals(new java.math.BigDecimal(value).toBigIntegerExact(),
-                    ProtosTestIntegers.exact(large));
+            assertEquals(String.valueOf(new java.math.BigDecimal(value).toBigIntegerExact()), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(large));
         }
         // A large result never degrades into a missing value: without a Prelude it fails.
         assertThrows(NullPointerException.class,
@@ -115,7 +108,7 @@ class ProtosStandardNumericConversionTest {
         for (BigInteger value : exact) {
             ProtosFloatValue floating = assertInstanceOf(ProtosFloatValue.class,
                     ProtosStandardNumericConversionProtocol.convert(
-                            toFloat, ProtosTestIntegers.integer(value, prelude), prelude));
+                            toFloat, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(value, prelude), prelude));
             assertEquals(new java.math.BigDecimal(value).doubleValue(), floating.value(),
                     value.toString());
         }

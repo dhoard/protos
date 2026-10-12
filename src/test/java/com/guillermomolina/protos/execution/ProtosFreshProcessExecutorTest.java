@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
@@ -30,7 +29,6 @@ import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.source.Source;
 import java.io.ByteArrayOutputStream;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
@@ -76,7 +74,7 @@ final class ProtosFreshProcessExecutorTest {
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         ProtosIntegerValue value =
                 assertInstanceOf(ProtosIntegerValue.class, outcome.value());
-        assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(value));
+        assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
         assertNull(outcome.error());
     }
 
@@ -169,7 +167,7 @@ final class ProtosFreshProcessExecutorTest {
 
         ProtosIntegerValue result =
                 assertInstanceOf(ProtosIntegerValue.class, outcome.value());
-        assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(result));
+        assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(result));
     }
 
     @Test
@@ -367,7 +365,7 @@ final class ProtosFreshProcessExecutorTest {
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         ProtosIntegerValue integer =
                 assertInstanceOf(ProtosIntegerValue.class, outcome.value());
-        assertEquals(BigInteger.valueOf(expected), ProtosTestIntegers.exact(integer));
+        assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
         assertNull(outcome.error());
     }
 

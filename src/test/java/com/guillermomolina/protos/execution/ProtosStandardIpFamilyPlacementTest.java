@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -260,7 +259,7 @@ final class ProtosStandardIpFamilyPlacementTest {
         BigInteger ipv6Max = BigInteger.ONE.shiftLeft(128).subtract(BigInteger.ONE);
         for (BigInteger bits : java.util.List.of(
                 BigInteger.ZERO, BigInteger.valueOf(0x7f000001L), BigInteger.valueOf(0xffffffffL))) {
-            assertEquals(expectedHash(bits, 4), ProtosTestIntegers.exact(guestHash(prelude, 4, bits)));
+            assertEquals(String.valueOf(expectedHash(bits, 4)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(guestHash(prelude, 4, bits)));
         }
         for (BigInteger bits : java.util.List.of(
                 BigInteger.ONE,
@@ -270,7 +269,7 @@ final class ProtosStandardIpFamilyPlacementTest {
                 BigInteger.ONE.shiftLeft(127),
                 ipv6Max)) {
             Object hash = guestHash(prelude, 6, bits);
-            assertEquals(expectedHash(bits, 6), ProtosTestIntegers.exact(hash), bits.toString(16));
+            assertEquals(String.valueOf(expectedHash(bits, 6)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(hash), bits.toString(16));
             if (expectedHash(bits, 6).bitLength() >= Long.SIZE) {
                 assertSame(prelude.bigIntegerPrototype(),
                         ((ProtosObjectValue) hash).parent().orElseThrow(), bits.toString(16));
@@ -312,7 +311,7 @@ final class ProtosStandardIpFamilyPlacementTest {
         Object rightHash = guestHash(right, 6, bits);
         assertSame(left.bigIntegerPrototype(), ((ProtosObjectValue) leftHash).parent().orElseThrow());
         assertSame(right.bigIntegerPrototype(), ((ProtosObjectValue) rightHash).parent().orElseThrow());
-        assertEquals(ProtosTestIntegers.exact(leftHash), ProtosTestIntegers.exact(rightHash));
+        assertEquals(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(leftHash), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(rightHash));
     }
 
     @Test
@@ -325,7 +324,7 @@ final class ProtosStandardIpFamilyPlacementTest {
         Object hash = ProtosInvocation.invokeMessage(address, "hash", java.util.List.of(), activation);
         assertTrue(hash != null, "IP hash must never be a guest null");
         assertTrue(ProtosNumericValueSupport.isCurrentInteger(hash));
-        assertEquals(expectedHash(bits, 6), ProtosTestIntegers.exact(hash));
+        assertEquals(String.valueOf(expectedHash(bits, 6)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(hash));
         assertTrue(expectedHash(bits, 6).bitLength() >= Long.SIZE);
         assertSame(prelude.bigIntegerPrototype(), ((ProtosObjectValue) hash).parent().orElseThrow());
     }
@@ -340,9 +339,7 @@ final class ProtosStandardIpFamilyPlacementTest {
         assertTrue(
                 ProtosStandardIpEndpointProtocol.recognizesValue(
                         copy, endpointPrototype, addressPrototype));
-        assertEquals(
-                ProtosTestIntegers.exact(source.readLocalSlot("port").orElseThrow()),
-                ProtosTestIntegers.exact(copy.readLocalSlot("port").orElseThrow()));
+        assertEquals(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(source.readLocalSlot("port").orElseThrow()), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(copy.readLocalSlot("port").orElseThrow()));
 
         ProtosObjectValue sourceAddress =
                 (ProtosObjectValue) source.readLocalSlot("address").orElseThrow();

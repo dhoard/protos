@@ -23,9 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
-import java.math.BigInteger;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -127,7 +126,7 @@ final class ProtosTestToolI8D1ProviderFoundationTest {
         assertEquals(1, request.bindings().size());
         assertSame(gpu, request.bindings().get(0));
         assertEquals("a100", request.bindings().get(0).profile());
-        assertEquals(BigInteger.valueOf(2), ProtosTestIntegers.exact(request.bindings().get(0).units()));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(request.bindings().get(0).units()));
 
         assertThrows(
                 UnsupportedOperationException.class,

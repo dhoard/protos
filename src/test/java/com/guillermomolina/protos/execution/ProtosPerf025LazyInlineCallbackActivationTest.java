@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedInlineLiteralCall;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -54,7 +53,6 @@ import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.Source;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.math.BigInteger;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -714,9 +712,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
     }
 
     private static void assertInteger(long expected, Object value) {
-        assertEquals(
-                BigInteger.valueOf(expected),
-                ProtosTestIntegers.exact(value));
+        assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
     }
 
     /** One probe call made from inside a live inline callback region. */

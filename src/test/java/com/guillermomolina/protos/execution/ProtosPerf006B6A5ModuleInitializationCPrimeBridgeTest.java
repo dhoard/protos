@@ -4,7 +4,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -25,7 +24,7 @@ import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
@@ -86,9 +85,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             assertEquals(
                     ProtosActorModuleState.InitializationState.INITIALIZING,
                     during.state());
-            assertEquals(
-                    BigInteger.ONE,
-                    ProtosTestIntegers.exact(during.instance().readLocalSlot("count").orElseThrow()));
+            assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(during.instance().readLocalSlot("count").orElseThrow()));
             assertEquals(1, resolver.loads("m"));
 
             ProtosFutureValue pending = injectedFuture.get();
@@ -106,12 +103,8 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             assertEquals(
                     ProtosActorModuleState.InitializationState.READY,
                     state.lookup(new ProtosModuleKey("m")).orElseThrow().state());
-            assertEquals(
-                    BigInteger.valueOf(2),
-                    ProtosTestIntegers.exact(module.readLocalSlot("count").orElseThrow()));
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    ProtosTestIntegers.exact(module.readLocalSlot("value").orElseThrow()));
+            assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(module.readLocalSlot("count").orElseThrow()));
+            assertEquals(String.valueOf("7"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(module.readLocalSlot("value").orElseThrow()));
             assertEquals(1, resolver.loads("m"));
 
             ProtosActivation cachedActivation = activation(prelude, domain, state);
@@ -171,9 +164,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             ProtosObjectValue b =
                     (ProtosObjectValue) a.readLocalSlot("b").orElseThrow();
             assertSame(a, b.readLocalSlot("a").orElseThrow());
-            assertEquals(
-                    BigInteger.TEN,
-                    ProtosTestIntegers.exact(a.readLocalSlot("seen").orElseThrow()));
+            assertEquals(String.valueOf("10"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(a.readLocalSlot("seen").orElseThrow()));
             assertEquals(1, resolver.loads("a"));
             assertEquals(1, resolver.loads("b"));
             assertEquals(
@@ -225,9 +216,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             ProtosObjectValue module =
                     (ProtosObjectValue) recovered.result().orElseThrow();
             assertTrue(module.hasLocalSlot("ok"));
-            assertEquals(
-                    BigInteger.valueOf(42),
-                    ProtosTestIntegers.exact(module.readLocalSlot("ok").orElseThrow()));
+            assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(module.readLocalSlot("ok").orElseThrow()));
             assertEquals(2, resolver.loads("retry"));
             assertEquals(
                     ProtosActorModuleState.InitializationState.READY,
@@ -316,9 +305,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
                     (ProtosObjectValue) retried.result().orElseThrow();
             assertNotSame(firstInstance, recovered);
             assertEquals(2, resolver.loads("cancel"));
-            assertEquals(
-                    BigInteger.valueOf(11),
-                    ProtosTestIntegers.exact(recovered.readLocalSlot("value").orElseThrow()));
+            assertEquals(String.valueOf("11"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(recovered.readLocalSlot("value").orElseThrow()));
             assertEquals(
                     ProtosActorModuleState.InitializationState.READY,
                     state.lookup(new ProtosModuleKey("cancel")).orElseThrow().state());

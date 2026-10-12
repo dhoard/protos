@@ -34,7 +34,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
@@ -82,8 +82,8 @@ final class ProtosStandardEncodingProtocolTest {
             new ProtosIntegerValue(-1),
             new ProtosIntegerValue(256),
             new ProtosIntegerValue((1L << 32) + 65),
-            ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64), prelude),
-            ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(65)), prelude),
+            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), prelude),
+            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(65)), prelude),
             new ProtosFloatValue(65.0d),
         };
         for (Object bad : invalid) {
@@ -111,7 +111,7 @@ final class ProtosStandardEncodingProtocolTest {
                             ProtosInvocation.invokeMessage(
                                     encoding, "encode", List.of(new ProtosStringValue(text)), a));
             for (Object octet : encoded.indexedSnapshot()) {
-                assertTrue(ProtosTestIntegers.exact(octet).bitLength() <= 8, name);
+                assertTrue((octet instanceof com.guillermomolina.protos.runtime.ProtosIntegerValue compact && compact.longValue() >= 0 && compact.longValue() <= 255), name);
             }
             assertEquals(text, decode(encoding, encoded, a), name);
         }
@@ -120,8 +120,8 @@ final class ProtosStandardEncodingProtocolTest {
                         ProtosInvocation.invokeMessage(
                                 descriptor(prelude, "UTF8"), "encode", List.of(new ProtosStringValue("\uD83D\uDE00")), a);
         assertEquals(
-                List.of(BigInteger.valueOf(0xf0), BigInteger.valueOf(0x9f), BigInteger.valueOf(0x98), BigInteger.valueOf(0x80)),
-                utf8.indexedSnapshot().stream().map(ProtosTestIntegers::exact).toList());
+                List.of("240", "159", "152", "128"),
+                utf8.indexedSnapshot().stream().map(com.guillermomolina.protos.runtime.ProtosNumericValueSupport::integerDecimalText).toList());
 
         ProtosBytesValue malformed =
                 bytes(bytesPrototype(prelude, a), new ProtosIntegerValue(0xc3), new ProtosIntegerValue(0x28));

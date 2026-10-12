@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -35,7 +34,6 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Context;
@@ -334,7 +332,7 @@ final class ProtosPerf038EResidualCallGraphTest {
     private static void assertIntegers(List<Object> results, long... expected) {
         assertEquals(expected.length, results.size());
         for (int index = 0; index < expected.length; index++) {
-            assertEquals(BigInteger.valueOf(expected[index]), integerValue(results.get(index)));
+            assertEquals(Long.toString(expected[index]), integerValue(results.get(index)));
         }
     }
 
@@ -377,7 +375,7 @@ final class ProtosPerf038EResidualCallGraphTest {
         return new ProtosIntegerValue(value);
     }
 
-    private static BigInteger integerValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 }

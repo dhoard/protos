@@ -25,12 +25,14 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CallTarget;
@@ -40,7 +42,6 @@ import com.oracle.truffle.api.bytecode.TagTree;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -73,15 +74,9 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                                 + " " + localNames(candidate));
             }
 
-            assertEquals(
-                    BigInteger.valueOf(19),
-                    integerValue(call(closure("() => { 19 }", module), module)));
-            assertEquals(
-                    BigInteger.valueOf(23),
-                    integerValue(call(closure("() => { marker }", module), module)));
-            assertEquals(
-                    BigInteger.valueOf(23),
-                    integerValue(call(closure("() => { holder.value }", module), module)));
+            assertEquals("19", integerValue(call(closure("() => { 19 }", module), module)));
+            assertEquals("23", integerValue(call(closure("() => { marker }", module), module)));
+            assertEquals("23", integerValue(call(closure("() => { holder.value }", module), module)));
 
             assertSame(
                     ProtosBooleanValue.TRUE,
@@ -100,6 +95,53 @@ final class ProtosPerf037EDirectTerminalReturnTest {
     }
 
     @Test
+    void terminalFloatReturnsPrimitiveOnlyToAcceptingCaller() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue run = closure("() => { 1.5 }", module);
+            ProtosSemanticBytecodeRootNode root =
+                    run.executionPlan()
+                            .orElseThrow()
+                            .bytecodeActivationRootForTesting();
+
+            root.getRootNodes().ensureComplete();
+            assertTrue(
+                    root.getBytecodeNode().getInstructionsAsList().stream()
+                            .anyMatch(instruction ->
+                                    instruction.getName()
+                                            .contains("MaterializeReturnCarrier")));
+
+            assertFalse(localNames(run).contains("sequenceResult"));
+            assertEquals(
+                    1.5d,
+                    assertInstanceOf(ProtosFloatValue.class, call(run, module)).value());
+
+            ProtosClosureValue accepting =
+                    closure("(ignored) => { 1.5 }", module);
+
+            Object[] arguments =
+                    ProtosFrameArguments.compactDirectClosureCallOnePrepared(
+                            accepting,
+                            module,
+                            ProtosReturnHome
+                                    .unobservableAcceptingPrimitiveResultForRuntime(),
+                            new ProtosIntegerValue(7L));
+
+            assertTrue(ProtosFrameArguments.acceptsPrimitiveResult(arguments));
+
+            Object result =
+                    accepting.executionPlan()
+                            .orElseThrow()
+                            .bytecodeActivationRootForTesting()
+                            .getCallTarget()
+                            .call(arguments);
+
+            assertEquals(
+                    1.5d,
+                    assertInstanceOf(Double.class, result).doubleValue());
+        });
+    }
+
+    @Test
     void earlierStatementsExecuteOnceInSourceOrder() throws Exception {
         withCore(module -> {
             evaluate("counter: 0\nholder: { value: 23 }", module);
@@ -112,19 +154,11 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                                     + "}",
                             module);
 
-            assertEquals(
-                    BigInteger.valueOf(23),
-                    integerValue(call(run, module)));
-            assertEquals(
-                    BigInteger.ONE,
-                    integerValue(evaluate("counter", module)));
+            assertEquals("23", integerValue(call(run, module)));
+            assertEquals("1", integerValue(evaluate("counter", module)));
 
-            assertEquals(
-                    BigInteger.valueOf(23),
-                    integerValue(call(run, module)));
-            assertEquals(
-                    BigInteger.TWO,
-                    integerValue(evaluate("counter", module)));
+            assertEquals("23", integerValue(call(run, module)));
+            assertEquals("2", integerValue(evaluate("counter", module)));
         });
     }
 
@@ -168,9 +202,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                                     + "outer()",
                             module);
 
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(result));
+            assertEquals("7", integerValue(result));
         });
     }
 
@@ -188,9 +220,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
             assertTrue(
                     localNames(composed).contains("sequenceResult"),
                     "composed terminal calls retain the original result local");
-            assertEquals(
-                    BigInteger.valueOf(31),
-                    integerValue(call(composed, module)));
+            assertEquals("31", integerValue(call(composed, module)));
         });
     }
 
@@ -236,9 +266,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
             }
 
             assertFalse(localNames(run).contains("sequenceResult"));
-            assertEquals(
-                    BigInteger.valueOf(23),
-                    integerValue(call(run, module)));
+            assertEquals("23", integerValue(call(run, module)));
         });
     }
 
@@ -284,9 +312,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                             .toList());
 
             assertFalse(localNames(run).contains("sequenceResult"));
-            assertEquals(
-                    BigInteger.valueOf(41),
-                    integerValue(call(run, module)));
+            assertEquals("41", integerValue(call(run, module)));
         });
     }
 
@@ -328,15 +354,11 @@ final class ProtosPerf037EDirectTerminalReturnTest {
             ProtosClosureValue valueReader =
                     closure("() => { holder.value }", module);
 
-            assertEquals(
-                    BigInteger.valueOf(23),
-                    integerValue(call(valueReader, module)));
+            assertEquals("23", integerValue(call(valueReader, module)));
 
             evaluate("holder.value = 55", module);
 
-            assertEquals(
-                    BigInteger.valueOf(55),
-                    integerValue(call(valueReader, module)));
+            assertEquals("55", integerValue(call(valueReader, module)));
 
             ProtosClosureValue methodReader =
                     closure("() => { holder.method }", module);
@@ -365,9 +387,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                             ProtosClosureValue.class,
                             call(supplier, module));
 
-            assertEquals(
-                    BigInteger.valueOf(37),
-                    integerValue(call(returned, module)));
+            assertEquals("37", integerValue(call(returned, module)));
         });
     }
 
@@ -389,19 +409,11 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                                     + "}",
                             module);
 
-            assertEquals(
-                    BigInteger.valueOf(23),
-                    integerValue(call(run, module)));
-            assertEquals(
-                    BigInteger.ONE,
-                    integerValue(evaluate("counter", module)));
+            assertEquals("23", integerValue(call(run, module)));
+            assertEquals("1", integerValue(evaluate("counter", module)));
 
-            assertEquals(
-                    BigInteger.valueOf(23),
-                    integerValue(call(run, module)));
-            assertEquals(
-                    BigInteger.TWO,
-                    integerValue(evaluate("counter", module)));
+            assertEquals("23", integerValue(call(run, module)));
+            assertEquals("2", integerValue(evaluate("counter", module)));
         });
     }
 
@@ -418,9 +430,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                             module);
 
             assertFalse(localNames(run).contains("sequenceResult"));
-            assertEquals(
-                    BigInteger.valueOf(41),
-                    integerValue(call(run, module)));
+            assertEquals("41", integerValue(call(run, module)));
         });
     }
 
@@ -437,9 +447,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                                     + "}",
                             module);
 
-            assertEquals(
-                    BigInteger.valueOf(9),
-                    integerValue(call(run, module)));
+            assertEquals("9", integerValue(call(run, module)));
         });
     }
 
@@ -467,15 +475,9 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                     localNames(run).contains("sequenceResult"),
                     "composed final calls retain final-result storage");
 
-            assertEquals(
-                    BigInteger.ONE,
-                    integerValue(call(run, module)));
-            assertEquals(
-                    BigInteger.TWO,
-                    integerValue(call(run, module)));
-            assertEquals(
-                    BigInteger.TWO,
-                    integerValue(evaluate("counter", module)));
+            assertEquals("1", integerValue(call(run, module)));
+            assertEquals("2", integerValue(call(run, module)));
+            assertEquals("2", integerValue(evaluate("counter", module)));
         });
     }
 
@@ -527,12 +529,8 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                                     + "}",
                             module);
 
-            assertEquals(
-                    BigInteger.valueOf(2),
-                    integerValue(call(run, module)));
-            assertEquals(
-                    BigInteger.valueOf(4),
-                    integerValue(call(run, module)));
+            assertEquals("2", integerValue(call(run, module)));
+            assertEquals("4", integerValue(call(run, module)));
         });
     }
 
@@ -559,12 +557,8 @@ final class ProtosPerf037EDirectTerminalReturnTest {
 
             assertTrue(localNames(run).contains("sequenceResult"));
 
-            assertEquals(
-                    BigInteger.valueOf(3),
-                    integerValue(call(run, module)));
-            assertEquals(
-                    BigInteger.valueOf(6),
-                    integerValue(call(run, module)));
+            assertEquals("3", integerValue(call(run, module)));
+            assertEquals("6", integerValue(call(run, module)));
         });
     }
 
@@ -582,9 +576,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                             module);
 
             for (int index = 0; index < 32; index++) {
-                assertEquals(
-                        BigInteger.valueOf(17),
-                        integerValue(call(reader, module)));
+                assertEquals("17", integerValue(call(reader, module)));
             }
 
             evaluate(
@@ -605,17 +597,13 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                     second,
                     "Closure extraction must remain fresh");
 
-            assertEquals(
-                    BigInteger.valueOf(81),
-                    integerValue(call(first, module)));
+            assertEquals("81", integerValue(call(first, module)));
 
             evaluate(
                     "holder.value = 19",
                     module);
 
-            assertEquals(
-                    BigInteger.valueOf(19),
-                    integerValue(call(reader, module)));
+            assertEquals("19", integerValue(call(reader, module)));
         });
     }
 
@@ -703,8 +691,8 @@ final class ProtosPerf037EDirectTerminalReturnTest {
         return prepared.finish(result);
     }
 
-    private static BigInteger integerValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 
     private static List<Object> localNames(

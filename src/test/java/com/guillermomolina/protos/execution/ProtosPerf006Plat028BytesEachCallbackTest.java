@@ -4,7 +4,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -24,7 +23,7 @@ import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -89,7 +88,7 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
             ProtosActivation module = activation(prelude, domain);
             ProtosBytesValue bytes = bytes(prelude, 1, 2);
-            List<BigInteger> observed = new ArrayList<>();
+            List<Long> observed = new ArrayList<>();
 
             module.context().createLocalSlot("bytes", bytes);
             module.context().createLocalSlot(
@@ -98,7 +97,7 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
                             (activation, supplied) -> {
                                 ProtosIntegerValue octet =
                                         (ProtosIntegerValue) supplied.get(0);
-                                observed.add(ProtosTestIntegers.exact(octet));
+                                observed.add(octet.longValue());
                                 if (observed.size() == 1) {
                                     bytes.indexedPut(
                                             1,
@@ -120,11 +119,9 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
             assertEquals(ProtosTask.State.COMPLETED, task.state());
             assertSame(bytes, task.result().orElseThrow());
             assertEquals(
-                    List.of(BigInteger.ONE, BigInteger.TWO),
+                    List.of(1L, 2L),
                     observed);
-            assertEquals(
-                    BigInteger.valueOf(99),
-                    ProtosTestIntegers.exact(bytes.indexedAt(1)));
+            assertEquals(String.valueOf("99"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(bytes.indexedAt(1)));
         }
 
         System.out.println("PERF006_PLAT028_BYTES_EACH_SNAPSHOT=PASS");

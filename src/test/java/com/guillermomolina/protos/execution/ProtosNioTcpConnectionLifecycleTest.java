@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
@@ -159,7 +158,7 @@ final class ProtosNioTcpConnectionLifecycleTest {
         ProtosBytesValue b=assertInstanceOf(ProtosBytesValue.class,f.resolvedValue().orElseThrow());
         ArrayList<Integer> r=new ArrayList<>();
         for(Object v:b.indexedSnapshot())
-            r.add(ProtosTestIntegers.exact(v).intValueExact());
+            r.add(Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(v)));
         return r;
     }
 

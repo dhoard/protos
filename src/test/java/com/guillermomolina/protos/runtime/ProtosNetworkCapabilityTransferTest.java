@@ -90,9 +90,7 @@ final class ProtosNetworkCapabilityTransferTest {
                         ProtosActorValueTransfer.snapshotValue(ordinary, activation));
         assertNotSame(ordinary, actorCopy);
         assertSame(prelude.networkPrototype(), actorCopy.parent().orElseThrow());
-        assertEquals(
-                java.math.BigInteger.valueOf(7),
-                ProtosTestIntegers.exact(actorCopy.readLocalSlot("payload").orElseThrow()));
+        assertEquals(Long.toString(7), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(actorCopy.readLocalSlot("payload").orElseThrow()));
         assertTrue(actorCopy.isFrozen());
 
         Object copied =

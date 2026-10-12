@@ -36,6 +36,14 @@ public interface ProtosForeignValueOperations {
     ProtosForeignValueClass classify(ProtosForeignPluginSession session, Object handle)
             throws Exception;
 
+    /**
+     * Opts into Long for outbound signed-64 Integer arguments.
+     * The default preserves the existing BigInteger provider ABI.
+     */
+    default boolean supportsLongIntegerArguments() {
+        return false;
+    }
+
     /** Whether the provider represents {@code argument} losslessly; checked before entry. */
     default boolean acceptsArgument(ProtosForeignArgumentValue argument) {
         return true;

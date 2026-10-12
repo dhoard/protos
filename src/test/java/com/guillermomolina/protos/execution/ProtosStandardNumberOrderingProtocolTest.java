@@ -29,7 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -121,7 +121,7 @@ class ProtosStandardNumberOrderingProtocolTest {
     }
 
     private static Object integer(BigInteger value, ProtosPrelude prelude) {
-        return ProtosTestIntegers.integer(value, prelude);
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(value, prelude);
     }
 
     /** Asserts all four relations and their mirror for an expected sign of left compared to right. */

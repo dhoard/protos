@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -340,9 +339,7 @@ final class ProtosNioNetworkBackendConnectTest {
                     () -> ProtosInvocation.invoke(
                             x.prelude.ipEndpointPrototypeForRuntime(),
                             List.of(address,
-                                    ProtosTestIntegers.integer(
-                                            BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(80)),
-                                            x.prelude)),
+                                    com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(80)), x.prelude)),
                             x.activation));
         }
     }
@@ -366,7 +363,7 @@ final class ProtosNioNetworkBackendConnectTest {
         byte[] octets = unsignedOctets(bits, width);
         byte[] host = InetAddress.getByAddress(octets).getAddress();
         Object guest = ProtosNumericValueSupport.integerFromUnsignedBigEndian(host, prelude);
-        assertEquals(bits, ProtosTestIntegers.exact(guest), bits.toString(16));
+        assertEquals(String.valueOf(String.valueOf(bits)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(guest), bits.toString(16));
         assertArrayEquals(octets, ProtosNumericValueSupport.unsignedBigEndianOrNull(guest, width));
         if (bits.bitLength() > Long.SIZE - 1) {
             assertSame(prelude.bigIntegerPrototype(),
@@ -419,7 +416,7 @@ final class ProtosNioNetworkBackendConnectTest {
                                 addressFactory,
                                 List.of(
                                         new ProtosIntegerValue(version),
-                                        ProtosTestIntegers.integer(bits, prelude)),
+                                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(bits, prelude)),
                                 activation);
         Object endpointFactory =
                 prelude.ipEndpointPrototypeForRuntime();

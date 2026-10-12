@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -44,7 +43,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -83,7 +82,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
 
             ProtosIntegerValue integer =
                     assertInstanceOf(ProtosIntegerValue.class, result);
-            assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(integer));
+            assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
         }
 
         System.out.println("PERF006_B4B_DIRECT_OWNER_CONSUMPTION=PASS");
@@ -280,7 +279,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
 
             ProtosIntegerValue integer =
                     assertInstanceOf(ProtosIntegerValue.class, result);
-            assertEquals(BigInteger.valueOf(41), ProtosTestIntegers.exact(integer));
+            assertEquals(String.valueOf("41"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
         }
 
         System.out.println("PERF006_B4B_DEFAULT_RETURN_HOME=PASS");

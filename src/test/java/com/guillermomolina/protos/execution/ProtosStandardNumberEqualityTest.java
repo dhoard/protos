@@ -29,7 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -103,9 +103,7 @@ class ProtosStandardNumberEqualityTest {
         };
         for (Object[] pair : equalPairs) {
             assertEquality(true, pair[0], pair[1], a);
-            assertEquals(
-                    ProtosTestIntegers.exact(ProtosInvocation.invokeMessage(pair[0], "hash", List.of(), a)),
-                    ProtosTestIntegers.exact(ProtosInvocation.invokeMessage(pair[1], "hash", List.of(), a)));
+            assertEquals(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosInvocation.invokeMessage(pair[0], "hash", List.of(), a)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosInvocation.invokeMessage(pair[1], "hash", List.of(), a)));
         }
     }
 
@@ -129,7 +127,7 @@ class ProtosStandardNumberEqualityTest {
     }
 
     private static Object integer(BigInteger value, ProtosPrelude prelude) {
-        return ProtosTestIntegers.integer(value, prelude);
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(value, prelude);
     }
 
     private static void assertEquality(

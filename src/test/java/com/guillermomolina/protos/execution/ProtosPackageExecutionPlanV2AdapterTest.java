@@ -29,7 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Files;
@@ -395,14 +395,14 @@ final class ProtosPackageExecutionPlanV2AdapterTest {
                     version(rawPackage(plan, 3)),
                     (ProtosObjectValue) edgeRef(plan, 2, "target")
                             .readLocalSlot("version").orElseThrow())) {
-                version.assignLocalSlot("major", ProtosTestIntegers.integer(hugeMajor, prelude));
+                version.assignLocalSlot("major", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(hugeMajor, prelude));
                 version.assignLocalSlot("text", str(twoText));
             }
             ProtosObjectValue preVersion = version(rawPackage(plan, 5));
             ProtosObjectValue numeric = (ProtosObjectValue)
                     ((ProtosArrayValue) preVersion.readLocalSlot("prerelease").orElseThrow())
                             .indexedAt(1);
-            numeric.assignLocalSlot("number", ProtosTestIntegers.integer(hugeNumber, prelude));
+            numeric.assignLocalSlot("number", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(hugeNumber, prelude));
             numeric.assignLocalSlot("text", str(hugeNumber.toString()));
             preVersion.assignLocalSlot("text", str(preText));
 
@@ -435,7 +435,7 @@ final class ProtosPackageExecutionPlanV2AdapterTest {
                 .assignLocalSlot("major", str("1")));
         assertRejected(plan -> {
             ProtosObjectValue version = version(rawPackage(plan, 2));
-            version.assignLocalSlot("major", ProtosTestIntegers.integer(huge.negate(), prelude));
+            version.assignLocalSlot("major", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge.negate(), prelude));
             version.assignLocalSlot("text", str(huge.negate() + ".0.0"));
         });
         // The text must be exactly the canonical rendering: no leading zeros or sign.
@@ -443,19 +443,19 @@ final class ProtosPackageExecutionPlanV2AdapterTest {
         assertRejected(plan -> version(rawPackage(plan, 2)).assignLocalSlot("text", str("+1.0.0")));
         assertRejected(plan -> {
             ProtosObjectValue version = version(rawPackage(plan, 2));
-            version.assignLocalSlot("major", ProtosTestIntegers.integer(huge, prelude));
+            version.assignLocalSlot("major", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude));
             version.assignLocalSlot("text", str("1.0.0"));
         });
         // A large Integer is never an ordinary structural record.
         assertRejected(plan -> ref(rawPackage(plan, 2))
-                .assignLocalSlot("version", ProtosTestIntegers.integer(huge, prelude)));
+                .assignLocalSlot("version", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude)));
         assertRejected(plan -> rawPackage(plan, 2)
-                .assignLocalSlot("ref", ProtosTestIntegers.integer(huge, prelude)));
+                .assignLocalSlot("ref", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude)));
         // Numeric prerelease identifiers: Integer number, canonical text, digits-only alphanumeric.
         assertRejected(plan -> prereleaseIdentifier(plan, 1)
                 .assignLocalSlot("text", str("01")));
         assertRejected(plan -> prereleaseIdentifier(plan, 1)
-                .assignLocalSlot("number", ProtosTestIntegers.integer(huge, prelude)));
+                .assignLocalSlot("number", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude)));
         assertRejected(plan -> prereleaseIdentifier(plan, 1)
                 .assignLocalSlot("number", new ProtosFloatValue(1.0d)));
         assertRejected(plan -> {

@@ -19,10 +19,9 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.*;
 import org.graalvm.polyglot.Context;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -477,9 +476,8 @@ final class ProtosStandardTextWriterProtocolTest {
             List<Object> values = bytes.indexedSnapshot();
             byte[] result = new byte[values.size()];
             for (int i = 0; i < values.size(); i++) {
-                BigInteger value =
-                        ProtosTestIntegers.exact(values.get(i));
-                result[i] = (byte) value.intValueExact();
+                int value = Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(values.get(i)));
+                result[i] = (byte) value;
             }
             return result;
         }

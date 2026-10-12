@@ -41,7 +41,7 @@ final class ProtosI091NumericBoundaryTest {
         assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(
                 new ProtosIntegerValue(1L + Integer.MAX_VALUE)));
         assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(
-                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(80))));
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(80), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject())));
         assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(new ProtosFloatValue(1.0)));
         assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(1));
         assertThrows(IllegalArgumentException.class,
@@ -97,7 +97,7 @@ final class ProtosI091NumericBoundaryTest {
     void mixedSmallAndLargeIdentitiesNeedNoArbitraryArithmetic() {
         BigInteger exact = BigInteger.ONE.shiftLeft(100).add(BigInteger.valueOf(12345L));
         for (BigInteger value : new BigInteger[] {exact, exact.negate()}) {
-            Object large = ProtosTestIntegers.integer(value);
+            Object large = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(value, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
             Object zero = new ProtosIntegerValue(0L);
             Object one = new ProtosIntegerValue(1L);
             assertSame(large, ProtosNumericValueSupport.addIntegers(large, zero, null));
@@ -172,7 +172,7 @@ final class ProtosI091NumericBoundaryTest {
             assertEquals(maximum, unsignedOrSigned(kind, kind.maximumBits()), kind.name());
 
             for (BigInteger edge : new BigInteger[] {minimum, maximum}) {
-                Object integer = ProtosTestIntegers.integer(edge);
+                Object integer = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(edge, com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
                 assertTrue(kind.containsInteger(integer), kind + " " + edge);
                 ProtosFixedIntegerInteropValue value =
                         ProtosFixedIntegerInteropValue.ofInteger(kind, integer);
@@ -181,7 +181,7 @@ final class ProtosI091NumericBoundaryTest {
                 assertEquals(edge, unsignedOrSigned(kind, value.bits()));
                 if (edge.bitLength() < Long.SIZE) {
                     // Only a UINT64 value beyond the signed-64 range needs a Prelude.
-                    assertEquals(edge, ProtosTestIntegers.exact(value.integer(null)));
+                    assertEquals(String.valueOf(edge), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value.integer(null)));
                 }
                 assertEquals(edge.bitLength() < Byte.SIZE, interop.fitsInByte(value));
                 assertEquals(edge.bitLength() < Short.SIZE, interop.fitsInShort(value));
@@ -193,8 +193,8 @@ final class ProtosI091NumericBoundaryTest {
                             ProtosFixedIntegerInteropValue.ofLong(kind, edge.longValueExact()).bits());
                 }
             }
-            Object below = ProtosTestIntegers.integer(minimum.subtract(BigInteger.ONE));
-            Object above = ProtosTestIntegers.integer(maximum.add(BigInteger.ONE));
+            Object below = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(minimum.subtract(BigInteger.ONE), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
+            Object above = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(maximum.add(BigInteger.ONE), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
             assertFalse(kind.containsInteger(below), kind.name());
             assertFalse(kind.containsInteger(above), kind.name());
             assertThrows(IllegalArgumentException.class,
@@ -211,12 +211,10 @@ final class ProtosI091NumericBoundaryTest {
         assertEquals(Long.MIN_VALUE + 2L, high.bits());
         assertEquals(twoPow63.add(BigInteger.TWO), interop.asBigInteger(high));
         assertFalse(interop.fitsInLong(high));
-        assertEquals(
-                twoPow63.add(BigInteger.TWO),
-                ProtosTestIntegers.exact(
+        assertEquals((twoPow63.add(BigInteger.TWO)).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                         ProtosNumericValueSupport.integerFromUnsignedBigEndian(
                                 ProtosNumericValueSupport.unsignedBigEndianOrNull(
-                                        ProtosTestIntegers.integer(interop.asBigInteger(high)), 8),
+                                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(interop.asBigInteger(high), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()), 8),
                                 prototype)));
         assertThrows(NullPointerException.class, () -> high.integer(null));
         assertThrows(IllegalArgumentException.class,

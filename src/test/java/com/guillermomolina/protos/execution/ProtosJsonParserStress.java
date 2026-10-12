@@ -20,13 +20,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -131,11 +129,7 @@ final class ProtosJsonParserStress {
                         ProtosObjectValue.class,
                         value(numberNode, "number"));
         assertTrue(decimal.isOpen());
-        assertEquals(
-                BigInteger.valueOf(coefficient),
-                ProtosTestIntegers.exact(decimal.readLocalSlot("coefficient").orElseThrow()));
-        assertEquals(
-                BigInteger.valueOf(exponent),
-                ProtosTestIntegers.exact(decimal.readLocalSlot("exponent").orElseThrow()));
+        assertEquals(Long.toString(coefficient), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(decimal.readLocalSlot("coefficient").orElseThrow()));
+        assertEquals(Long.toString(exponent), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(decimal.readLocalSlot("exponent").orElseThrow()));
     }
 }

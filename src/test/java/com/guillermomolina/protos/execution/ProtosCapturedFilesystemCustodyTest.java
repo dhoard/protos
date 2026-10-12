@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
@@ -24,7 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosPathComponents;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
-import java.math.BigInteger;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -205,9 +204,9 @@ final class ProtosCapturedFilesystemCustodyTest {
                 assertInstanceOf(ProtosBytesValue.class, read.resolvedValue().orElseThrow());
         byte[] raw = new byte[bytes.indexedSize()];
         for (int index = 0; index < raw.length; index++) {
-            BigInteger octet =
-                    ProtosTestIntegers.exact(bytes.indexedAt(index));
-            raw[index] = (byte) octet.intValueExact();
+            long octet = org.junit.jupiter.api.Assertions.assertInstanceOf(
+                    ProtosIntegerValue.class, bytes.indexedAt(index)).longValue();
+            raw[index] = (byte) octet;
         }
 
         assertResolved(ProtosInvocation.invokeMessage(file, "close", List.of(), activation));

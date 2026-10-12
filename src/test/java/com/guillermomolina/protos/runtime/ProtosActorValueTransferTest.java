@@ -280,7 +280,7 @@ final class ProtosActorValueTransferTest {
         bytes.indexedPut(0, new ProtosIntegerValue(9));
 
         assertNotSame(bytes, copied);
-        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(copied.indexedAt(0)));
+        assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(copied.indexedAt(0)));
         assertNotSame(metadata, copied.readLocalSlot("metadata").orElseThrow());
     }
 
@@ -633,10 +633,10 @@ final class ProtosActorValueTransferTest {
         ProtosActivation source = prelude.newModuleActivation();
         BigInteger twoTo64 = BigInteger.ONE.shiftLeft(64);
         BigInteger huge = BigInteger.ONE.shiftLeft(1000).add(BigInteger.ONE);
-        Object positive = ProtosTestIntegers.integer(twoTo64, prelude);
-        Object negative = ProtosTestIntegers.integer(twoTo64.negate(), prelude);
-        Object shared = ProtosTestIntegers.integer(huge, prelude);
-        Object twin = ProtosTestIntegers.integer(huge, prelude);
+        Object positive = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(twoTo64, prelude);
+        Object negative = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(twoTo64.negate(), prelude);
+        Object shared = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude);
+        Object twin = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude);
         ProtosObjectValue nested = new ProtosObjectValue(ProtosObjectValue.rootObject());
         nested.createLocalSlot("shared", shared);
         nested.createLocalSlot("again", shared);
@@ -659,9 +659,9 @@ final class ProtosActorValueTransferTest {
         Object copiedTwin = copiedNested.readLocalSlot("twin").orElseThrow();
 
         assertNotSame(positive, copiedPositive);
-        assertEquals(twoTo64, ProtosTestIntegers.exact(copiedPositive));
-        assertEquals(twoTo64.negate(), ProtosTestIntegers.exact(copiedNegative));
-        assertEquals(huge, ProtosTestIntegers.exact(copiedShared));
+        assertEquals(String.valueOf(String.valueOf(twoTo64)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(copiedPositive));
+        assertEquals(String.valueOf(twoTo64.negate()), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(copiedNegative));
+        assertEquals(String.valueOf(String.valueOf(huge)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(copiedShared));
         // Rematerialized whole: frozen, slotless, and owned by the BigInteger prototype.
         for (ProtosLargeIntegerValue copied :
                 List.of(copiedPositive, copiedNegative, copiedShared)) {
@@ -687,7 +687,7 @@ final class ProtosActorValueTransferTest {
         ProtosPrelude prelude = core();
         ProtosActivation source = prelude.newModuleActivation();
         BigInteger huge = BigInteger.ONE.shiftLeft(1000).add(BigInteger.ONE);
-        Object key = ProtosTestIntegers.integer(huge, prelude);
+        Object key = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude);
         ProtosMapValue map = prelude.newMap();
         ProtosIdentityMapValue identityMap =
                 new ProtosIdentityMapValue(prelude.identityMapPrototype());
@@ -715,7 +715,7 @@ final class ProtosActorValueTransferTest {
                 ProtosNumericHashKey.fromIdentity(identityEntry.key()),
                 identityEntry.recordedIdentityHash());
 
-        Object probe = ProtosTestIntegers.integer(huge, prelude);
+        Object probe = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude);
         ProtosStringValue fromMap =
                 assertInstanceOf(
                         ProtosStringValue.class,
@@ -734,7 +734,7 @@ final class ProtosActorValueTransferTest {
             throws Exception {
         ProtosPrelude prelude = core();
         ProtosActivation source = prelude.newModuleActivation();
-        Object large = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64), prelude);
+        Object large = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), prelude);
 
         assertNonTransferable(
                 source,

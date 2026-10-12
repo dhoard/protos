@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -102,7 +101,7 @@ final class ProtosHostEntryFutureSuspensionTest {
         }
 
         long slot(String name) {
-            return ProtosTestIntegers.exact(module.readLocalSlot(name).orElseThrow()).longValueExact();
+            return Long.parseLong(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(module.readLocalSlot(name).orElseThrow()));
         }
 
         ProtosActorExecutionDomain domain() {

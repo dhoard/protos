@@ -21,13 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -229,8 +228,7 @@ fixture.prelude().newModuleActivation());
     }
 
     private static int integerAt(ProtosArrayValue array, int index) {
-        return ProtosTestIntegers.exact(array.indexedAt(index))
-                .intValueExact();
+        return Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(array.indexedAt(index)));
     }
 
     private static String protosString(String value) {

@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -28,7 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -148,7 +147,7 @@ class ProtosArrayMatchProtocolTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         captures.indexedAt(0));
-        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(first));
+        assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(first));
 
         ProtosArrayValue nested =
                 assertInstanceOf(
@@ -230,7 +229,7 @@ class ProtosArrayMatchProtocolTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         captures.indexedAt(0));
-        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(captured));
+        assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(captured));
     }
 
     @Test

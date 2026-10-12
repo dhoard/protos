@@ -18,7 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -42,7 +42,9 @@ import org.junit.jupiter.api.Test;
 /** I091 compact numeric paths must agree exactly with the arbitrary-precision semantics. */
 final class ProtosI091CompactNumericPathsTest {
     @Test
-    void exactQuotientRoundingAgreesAcrossCompactAndScaledPaths() {
+    void exactQuotientRoundingAgreesAcrossCompactAndScaledPaths() throws IOException {
+        ProtosPrelude prelude = new ProtosCoreBootstrap()
+                .bootstrap(Path.of("protos", "lib", "core"));
         assertEquals(1.0 / 3.0, divide(1L, 3L));
         assertEquals(-2.5, divide(-5L, 2L));
         assertEquals(
@@ -59,7 +61,7 @@ final class ProtosI091CompactNumericPathsTest {
         assertEquals(
                 0x1p64 / 3.0,
                 ProtosBinary64Rounding.divideExactIntegers(
-                        ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64)),
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), prelude),
                         new ProtosIntegerValue(3L)));
         assertEquals(
                 0x1p63,
@@ -67,7 +69,9 @@ final class ProtosI091CompactNumericPathsTest {
     }
 
     @Test
-    void mixedOrderingIsExactForCompactIntegers() {
+    void mixedOrderingIsExactForCompactIntegers() throws IOException {
+        ProtosPrelude prelude = new ProtosCoreBootstrap()
+                .bootstrap(Path.of("protos", "lib", "core"));
         assertEquals(Comparison.GREATER, compare(new ProtosIntegerValue(3L), 2.5));
         assertEquals(Comparison.LESS, compare(new ProtosIntegerValue(-2L), 2.5));
         assertEquals(Comparison.GREATER, compare(new ProtosIntegerValue(-2L), -2.5));
@@ -83,11 +87,13 @@ final class ProtosI091CompactNumericPathsTest {
         assertEquals(Comparison.UNORDERED, compare(new ProtosIntegerValue(1L), Double.NaN));
         assertEquals(
                 Comparison.LESS,
-                compare(ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64)), 0x1p65));
+                compare(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), prelude), 0x1p65));
     }
 
     @Test
-    void largeIntegerOrderingAgainstFloatsIsExactWithoutFloatMaterialization() {
+    void largeIntegerOrderingAgainstFloatsIsExactWithoutFloatMaterialization() throws IOException {
+        ProtosPrelude prelude = new ProtosCoreBootstrap()
+                .bootstrap(Path.of("protos", "lib", "core"));
         BigInteger twoPow64 = BigInteger.ONE.shiftLeft(64);
         BigInteger[] integers = {
             twoPow64, twoPow64.add(BigInteger.ONE), twoPow64.subtract(BigInteger.ONE),
@@ -101,7 +107,7 @@ final class ProtosI091CompactNumericPathsTest {
             0x1p1023, -0x1p63, Double.MAX_VALUE, 1.5, -1.5
         };
         for (BigInteger exact : integers) {
-            Object integer = ProtosTestIntegers.integer(exact);
+            Object integer = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(exact, prelude);
             for (double floating : floats) {
                 // Every Integer here is at least 2^63 in magnitude, so truncating a fractional
                 // Float cannot turn an inequality into equality.
@@ -133,10 +139,8 @@ final class ProtosI091CompactNumericPathsTest {
                 ProtosLargeIntegerValue.class,
                 ProtosBinary64Rounding.integralBinary64(0x1p63, prelude));
         assertSame(prelude.bigIntegerPrototype(), twoPow63.parent().orElseThrow());
-        assertEquals(BigInteger.ONE.shiftLeft(63), ProtosTestIntegers.exact(twoPow63));
-        assertEquals(
-                BigInteger.ONE.shiftLeft(70).negate(),
-                ProtosTestIntegers.exact(
+        assertEquals((BigInteger.ONE.shiftLeft(63)).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(twoPow63));
+        assertEquals((BigInteger.ONE.shiftLeft(70).negate()).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                         ProtosBinary64Rounding.integralBinary64(
                                 -0x1p70, prelude)));
         assertNull(ProtosBinary64Rounding.integralBinary64(
@@ -156,9 +160,7 @@ final class ProtosI091CompactNumericPathsTest {
                 ProtosNumericValueSupport.sameInteger(
                         ProtosCurrentNumericRelations.normalHash(integer, null),
                         ProtosCurrentNumericRelations.normalHash(floating, null)));
-        assertEquals(
-                BigInteger.valueOf(Double.hashCode(0.5)),
-                ProtosTestIntegers.exact(
+        assertEquals(Long.toString(Double.hashCode(0.5)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                         ProtosCurrentNumericRelations.normalHash(new ProtosFloatValue(0.5), null)));
     }
 

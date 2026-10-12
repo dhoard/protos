@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -31,7 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
-import java.math.BigInteger;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -196,7 +195,7 @@ final class ProtosExactExecutionFacilityTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         observation.readLocalSlot("value").orElseThrow());
-        assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(value));
+        assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
     }
 
     @Test
@@ -229,8 +228,8 @@ final class ProtosExactExecutionFacilityTest {
                         ProtosIntegerValue.class,
                         observation.readLocalSlot("value").orElseThrow());
         assertTrue(
-                ProtosTestIntegers.exact(value).equals(BigInteger.ONE)
-                        || ProtosTestIntegers.exact(value).equals(BigInteger.TWO),
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value).equals("1")
+                        || com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value).equals("2"),
                 "Group request must resolve through exactly one eligible retained fixture member");
     }
 

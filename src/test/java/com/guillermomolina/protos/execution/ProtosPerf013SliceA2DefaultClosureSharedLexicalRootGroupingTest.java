@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -34,7 +33,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
+
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
@@ -87,7 +86,7 @@ final class ProtosPerf013SliceA2DefaultClosureSharedLexicalRootGroupingTest {
                 Object finalResult = root.getCallTarget().call(module);
                 ProtosIntegerValue integer =
                         assertInstanceOf(ProtosIntegerValue.class, finalResult);
-                assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(integer));
+                assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer));
 
                 ProtosClosureValue closureF =
                         assertInstanceOf(
@@ -168,10 +167,7 @@ final class ProtosPerf013SliceA2DefaultClosureSharedLexicalRootGroupingTest {
                 Object finalResult = root.getCallTarget().call(module);
                 ProtosIntegerValue integer =
                         assertInstanceOf(ProtosIntegerValue.class, finalResult);
-                assertEquals(
-                        BigInteger.valueOf(42),
-                        ProtosTestIntegers.exact(integer),
-                        "x must remain visible by reference two Closure levels below "
+                assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(integer), "x must remain visible by reference two Closure levels below "
                                 + "the default expression that first captured it");
 
                 ProtosClosureValue closureF =

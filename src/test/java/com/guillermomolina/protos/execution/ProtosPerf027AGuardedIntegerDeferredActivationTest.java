@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedClosureCall;
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -92,26 +91,20 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
 
             Object entered = prepared.enterImmediate();
             Object result = prepared.finish(entered);
-            assertEquals(
-                    LONG_MAX.add(BigInteger.ONE),
-                    integerValue(result));
+            assertEquals(String.valueOf(LONG_MAX.add(BigInteger.ONE)), integerValue(result));
         });
     }
 
     @Test
     void representativeOperationsRetainExactResults() throws Exception {
         inEnteredContext(prelude -> {
-            assertEquals(HUGE.subtract(BigInteger.ONE),
-                    integerValue(run(prelude, ProtosTestIntegers.integer(HUGE, prelude), "-", integer(1))));
-            assertEquals(HUGE.multiply(HUGE),
-                    integerValue(run(prelude, ProtosTestIntegers.integer(HUGE, prelude), "*",
-                            ProtosTestIntegers.integer(HUGE, prelude))));
-            assertEquals(HUGE.divide(BigInteger.valueOf(7)),
-                    integerValue(run(prelude, ProtosTestIntegers.integer(HUGE, prelude), "div", integer(7))));
-            assertEquals(HUGE.mod(BigInteger.valueOf(7)),
-                    integerValue(run(prelude, ProtosTestIntegers.integer(HUGE, prelude), "mod", integer(7))));
+            assertEquals(String.valueOf(HUGE.subtract(BigInteger.ONE)), integerValue(run(prelude, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(HUGE, prelude), "-", integer(1))));
+            assertEquals(String.valueOf(HUGE.multiply(HUGE)), integerValue(run(prelude, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(HUGE, prelude), "*",
+                            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(HUGE, prelude))));
+            assertEquals(String.valueOf(HUGE.divide(BigInteger.valueOf(7))), integerValue(run(prelude, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(HUGE, prelude), "div", integer(7))));
+            assertEquals(String.valueOf(HUGE.mod(BigInteger.valueOf(7))), integerValue(run(prelude, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(HUGE, prelude), "mod", integer(7))));
             assertSame(ProtosBooleanValue.TRUE,
-                    run(prelude, ProtosTestIntegers.integer(HUGE, prelude), ">", integer(0)));
+                    run(prelude, com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(HUGE, prelude), ">", integer(0)));
             assertSame(ProtosBooleanValue.FALSE, run(prelude, integer(0), ">", integer(0)));
         });
     }
@@ -124,7 +117,7 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
     @Test
     void oneGuardServesBothConcreteIntegerFamilies() throws Exception {
         inEnteredContext(prelude -> {
-            Object big = ProtosTestIntegers.integer(HUGE, prelude);
+            Object big = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(HUGE, prelude);
             PrepareSendArguments.GuardedIntegerSend fromSmall =
                     PrepareSendArguments.createGuardedIntegerSend(integer(7), "+", prelude);
             PrepareSendArguments.GuardedIntegerSend fromBig =
@@ -147,7 +140,7 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
                             entered, prelude, "+", entered, prelude, fromSmall);
             assertTrue(prepared.isImmediate());
             Object result = prepared.finish(prepared.enterImmediate());
-            assertEquals(HUGE.add(BigInteger.ONE), integerValue(result));
+            assertEquals(String.valueOf(HUGE.add(BigInteger.ONE)), integerValue(result));
             assertSame(
                     prelude.bigIntegerPrototype(),
                     ((com.guillermomolina.protos.runtime.ProtosObjectValue) result)
@@ -339,8 +332,8 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
         return new ProtosIntegerValue(value);
     }
 
-    private static BigInteger integerValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 
     private static Object privateField(Object target, String name)

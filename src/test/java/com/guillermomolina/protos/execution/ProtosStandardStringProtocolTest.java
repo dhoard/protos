@@ -29,7 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -81,7 +81,7 @@ class ProtosStandardStringProtocolTest {
         assertEquals("b", at(mixed, 2, a));
         Object size = ProtosInvocation.invokeMessage(mixed, "size", List.of(), a);
         assertTrue(ProtosNumericValueSupport.isIntegerInLongRange(size));
-        assertEquals(BigInteger.valueOf(3), ProtosTestIntegers.exact(size));
+        assertEquals(String.valueOf("3"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(size));
 
         ProtosStringValue joined =
                 (ProtosStringValue) ProtosInvocation.invokeMessage(ascii, "+", List.of(mixed), a);
@@ -99,8 +99,8 @@ class ProtosStandardStringProtocolTest {
             new ProtosIntegerValue(3),
             new ProtosIntegerValue(4),
             new ProtosIntegerValue((1L << 32) + 1),
-            ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64), prelude),
-            ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE), prelude),
+            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), prelude),
+            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE), prelude),
             new ProtosFloatValue(1.0d),
             Long.valueOf(1L),
         };

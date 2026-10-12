@@ -198,9 +198,9 @@ final class ProtosSemanticTransferFamilyTest {
                 ProtosCoreBootstrap.withSemanticTransferFamiliesForTesting(List.of(PORTABLE))
                         .bootstrap(CORE);
         BigInteger huge = BigInteger.ONE.shiftLeft(1000).add(BigInteger.ONE);
-        Object shared = ProtosTestIntegers.integer(huge, prelude);
-        Object twin = ProtosTestIntegers.integer(huge, prelude);
-        Object negative = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).negate(), prelude);
+        Object shared = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude);
+        Object twin = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude);
+        Object negative = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).negate(), prelude);
         ProtosObjectValue graph = surroundingGraph(PORTABLE.mint("a+b"), PORTABLE.mint("a+b"));
         graph.createLocalSlot("large", shared);
         graph.createLocalSlot("largeAgain", shared);
@@ -225,8 +225,8 @@ final class ProtosSemanticTransferFamilyTest {
             assertTrue(large.isFrozen());
             assertSame(destinationPrelude.bigIntegerPrototype(), large.parent().orElseThrow());
         }
-        assertEquals(huge, ProtosTestIntegers.exact(copiedLarge));
-        assertEquals(BigInteger.ONE.shiftLeft(64).negate(), ProtosTestIntegers.exact(copiedNegative));
+        assertEquals(String.valueOf(huge), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(copiedLarge));
+        assertEquals((BigInteger.ONE.shiftLeft(64).negate()).toString(), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(copiedNegative));
         assertSame(copiedLarge, delivered.get(1));
         assertSame(copiedLarge, copiedGraph.readLocalSlot("largeAgain").orElseThrow());
         assertNotSame(copiedLarge, copiedTwin);

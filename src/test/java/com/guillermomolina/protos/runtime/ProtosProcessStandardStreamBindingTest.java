@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosStandardBytesProtocol;
 import com.guillermomolina.protos.execution.ProtosStandardProcessStreamProtocol;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.List;
@@ -120,13 +119,19 @@ final class ProtosProcessStandardStreamBindingTest {
 
         stdin.completeNext(new byte[] {22});
         assertEquals(
-                BigInteger.valueOf(11),
-                ProtosTestIntegers.exact(((ProtosBytesValue) a.resolvedValue().orElseThrow())
-                                        .indexedAt(0)));
+                11L,
+                assertInstanceOf(
+                        ProtosIntegerValue.class,
+                        ((ProtosBytesValue) a.resolvedValue().orElseThrow())
+                                .indexedAt(0))
+                        .longValue());
         assertEquals(
-                BigInteger.valueOf(22),
-                ProtosTestIntegers.exact(((ProtosBytesValue) b.resolvedValue().orElseThrow())
-                                        .indexedAt(0)));
+                22L,
+                assertInstanceOf(
+                        ProtosIntegerValue.class,
+                        ((ProtosBytesValue) b.resolvedValue().orElseThrow())
+                                .indexedAt(0))
+                        .longValue());
     }
 
     @Test
@@ -202,9 +207,12 @@ final class ProtosProcessStandardStreamBindingTest {
 
         assertEquals(ProtosFutureValue.State.RESOLVED, next.state());
         assertEquals(
-                BigInteger.valueOf(77),
-                ProtosTestIntegers.exact(((ProtosBytesValue) next.resolvedValue().orElseThrow())
-                                        .indexedAt(0)));
+                77L,
+                assertInstanceOf(
+                        ProtosIntegerValue.class,
+                        ((ProtosBytesValue) next.resolvedValue().orElseThrow())
+                                .indexedAt(0))
+                        .longValue());
         assertEquals(1, stdin.started.get());
     }
 
@@ -259,8 +267,8 @@ final class ProtosProcessStandardStreamBindingTest {
             new ProtosIntegerValue(-1L),
             new ProtosIntegerValue(Integer.MAX_VALUE + 1L),
             new ProtosIntegerValue((1L << 32) + 1),
-            ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64), prelude),
-            ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE), prelude),
+            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(com.guillermomolina.protos.runtime.ProtosNumberLiteral.parse("18446744073709551616"), prelude),
+            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(com.guillermomolina.protos.runtime.ProtosNumberLiteral.parse("18446744073709551617"), prelude),
             new ProtosFloatValue(1.0d),
             Long.valueOf(1L),
         };
@@ -280,8 +288,14 @@ final class ProtosProcessStandardStreamBindingTest {
         stdin.completeNext(new byte[] {0, (byte) 0xff});
 
         ProtosBytesValue result = (ProtosBytesValue) read.resolvedValue().orElseThrow();
-        assertEquals(BigInteger.ZERO, ProtosTestIntegers.exact(result.indexedAt(0)));
-        assertEquals(BigInteger.valueOf(255), ProtosTestIntegers.exact(result.indexedAt(1)));
+        assertEquals(
+                0L,
+                assertInstanceOf(ProtosIntegerValue.class, result.indexedAt(0))
+                        .longValue());
+        assertEquals(
+                255L,
+                assertInstanceOf(ProtosIntegerValue.class, result.indexedAt(1))
+                        .longValue());
 
         assertTrue(process.requestTerminationForRuntime());
         ProtosFutureValue afterTermination =

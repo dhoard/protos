@@ -21,7 +21,8 @@ package com.guillermomolina.protos.spi.foreign;
  *
  * <p>Only Protos Boolean, null, String, Integer, and Float values and handles of the same session
  * cross. {@link #value()} is a {@link Boolean}, {@code null}, a {@link String}, a {@link
- * java.math.BigInteger}, a {@link Double}, or the exact handle. Protos callbacks are not passed
+ * Long}, a {@link java.math.BigInteger}, a {@link Double}, or the exact handle.
+ * Long is supplied only when the provider opts into signed-64 arguments. Protos callbacks are not passed
  * through this contract.
  */
 public record ProtosForeignArgumentValue(ProtosForeignValueClass.Kind kind, Object value) {}

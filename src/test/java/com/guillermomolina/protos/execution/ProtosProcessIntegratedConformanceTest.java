@@ -19,11 +19,10 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -100,9 +99,7 @@ final class ProtosProcessIntegratedConformanceTest {
                 ProtosActorValueTransfer.snapshotValue(argsFromRoot, fixture.activation);
         assertNotSame(argsFromRoot, copiedArgs);
         assertFalse(ProtosIdentity.identical(argsFromRoot, copiedArgs));
-        assertEquals(
-                BigInteger.valueOf(2),
-                ProtosTestIntegers.exact(invoke(copiedArgs, "size", fixture.activation)));
+        assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(invoke(copiedArgs, "size", fixture.activation)));
         assertEquals(
                 "beta",
                 assertInstanceOf(

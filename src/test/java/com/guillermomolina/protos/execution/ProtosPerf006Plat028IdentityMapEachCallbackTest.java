@@ -27,7 +27,6 @@ import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,8 +49,8 @@ final class ProtosPerf006Plat028IdentityMapEachCallbackTest {
                     new ProtosFutureValue(prelude.futurePrototype(), domain);
             AtomicInteger callbacks = new AtomicInteger();
 
-            append(identityMap, key(), BigInteger.ONE);
-            append(identityMap, key(), BigInteger.TWO);
+            append(identityMap, key(), new ProtosIntegerValue(1L));
+            append(identityMap, key(), new ProtosIntegerValue(2L));
             module.context().createLocalSlot("identityMap", identityMap);
             module.context().createLocalSlot("gate", gate);
             module.context().createLocalSlot(
@@ -285,10 +284,6 @@ final class ProtosPerf006Plat028IdentityMapEachCallbackTest {
 
     private static ProtosObjectValue key() {
         return new ProtosObjectValue(ProtosObjectValue.rootObject());
-    }
-
-    private static void append(ProtosIdentityMapValue map, Object key, BigInteger value) {
-        append(map, key, new ProtosIntegerValue(value.longValueExact()));
     }
 
     private static void append(ProtosIdentityMapValue map, Object key, Object value) {

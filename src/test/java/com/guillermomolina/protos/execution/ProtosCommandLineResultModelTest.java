@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -31,7 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -180,14 +179,14 @@ final class ProtosCommandLineResultModelTest {
         assertEquals("optionOccurrence", stringSlot(verbose, "kind"));
         assertEquals("verbose", stringSlot(verbose, "key"));
         assertEquals("--verbose", stringSlot(verbose, "spelling"));
-        assertEquals(BigInteger.ZERO, integerSlot(verbose, "tokenIndex"));
+        assertEquals("0", integerSlot(verbose, "tokenIndex"));
         assertSame(ProtosNullValue.INSTANCE, verbose.localSlotsSnapshot().get("value"));
         assertSame(ProtosNullValue.INSTANCE, verbose.localSlotsSnapshot().get("valueTokenIndex"));
 
         ProtosObjectValue packageResult = objectSlot(root, "subcommand");
         assertCommandResultShape(packageResult);
         assertEquals("package", stringSlot(packageResult, "name"));
-        assertEquals(BigInteger.ONE, integerSlot(packageResult, "tokenIndex"));
+        assertEquals("1", integerSlot(packageResult, "tokenIndex"));
         assertSame(
                 ProtosNullValue.INSTANCE,
                 packageResult.localSlotsSnapshot().get("endOfOptionsIndex"));
@@ -195,8 +194,8 @@ final class ProtosCommandLineResultModelTest {
         ProtosObjectValue leaf = objectSlot(packageResult, "subcommand");
         assertCommandResultShape(leaf);
         assertEquals("install", stringSlot(leaf, "name"));
-        assertEquals(BigInteger.TWO, integerSlot(leaf, "tokenIndex"));
-        assertEquals(BigInteger.valueOf(3), integerSlot(leaf, "endOfOptionsIndex"));
+        assertEquals("2", integerSlot(leaf, "tokenIndex"));
+        assertEquals("3", integerSlot(leaf, "endOfOptionsIndex"));
         assertSame(ProtosNullValue.INSTANCE, leaf.localSlotsSnapshot().get("subcommand"));
 
         ProtosArrayValue leafPositionals = arraySlot(leaf, "positionals");
@@ -213,7 +212,7 @@ final class ProtosCommandLineResultModelTest {
         assertEquals("positionalOccurrence", stringSlot(positional, "kind"));
         assertEquals("files", stringSlot(positional, "key"));
         assertEquals("-literal", stringSlot(positional, "value"));
-        assertEquals(BigInteger.valueOf(4), integerSlot(positional, "tokenIndex"));
+        assertEquals("4", integerSlot(positional, "tokenIndex"));
     }
 
     @Test
@@ -379,7 +378,7 @@ final class ProtosCommandLineResultModelTest {
         return assertInstanceOf(ProtosStringValue.class, value).value();
     }
 
-    private static BigInteger integerSlot(ProtosObjectValue object, String name) {
-        return ProtosTestIntegers.exact(object.localSlotsSnapshot().get(name));
+    private static String integerSlot(ProtosObjectValue object, String name) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(object.localSlotsSnapshot().get(name));
     }
 }

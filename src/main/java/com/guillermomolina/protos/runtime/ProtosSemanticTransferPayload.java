@@ -25,7 +25,7 @@ import java.util.List;
  * Inert, immutable semantic payload of a {@link ProtosSemanticTransferFamily} value (PLAT051).
  *
  * <p>A payload is an ordered acyclic tree whose leaves are host scalars only: {@link String},
- * {@link BigInteger}, {@link Boolean} and {@link Double}; inner nodes are nested payloads. It can
+ * {@link Long}, {@link BigInteger}, {@link Boolean} and {@link Double}; inner nodes are nested payloads. It can
  * hold no Protos runtime value, so no Closure, prototype, execution state or authority can cross
  * through it, and a future Process transport could encode the same logical content. It defines
  * no wire format.
@@ -42,6 +42,7 @@ public final class ProtosSemanticTransferPayload {
         ArrayList<Object> copy = new ArrayList<>(elements.length);
         for (Object element : elements) {
             if (!(element instanceof String
+                    || element instanceof Long
                     || element instanceof BigInteger
                     || element instanceof Boolean
                     || element instanceof Double
@@ -68,17 +69,18 @@ public final class ProtosSemanticTransferPayload {
 
     /** The Integer leaf denoting {@code value}. */
     public static Object integer(long value) {
-        return BigInteger.valueOf(value);
+        return value;
     }
 
     /** The Integer leaf denoting the semantic Integer {@code integer}. */
     public static Object integer(Object integer) {
-        return ProtosNumericValueSupport.exactBigInteger(integer);
+        return ProtosNumericValueSupport.hostInteger(integer);
     }
 
     /** Whether the element at {@code index} is an Integer leaf. */
     public boolean isInteger(int index) {
-        return elements.get(index) instanceof BigInteger;
+        Object value = elements.get(index);
+        return value instanceof Long || value instanceof BigInteger;
     }
 
     /**
@@ -86,16 +88,26 @@ public final class ProtosSemanticTransferPayload {
      * -1 for any other leaf value or element.
      */
     public int nonNegativeInt(int index) {
-        return elements.get(index) instanceof BigInteger exact
-                        && exact.signum() >= 0
-                        && exact.bitLength() < Integer.SIZE
-                ? exact.intValue()
-                : -1;
+        Object value = elements.get(index);
+        if (value instanceof Long small) {
+            return small >= 0L && small <= Integer.MAX_VALUE
+                    ? small.intValue()
+                    : -1;
+        }
+        if (value instanceof BigInteger large
+                && large.signum() >= 0
+                && large.bitLength() < Integer.SIZE) {
+            return large.intValue();
+        }
+        return -1;
     }
 
     /** The sign of the Integer leaf at {@code index}. */
     public int integerSignum(int index) {
-        return leaf(index).signum();
+        Object value = leaf(index);
+        return value instanceof Long small
+                ? Long.compare(small, 0L)
+                : ((BigInteger) value).signum();
     }
 
     /**
@@ -103,17 +115,20 @@ public final class ProtosSemanticTransferPayload {
      * {@code difference}.
      */
     public boolean integersDifferBy(int minuend, int subtrahend, long difference) {
-        BigInteger left = leaf(minuend);
-        BigInteger right = leaf(subtrahend);
-        if (left.bitLength() < Long.SIZE && right.bitLength() < Long.SIZE) {
-            long x = left.longValue();
-            long y = right.longValue();
-            long exact = x - y;
-            if (((x ^ y) & (x ^ exact)) >= 0L) {
-                return exact == difference;
-            }
+        Object left = leaf(minuend);
+        Object right = leaf(subtrahend);
+        if (left instanceof Long x && right instanceof Long y) {
+            long result = x - y;
+            return ((x ^ y) & (x ^ result)) >= 0L
+                    && result == difference;
         }
-        return left.subtract(right).equals(BigInteger.valueOf(difference));
+        BigInteger x = left instanceof Long small
+                ? BigInteger.valueOf(small)
+                : (BigInteger) left;
+        BigInteger y = right instanceof Long small
+                ? BigInteger.valueOf(small)
+                : (BigInteger) right;
+        return x.subtract(y).equals(BigInteger.valueOf(difference));
     }
 
     /**
@@ -121,13 +136,14 @@ public final class ProtosSemanticTransferPayload {
      * consulted only for a value outside the signed-64 range.
      */
     public Object semanticInteger(int index, ProtosPrelude prelude) {
-        return ProtosNumericValueSupport.integer(leaf(index), prelude);
+        return ProtosNumericValueSupport.integerFromHost(leaf(index), prelude);
     }
 
-    private BigInteger leaf(int index) {
-        if (!(elements.get(index) instanceof BigInteger exact)) {
+    private Object leaf(int index) {
+        Object value = elements.get(index);
+        if (!(value instanceof Long || value instanceof BigInteger)) {
             throw new IllegalArgumentException("payload element is not an Integer leaf");
         }
-        return exact;
+        return value;
     }
 }

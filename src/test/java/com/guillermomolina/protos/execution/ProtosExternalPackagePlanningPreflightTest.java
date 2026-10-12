@@ -1,7 +1,6 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -146,7 +145,7 @@ final class ProtosExternalPackagePlanningPreflightTest {
                     assertInstanceOf(
                             ProtosIntegerValue.class,
                             plan.readLocalSlot("generation").orElseThrow());
-            assertEquals(2, ProtosTestIntegers.exact(generation).intValueExact());
+            assertEquals(String.valueOf(2), String.valueOf(Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(generation))));
 
             ProtosArrayValue packages =
                     assertInstanceOf(

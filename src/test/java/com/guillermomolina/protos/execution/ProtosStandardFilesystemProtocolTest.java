@@ -16,11 +16,10 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.List;
@@ -136,9 +135,7 @@ class ProtosStandardFilesystemProtocolTest {
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
                                 file, "position", List.of(), x.activation);
-        assertEquals(
-                BigInteger.ZERO,
-                ProtosTestIntegers.exact(position.resolvedValue().orElseThrow()));
+        assertEquals(String.valueOf("0"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(position.resolvedValue().orElseThrow()));
     }
 
     @Test

@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -51,7 +50,6 @@ import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.source.Source;
 import java.lang.reflect.Field;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -153,9 +151,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             for (int iteration = 0; iteration < 3; iteration++) {
                 ProtosBytecodeRootNode.PreparedClosureCall prepared =
                         fastDirect(run, module);
-                assertEquals(
-                        BigInteger.ONE,
-                        integerValue(enter(prepared)));
+                assertEquals("1", integerValue(enter(prepared)));
                 assertSame(
                         run,
                         prepared.targetArguments()[0],
@@ -167,9 +163,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     ProtosFrameArguments.compactImmediateMethodCall(
                             run, newObject(), newObject(), module,
                             new Object[0]);
-            assertEquals(
-                    BigInteger.ONE,
-                    integerValue(target(run).call(method)));
+            assertEquals("1", integerValue(target(run).call(method)));
             assertSame(
                     run,
                     method[0],
@@ -205,9 +199,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             for (int i = 0; i < 3; i++) {
                 ProtosBytecodeRootNode.PreparedClosureCall prepared =
                         fastDirect(scalar, module);
-                assertEquals(
-                        BigInteger.valueOf(7),
-                        integerValue(enter(prepared)));
+                assertEquals("7", integerValue(enter(prepared)));
                 assertSame(
                         scalar, prepared.targetArguments()[0],
                         "pure scalar execution must remain compact");
@@ -254,10 +246,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                 .isUnmaterializedCompactScalarLocalCall(arguments),
                         "a published activation leaves the scalar lane");
 
-                assertEquals(
-                        BigInteger.ONE,
-                        integerValue(target(scalar).call(arguments)),
-                        "the authoritative path creates and reads the binding");
+                assertEquals("1", integerValue(target(scalar).call(arguments)), "the authoritative path creates and reads the binding");
                 assertSame(
                         published, arguments[0],
                         "the observed execution context keeps its identity");
@@ -323,10 +312,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 for (int iteration = 0; iteration < 3; iteration++) {
                     ProtosBytecodeRootNode.PreparedClosureCall prepared =
                             fastDirect(scalar, module);
-                    assertEquals(
-                            BigInteger.valueOf(body.expected()),
-                            integerValue(enter(prepared)),
-                            body.characters());
+                    assertEquals(Long.toString(body.expected()), integerValue(enter(prepared)), body.characters());
                     assertSame(
                             scalar, prepared.targetArguments()[0],
                             "scalar creation/read must not materialize");
@@ -336,10 +322,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         ProtosFrameArguments.compactImmediateMethodCall(
                                 scalar, newObject(), newObject(), module,
                                 new Object[0]);
-                assertEquals(
-                        BigInteger.valueOf(body.expected()),
-                        integerValue(target(scalar).call(method)),
-                        body.characters());
+                assertEquals(Long.toString(body.expected()), integerValue(target(scalar).call(method)), body.characters());
                 assertSame(
                         scalar, method[0],
                         "compact method execution must remain compact");
@@ -363,10 +346,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     ProtosActivation published =
                             ProtosFrameArguments.activation(arguments);
                     ProtosObjectValue observed = published.context();
-                    assertEquals(
-                            BigInteger.valueOf(body.expected()),
-                            integerValue(target(scalar).call(arguments)),
-                            body.characters());
+                    assertEquals(Long.toString(body.expected()), integerValue(target(scalar).call(arguments)), body.characters());
                     assertSame(published, arguments[0]);
                     assertSame(observed, published.context());
                     for (String name : body.created()) {
@@ -406,16 +386,12 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             }
 
             // Same tagged root, compact and observed.
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(enter(fastDirect(scalar, module))));
+            assertEquals("7", integerValue(enter(fastDirect(scalar, module))));
             Object[] observed =
                     ProtosFrameArguments.compactDirectClosureCall(
                             scalar, module, null, new Object[0]);
             ProtosFrameArguments.activation(observed).context();
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(target(scalar).call(observed)));
+            assertEquals("7", integerValue(target(scalar).call(observed)));
         });
     }
 
@@ -435,18 +411,14 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue outer =
                     closure("() => { first: perf034eOuter\nfirst }", module);
             assertNone(instructionNames(outer), "IsCompactLocalFrame");
-            assertEquals(
-                    BigInteger.valueOf(5),
-                    integerValue(enter(fastDirect(outer, module))));
+            assertEquals("5", integerValue(enter(fastDirect(outer, module))));
 
             ProtosClosureValue captured =
                     closure(
                             "() => { first: 7\nreader: () => first\nsecond: first\nsecond }",
                             module);
             assertNone(instructionNames(captured), "IsCompactLocalFrame");
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(enter(fastDirect(captured, module))));
+            assertEquals("7", integerValue(enter(fastDirect(captured, module))));
         });
     }
 
@@ -500,10 +472,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 for (int iteration = 0; iteration < 3; iteration++) {
                     ProtosBytecodeRootNode.PreparedClosureCall prepared =
                             fastDirect(scalar, module);
-                    assertEquals(
-                            BigInteger.valueOf(body.expected()),
-                            integerValue(enter(prepared)),
-                            body.characters());
+                    assertEquals(Long.toString(body.expected()), integerValue(enter(prepared)), body.characters());
                     assertSame(
                             scalar, prepared.targetArguments()[0],
                             "scalar assignment must not materialize");
@@ -513,10 +482,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         ProtosFrameArguments.compactImmediateMethodCall(
                                 scalar, newObject(), newObject(), module,
                                 new Object[0]);
-                assertEquals(
-                        BigInteger.valueOf(body.expected()),
-                        integerValue(target(scalar).call(method)),
-                        body.characters());
+                assertEquals(Long.toString(body.expected()), integerValue(target(scalar).call(method)), body.characters());
                 assertSame(scalar, method[0]);
             }
         });
@@ -535,16 +501,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     ProtosActivation published =
                             ProtosFrameArguments.activation(arguments);
                     ProtosObjectValue observed = published.context();
-                    assertEquals(
-                            BigInteger.valueOf(body.expected()),
-                            integerValue(target(scalar).call(arguments)),
-                            body.characters());
+                    assertEquals(Long.toString(body.expected()), integerValue(target(scalar).call(arguments)), body.characters());
                     assertSame(published, arguments[0]);
                     assertSame(observed, published.context());
-                    assertEquals(
-                            BigInteger.valueOf(body.assignedValue()),
-                            integerValue(observed.readLocalSlot(body.assigned()).orElseThrow()),
-                            () -> body.characters()
+                    assertEquals(Long.toString(body.assignedValue()), integerValue(observed.readLocalSlot(body.assigned()).orElseThrow()), () -> body.characters()
                                     + ": the observed context holds the assigned value");
                     contexts.add(observed);
                 }
@@ -616,20 +576,14 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue outer =
                     closure("() => { first: 1\nperf036aOuter = 6\nfirst }", module);
             assertNone(instructionNames(outer), "IsCompactLocalFrame");
-            assertEquals(BigInteger.ONE, integerValue(enter(fastDirect(outer, module))));
-            assertEquals(
-                    BigInteger.valueOf(6),
-                    integerValue(evaluate("perf036aOuter", module)),
-                    "an outer binding is assigned through the lexical chain");
+            assertEquals("1", integerValue(enter(fastDirect(outer, module))));
+            assertEquals("6", integerValue(evaluate("perf036aOuter", module)), "an outer binding is assigned through the lexical chain");
 
             ProtosClosureValue explicitTarget =
                     closure("() => { first: 7\ncontext.first = 9\nfirst }", module);
             assertNone(instructionNames(explicitTarget), "IsCompactLocalFrame");
             assertContains(instructionNames(explicitTarget), "AssignLocalSlot");
-            assertEquals(
-                    BigInteger.valueOf(9),
-                    integerValue(enter(fastDirect(explicitTarget, module))),
-                    "an explicit-target assignment keeps the general lowering");
+            assertEquals("9", integerValue(enter(fastDirect(explicitTarget, module))), "an explicit-target assignment keeps the general lowering");
 
             ProtosClosureValue beforeCreation =
                     closure("() => { first = 3\nfirst: 4\nfirst }", module);
@@ -642,19 +596,14 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue send =
                     closure("() => { first: 4\nfirst = first + 1\nfirst }", module);
             assertNone(instructionNames(send), "IsCompactLocalFrame");
-            assertEquals(
-                    BigInteger.valueOf(5),
-                    integerValue(enter(fastDirect(send, module))));
+            assertEquals("5", integerValue(enter(fastDirect(send, module))));
 
             ProtosClosureValue captured =
                     closure(
                             "() => { first: 1\nsetter: (v) => { first = v }\nsetter(8)\nfirst }",
                             module);
             assertNone(instructionNames(captured), "IsCompactLocalFrame");
-            assertEquals(
-                    BigInteger.valueOf(8),
-                    integerValue(enter(fastDirect(captured, module))),
-                    "a captured assignment writes the binding by reference");
+            assertEquals("8", integerValue(enter(fastDirect(captured, module))), "a captured assignment writes the binding by reference");
 
             ProtosClosureValue recreated =
                     closure(
@@ -662,9 +611,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                     + "first: 6\nfirst = 9\nfirst }",
                             module);
             assertNone(instructionNames(recreated), "IsCompactLocalFrame");
-            assertEquals(
-                    BigInteger.valueOf(9),
-                    integerValue(enter(fastDirect(recreated, module))));
+            assertEquals("9", integerValue(enter(fastDirect(recreated, module))));
 
             ProtosClosureValue removed =
                     closure(
@@ -728,7 +675,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertEquals(
                     layout.offsetOf("identity"),
                     constantOrdinalOf(run, "CreateCurrentIndexedLocalSlot"));
-            assertEquals(BigInteger.ONE, integerValue(enter(fastDirect(run, module))));
+            assertEquals("1", integerValue(enter(fastDirect(run, module))));
 
             ProtosBytecodeRootNode.PreparedClosureCall duplicate =
                     fastDirect(
@@ -798,26 +745,20 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             List<Object> first =
                     assertInstanceOf(ProtosArrayValue.class, results.get(0)).indexedSnapshot();
             assertEquals(
-                    List.of(BigInteger.ONE, BigInteger.TWO, BigInteger.valueOf(3)),
+                    List.of("1", "2", "3"),
                     first.stream().map(ProtosPerf025CompactCalleeExecutionTest::integerValue).toList());
             List<Object> withNull =
                     assertInstanceOf(ProtosArrayValue.class, results.get(1)).indexedSnapshot();
             assertSame(ProtosNullValue.INSTANCE, withNull.get(1), "PRESENT(null) is not ABSENT");
 
-            assertEquals(
-                    BigInteger.valueOf(42),
-                    integerValue(evaluate(
+            assertEquals("42", integerValue(evaluate(
                             "few: (source) => { (b, c): source\nb }\n"
                                     + "Error.handle(() => { few(Array(1)) }, (caught) => 42)\n",
-                            module)),
-                    "an insufficient source is the multiple-creation Error");
-            assertEquals(
-                    BigInteger.valueOf(43),
-                    integerValue(evaluate(
+                            module)), "an insufficient source is the multiple-creation Error");
+            assertEquals("43", integerValue(evaluate(
                             "twice: (source) => { (b, c, b): source\nb }\n"
                                     + "Error.handle(() => { twice(Array(1, 2, 3)) }, (caught) => 43)\n",
-                            module)),
-                    "a later duplicate creation is the creation Error");
+                            module)), "a later duplicate creation is the creation Error");
         });
         System.out.println("PERF030_I_FRAME_REST_CONSTANT_ORDINAL=YES");
         System.out.println("PERF030_I_MULTIPLE_CREATE_RUNTIME_ORDINAL_ARRAY=NO");
@@ -834,10 +775,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertSame(a, enter(prepared));
             assertSame(earlier, prepared.targetArguments()[0]);
 
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(evaluate("b: 7\nf: (a = b, b = 1) => { a }\nf()\n", module)),
-                    "a default never reads a later parameter's future value");
+            assertEquals("7", integerValue(evaluate("b: 7\nf: (a = b, b = 1) => { a }\nf()\n", module)), "a default never reads a later parameter's future value");
         });
         System.out.println("DEFAULT_BINDING_VISIBILITY=PASS");
     }
@@ -861,7 +799,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertTrue(late.hasLocalSlot("a"));
             assertTrue(late.hasLocalSlot("b"));
             assertFalse(late.hasLocalSlot("d"));
-            assertEquals(BigInteger.valueOf(3), integerValue(late.readLocalSlot("b").orElseThrow()));
+            assertEquals("3", integerValue(late.readLocalSlot("b").orElseThrow()));
 
             List<Object> contexts =
                     assertInstanceOf(
@@ -902,7 +840,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                             module))
                             .indexedSnapshot();
             assertSame(ProtosBooleanValue.FALSE, removed.get(0));
-            assertEquals(BigInteger.valueOf(5), integerValue(removed.get(1)));
+            assertEquals("5", integerValue(removed.get(1)));
         });
         System.out.println("D179_PRESENT_ABSENT=PASS");
         System.out.println("D179_REMOVE_RECREATE=PASS");
@@ -916,26 +854,18 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                     ProtosArrayValue.class,
                                     evaluate("r: (first, ...rest) => { rest }\nr(1, 2, 3)\n", module))
                             .indexedSnapshot();
-            assertEquals(List.of(BigInteger.TWO, BigInteger.valueOf(3)),
+            assertEquals(List.of("2", "3"),
                     rest.stream().map(ProtosPerf025CompactCalleeExecutionTest::integerValue).toList());
 
-            assertEquals(
-                    BigInteger.valueOf(6),
-                    integerValue(evaluate(
+            assertEquals("6", integerValue(evaluate(
                             "f: (x) => { set: (v) => { x = v }\nget: () => x\nset(6)\nget }\nf(1)()\n",
-                            module)),
-                    "a Closure created by the invocation captures its context by reference");
+                            module)), "a Closure created by the invocation captures its context by reference");
 
-            assertEquals(
-                    BigInteger.valueOf(42),
-                    integerValue(evaluate(
+            assertEquals("42", integerValue(evaluate(
                             "Error.handle(() => {\n f: (value) => { value }\n f()\n}, (caught) => 42)\n",
-                            module)),
-                    "an Error raised by a compact callee selects the ordinary handler");
+                            module)), "an Error raised by a compact callee selects the ordinary handler");
 
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(evaluate(
+            assertEquals("7", integerValue(evaluate(
                             "outer: () => {\n inner: (v) => { ^ v }\n inner(7)\n 99\n}\nouter()\n",
                             module)));
         });
@@ -1000,7 +930,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                     });
             assertTrue(module.executionDomain().dispatchOne());
             assertEquals(ProtosTask.State.COMPLETED, task.state());
-            assertEquals(BigInteger.valueOf(8), integerValue(task.result().orElseThrow()));
+            assertEquals("8", integerValue(task.result().orElseThrow()));
 
             Object[] arguments = preparedRef.get().targetArguments();
             assertSame(identity, arguments[0], "the Task-owned callee stayed compact");
@@ -1239,8 +1169,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         return new ProtosIntegerValue(value);
     }
 
-    private static BigInteger integerValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 
     private static Object privateField(Object target, String name)

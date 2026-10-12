@@ -18,9 +18,8 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.*;
-import java.math.BigInteger;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -207,15 +206,11 @@ final class ProtosSemanticTransferMaterializationTest {
         GuestFamily family = new GuestFamily();
         try (ProtosHostedExecutionTestFixture hosted = open(family, dir)) {
             ProtosActivation root = hosted.activation();
-            assertEquals(
-                    BigInteger.valueOf(42),
-                    ProtosTestIntegers.exact(await(
+            assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(await(
                                             hosted,
                                             "worker: Actor.spawn(\"plat051-holder\", \"holder\", 0)\n"
                                                     + "worker.request(\"echo\", 42)")));
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    ProtosTestIntegers.exact(await(hosted, "((value) => { value }).parallel(7)")));
+            assertEquals(String.valueOf("7"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(await(hosted, "((value) => { value }).parallel(7)")));
             assertEquals(0, family.materialized.get());
             assertTrue(root.actorModuleState().lookup(GUEST_KEY).isEmpty());
         }

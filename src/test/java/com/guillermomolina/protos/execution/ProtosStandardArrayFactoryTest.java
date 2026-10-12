@@ -31,7 +31,7 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -77,16 +77,14 @@ class ProtosStandardArrayFactoryTest {
                 prelude.newArray(
                         List.of(
                                 new ProtosStringValue("first"),
-                                ProtosTestIntegers.integer(huge, prelude),
+                                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(huge, prelude),
                                 new ProtosStringValue("last")));
 
         assertEquals("first", string(ProtosInvocation.invokeMessage(array, "at", List.of(index(0)), a)));
         assertEquals("last", string(ProtosInvocation.invokeMessage(array, "at", List.of(index(2)), a)));
-        assertEquals(
-                huge,
-                ProtosTestIntegers.exact(ProtosInvocation.invokeMessage(array, "at", List.of(index(1)), a)));
+        assertEquals(String.valueOf(String.valueOf(huge)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosInvocation.invokeMessage(array, "at", List.of(index(1)), a)));
 
-        Object twoTo64 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64), prelude);
+        Object twoTo64 = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64), prelude);
         // 2^32 + 1 truncates to int 1, and 2^64 + 1 truncates to long 1: neither may alias index 1.
         Object[] invalid = {
             index(-1),
@@ -94,7 +92,7 @@ class ProtosStandardArrayFactoryTest {
             index(Integer.MAX_VALUE),
             new ProtosIntegerValue((1L << 32) + 1),
             twoTo64,
-            ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE), prelude),
+            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE), prelude),
             new ProtosFloatValue(1.0d),
             BigInteger.ONE,
             Long.valueOf(1L),
@@ -112,7 +110,7 @@ class ProtosStandardArrayFactoryTest {
                     String.valueOf(bad));
         }
         assertEquals("first", string(array.indexedAt(0)));
-        assertEquals(huge, ProtosTestIntegers.exact(array.indexedAt(1)));
+        assertEquals(String.valueOf(String.valueOf(huge)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(array.indexedAt(1)));
         assertEquals("last", string(array.indexedAt(2)));
         assertEquals(3, array.indexedSize());
     }
@@ -125,14 +123,12 @@ class ProtosStandardArrayFactoryTest {
         ProtosArrayValue array = prelude.newArray(List.of(new ProtosIntegerValue(0)));
 
         ProtosInvocation.invokeMessage(
-                array, "atPut", List.of(index(0), ProtosTestIntegers.integer(negative, prelude)), a);
+                array, "atPut", List.of(index(0), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(negative, prelude)), a);
 
-        assertEquals(
-                negative,
-                ProtosTestIntegers.exact(ProtosInvocation.invokeMessage(array, "at", List.of(index(0)), a)));
+        assertEquals(String.valueOf(String.valueOf(negative)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosInvocation.invokeMessage(array, "at", List.of(index(0)), a)));
         Object size = ProtosInvocation.invokeMessage(array, "size", List.of(), a);
         assertTrue(ProtosNumericValueSupport.isIntegerInLongRange(size));
-        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(size));
+        assertEquals(String.valueOf("1"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(size));
     }
 
     @Test

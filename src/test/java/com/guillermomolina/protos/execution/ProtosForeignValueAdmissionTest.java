@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -81,9 +80,7 @@ class ProtosForeignValueAdmissionTest {
             assertEquals(
                     "héllo 😀",
                     assertInstanceOf(ProtosStringValue.class, fixture.eval(M + "m.text")).value());
-            assertEquals(
-                    big,
-                    ProtosTestIntegers.exact(fixture.eval(M + "m.big")));
+            assertEquals(String.valueOf(String.valueOf(big)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fixture.eval(M + "m.big")));
             assertEquals(
                     0.1,
                     assertInstanceOf(ProtosFloatValue.class, fixture.eval(M + "m.dbl")).value());
@@ -136,9 +133,7 @@ class ProtosForeignValueAdmissionTest {
                         .member("unstable", (Supplier<Object>) () -> new Alias(unstable));
         try (ProtosForeignValueFixture fixture = fixture(root)) {
             // Host equals/hashCode of the doubles are total; none of it may be imported.
-            assertEquals(
-                    BigInteger.TWO,
-                    ProtosTestIntegers.exact(fixture.eval(
+            assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(fixture.eval(
                                             M
                                                     + "mp: Map()\nmp[m.unstable] = 1\n"
                                                     + "mp[m.unstable] = 2\nmp.size()")));
@@ -184,17 +179,13 @@ class ProtosForeignValueAdmissionTest {
                         fixture.standardError("NonTransferableValue"),
                         failure.error().parent().orElseThrow());
             }
-            assertEquals(
-                    BigInteger.TEN,
-                    ProtosTestIntegers.exact(ProtosActorValueTransfer.snapshotValue(
+            assertEquals(String.valueOf("10"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosActorValueTransfer.snapshotValue(
                                             scalar, fixture.activation())));
 
             for (Object value : List.of(raw, facade, projectedCall, holder)) {
                 assertEquals("NonParallel", parallelCopyFailure(value, fixture));
             }
-            assertEquals(
-                    BigInteger.TEN,
-                    ProtosTestIntegers.exact(parallelCopy(scalar, fixture)));
+            assertEquals(String.valueOf("10"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(parallelCopy(scalar, fixture)));
             // The facade still owns its foreign state after the rejected transfers.
             assertSame(
                     root,
@@ -269,15 +260,15 @@ class ProtosForeignValueAdmissionTest {
             assertInstanceOf(com.guillermomolina.protos.runtime.ProtosLargeIntegerValue.class, large);
             assertSame(fixture.prelude.bigIntegerPrototype(),
                     ((ProtosObjectValue) large).parent().orElseThrow());
-            assertEquals(huge, ProtosTestIntegers.exact(large));
+            assertEquals(String.valueOf(String.valueOf(huge)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(large));
 
             Object actorCopy = ProtosActorValueTransfer.snapshotValue(large, fixture.activation());
             assertNotSame(large, actorCopy);
-            assertEquals(huge, ProtosTestIntegers.exact(actorCopy));
+            assertEquals(String.valueOf(String.valueOf(huge)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(actorCopy));
             assertSame(Boolean.TRUE, ProtosIdentity.identical(large, actorCopy));
             Object parallel = parallelCopy(large, fixture);
             assertNotSame(large, parallel);
-            assertEquals(huge, ProtosTestIntegers.exact(parallel));
+            assertEquals(String.valueOf(String.valueOf(huge)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(parallel));
         }
     }
 

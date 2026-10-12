@@ -78,10 +78,9 @@ final class ProtosForeignPluginValueAdapter implements ProtosForeignValueAdapter
                     ProtosForeignAdmissionDescriptor.booleanValue((Boolean) declared.scalar());
             case NULL -> ProtosForeignAdmissionDescriptor.absent();
             case STRING -> ProtosForeignAdmissionDescriptor.text((String) declared.scalar());
-            // D188: the public SPI declares every exact Integer as a host BigInteger.
             case INTEGER ->
                     ProtosForeignAdmissionDescriptor.integral(
-                            (java.math.BigInteger) declared.scalar());
+                            (Number) declared.scalar());
             case BINARY64 -> ProtosForeignAdmissionDescriptor.binary64((Double) declared.scalar());
             case HANDLE -> {
                 EnumSet<ProtosForeignAdmissionDescriptor.Capability> capabilities =
@@ -186,12 +185,12 @@ final class ProtosForeignPluginValueAdapter implements ProtosForeignValueAdapter
         return ((ProtosForeignPluginProvider.Session) session).plugin;
     }
 
-    private static List<ProtosForeignArgumentValue> publicArguments(
+    private List<ProtosForeignArgumentValue> publicArguments(
             List<ProtosForeignArgument> arguments) {
-        return arguments.stream().map(ProtosForeignPluginValueAdapter::publicArgument).toList();
+        return arguments.stream().map(this::publicArgument).toList();
     }
 
-    private static ProtosForeignArgumentValue publicArgument(ProtosForeignArgument argument) {
+    private ProtosForeignArgumentValue publicArgument(ProtosForeignArgument argument) {
         if (argument.isCallback()) {
             throw new IllegalStateException("callback arguments do not cross the public SPI");
         }
@@ -199,11 +198,12 @@ final class ProtosForeignPluginValueAdapter implements ProtosForeignValueAdapter
                 argument.kind() == ProtosForeignAdmissionDescriptor.Kind.RAW
                         ? ProtosForeignValueClass.Kind.HANDLE
                         : ProtosForeignValueClass.Kind.valueOf(argument.kind().name());
-        // D188: the public SPI carries every exact Integer as a host BigInteger.
-        Object value =
-                argument.value() instanceof Long small
-                        ? java.math.BigInteger.valueOf(small)
-                        : argument.value();
+        Object value = argument.value();
+        if (kind == ProtosForeignValueClass.Kind.INTEGER
+                && value instanceof Long small
+                && !operations().supportsLongIntegerArguments()) {
+            value = java.math.BigInteger.valueOf(small);
+        }
         return new ProtosForeignArgumentValue(kind, value);
     }
 }

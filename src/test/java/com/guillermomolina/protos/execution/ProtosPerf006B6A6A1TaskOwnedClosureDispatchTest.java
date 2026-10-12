@@ -11,7 +11,6 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
@@ -21,7 +20,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
+
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -134,9 +133,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                 assertTrue(module.executionDomain().dispatchOne());
 
                 assertEquals(ProtosTask.State.COMPLETED, task.state());
-                assertEquals(
-                        BigInteger.valueOf(99),
-                        ProtosTestIntegers.exact(task.result().orElseThrow()));
+                assertEquals(String.valueOf("99"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(task.result().orElseThrow()));
                 assertEquals(
                         1,
                         probes.get(),
@@ -189,9 +186,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                         ProtosClosureExecutionPlan template =
                                 closure.executionPlan().orElseThrow();
 
-                        assertEquals(
-                                BigInteger.valueOf(42),
-                                ProtosTestIntegers.exact(ProtosClosureInvoker.invoke(
+                        assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosClosureInvoker.invoke(
                                                         closure,
                                                         List.of(),
                                                         module)));
@@ -222,9 +217,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                         template);
                         rebound.requireContextLocalExecutionProjectionForRuntime();
 
-                        assertEquals(
-                                BigInteger.valueOf(42),
-                                ProtosTestIntegers.exact(ProtosClosureInvoker.invoke(
+                        assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosClosureInvoker.invoke(
                                                         rebound,
                                                         List.of(),
                                                         module)));
@@ -285,9 +278,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                         List.of(),
                                         module);
 
-                        assertEquals(
-                                BigInteger.valueOf(42),
-                                ProtosTestIntegers.exact(value));
+                        assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
                         assertEquals(
                                 0,
                                 ProtosLanguageContext.current()
@@ -335,9 +326,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                 while (future.isPending() && module.executionDomain().dispatchOne()) {}
 
                 assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
-                assertEquals(
-                        BigInteger.valueOf(42),
-                        ProtosTestIntegers.exact(future.resolvedValue().orElseThrow()));
+                assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(future.resolvedValue().orElseThrow()));
                 assertEquals(1, executions.get());
             } finally {
                 context.leave();
@@ -383,9 +372,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                         && module.executionDomain().dispatchOne()) {}
 
                 assertEquals(ProtosFutureValue.State.RESOLVED, destination.state());
-                assertEquals(
-                        BigInteger.valueOf(42),
-                        ProtosTestIntegers.exact(destination.resolvedValue().orElseThrow()));
+                assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(destination.resolvedValue().orElseThrow()));
             } finally {
                 context.leave();
             }

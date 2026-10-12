@@ -95,7 +95,7 @@ final class ProtosNumericValueSupportTest {
     void detachedNumberCopiesPreserveExactValuesAndIeeeBits() throws IOException {
         ProtosPrelude destination = new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
         ProtosIntegerValue small = new ProtosIntegerValue(Long.MIN_VALUE);
-        Object large = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(130));
+        Object large = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerWithPrototype(BigInteger.ONE.shiftLeft(130), com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
         ProtosFloatValue negativeZero = new ProtosFloatValue(-0.0d);
 
         ProtosIntegerValue smallCopy = assertInstanceOf(
@@ -113,7 +113,7 @@ final class ProtosNumericValueSupportTest {
         assertNotSame(negativeZero, floatCopy);
 
         assertEquals(Long.MIN_VALUE, smallCopy.longValue());
-        assertEquals(ProtosTestIntegers.exact(large), ProtosTestIntegers.exact(largeCopy));
+        assertEquals(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(large), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(largeCopy));
         // I091: a large Integer is rematerialized with the destination's BigInteger prototype.
         assertSame(destination.bigIntegerPrototype(), largeCopy.parent().orElseThrow());
         assertTrue(largeCopy.isFrozen());

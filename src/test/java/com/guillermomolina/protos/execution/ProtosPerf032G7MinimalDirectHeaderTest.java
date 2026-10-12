@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -42,7 +41,6 @@ import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -81,7 +79,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             assertSame(module, ProtosFrameArguments.compactInheritedProvenanceCaller(arguments));
             assertThrows(IllegalStateException.class, prepared::activation);
 
-            assertEquals(BigInteger.ONE, integerValue(enter(prepared)));
+            assertEquals("1", integerValue(enter(prepared)));
             assertSame(literal, arguments[0], "execution creates no eager activation");
             assertTrue(ProtosFrameArguments.isUnmaterializedCompactCall(arguments));
             assertTrue(ProtosFrameArguments.isUnmaterializedCompactScalarLocalCall(arguments));
@@ -120,7 +118,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                     "reconstruction never recomputes a home");
             assertTrue(home.isActive());
 
-            assertEquals(BigInteger.valueOf(42), integerValue(enter(prepared)));
+            assertEquals("42", integerValue(enter(prepared)));
             assertFalse(home.isActive());
             ProtosActivation callee = ProtosFrameArguments.activation(arguments);
             assertSame(home, callee.returnHome().orElseThrow());
@@ -157,7 +155,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             assertTrue(module.executionDomain().dispatchOne());
 
             assertEquals(ProtosTask.State.COMPLETED, task.state());
-            assertEquals(BigInteger.ONE, integerValue(task.result().orElseThrow()));
+            assertEquals("1", integerValue(task.result().orElseThrow()));
             Object[] arguments = argumentsRef.get();
             ProtosActivation callee = ProtosFrameArguments.activation(arguments);
             assertSame(task, callee.task().orElseThrow());
@@ -197,7 +195,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             assertTrue(module.executionDomain().dispatchOne());
 
             assertEquals(ProtosTask.State.COMPLETED, task.state());
-            assertEquals(BigInteger.valueOf(42), integerValue(task.result().orElseThrow()));
+            assertEquals("42", integerValue(task.result().orElseThrow()));
             ProtosActivation callee = ProtosFrameArguments.activation(argumentsRef.get());
             assertSame(task, callee.task().orElseThrow());
             assertSame(homeRef.get(), callee.returnHome().orElseThrow());
@@ -308,7 +306,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             assertSame(module, direct[3]);
             assertEquals(1, ProtosFrameArguments.compactSuppliedArgumentCount(direct));
             assertSame(seven, ProtosFrameArguments.compactSuppliedArgument(direct, 0));
-            assertEquals(BigInteger.valueOf(7), integerValue(enter(prepared)));
+            assertEquals("7", integerValue(enter(prepared)));
 
             ProtosClosureValue literal = parsedClosure("() => { 1 }", "g7-method.protos", module);
             ProtosObjectValue methodHome = new ProtosObjectValue(literal);
@@ -453,9 +451,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                     ProtosSemanticBytecodeRootNode.IsContinuationForCall
                             .provenNonSuspending(prepared, integer(1)));
 
-            assertEquals(
-                    BigInteger.ONE,
-                    integerValue(enter(prepared)));
+            assertEquals("1", integerValue(enter(prepared)));
         });
     }
 
@@ -475,9 +471,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             fastDirect(withSend, module));
 
             assertFalse(dynamic.provablyNonSuspending());
-            assertEquals(
-                    BigInteger.valueOf(3),
-                    integerValue(enter(dynamic)));
+            assertEquals("3", integerValue(enter(dynamic)));
 
             ProtosClosureValue withParameter =
                     parsedClosure(
@@ -491,9 +485,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             fastDirect(withParameter, module, integer(9)));
 
             assertTrue(parameterCall.provablyNonSuspending());
-            assertEquals(
-                    BigInteger.ONE,
-                    integerValue(enter(parameterCall)));
+            assertEquals("1", integerValue(enter(parameterCall)));
 
             ProtosClosureValue identity =
                     parsedClosure(
@@ -507,9 +499,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             fastDirect(identity, module, integer(7)));
 
             assertTrue(identityCall.provablyNonSuspending());
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(enter(identityCall)));
+            assertEquals("7", integerValue(enter(identityCall)));
 
             ProtosClosureValue twoParameters =
                     parsedClosure(
@@ -525,9 +515,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                                     integer(8), integer(9)));
 
             assertTrue(twoArgumentCall.provablyNonSuspending());
-            assertEquals(
-                    BigInteger.valueOf(8),
-                    integerValue(enter(twoArgumentCall)));
+            assertEquals("8", integerValue(enter(twoArgumentCall)));
 
             ProtosClosureValue dynamicParameter =
                     parsedClosure(
@@ -541,9 +529,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             fastDirect(dynamicParameter, module, integer(2)));
 
             assertFalse(dynamicParameterCall.provablyNonSuspending());
-            assertEquals(
-                    BigInteger.valueOf(3),
-                    integerValue(enter(dynamicParameterCall)));
+            assertEquals("3", integerValue(enter(dynamicParameterCall)));
         });
     }
 
@@ -565,9 +551,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             assertTrue(
                     ProtosSemanticBytecodeRootNode
                             .AdmitsStraightLineSourceCall.perform(zero));
-            assertEquals(
-                    BigInteger.ONE,
-                    integerValue(
+            assertEquals("1", integerValue(
                             ProtosSemanticBytecodeRootNode
                                     .EnterStraightLineSourceCall
                                     .ordinaryIndirect(
@@ -587,9 +571,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             assertTrue(
                     ProtosSemanticBytecodeRootNode
                             .AdmitsStraightLineSourceCall.perform(one));
-            assertEquals(
-                    BigInteger.valueOf(7),
-                    integerValue(
+            assertEquals("7", integerValue(
                             ProtosSemanticBytecodeRootNode
                                     .EnterStraightLineSourceCall
                                     .ordinaryIndirect(
@@ -658,9 +640,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                     "perf038h-fused-send-one.protos",
                     module);
 
-            assertEquals(
-                    BigInteger.valueOf(133),
-                    integerValue(result));
+            assertEquals("133", integerValue(result));
         });
     }
 
@@ -677,9 +657,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                     "perf038h-fused-call-arity.protos",
                     module);
 
-            assertEquals(
-                    BigInteger.valueOf(123),
-                    integerValue(result));
+            assertEquals("123", integerValue(result));
         });
     }
 
@@ -694,9 +672,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                     "perf038h-fused-call-fallback.protos",
                     module);
 
-            assertEquals(
-                    BigInteger.valueOf(43),
-                    integerValue(result));
+            assertEquals("43", integerValue(result));
         });
     }
 
@@ -722,10 +698,10 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             ProtosArrayValue.class, result).indexedSnapshot();
 
             assertEquals(4, values.size());
-            assertEquals(BigInteger.valueOf(7), integerValue(values.get(0)));
-            assertEquals(BigInteger.valueOf(7), integerValue(values.get(1)));
-            assertEquals(BigInteger.valueOf(5), integerValue(values.get(2)));
-            assertEquals(BigInteger.valueOf(9), integerValue(values.get(3)));
+            assertEquals("7", integerValue(values.get(0)));
+            assertEquals("7", integerValue(values.get(1)));
+            assertEquals("5", integerValue(values.get(2)));
+            assertEquals("9", integerValue(values.get(3)));
         });
     }
 
@@ -840,7 +816,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
         return new ProtosIntegerValue(value);
     }
 
-    private static BigInteger integerValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 }

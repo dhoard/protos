@@ -20,10 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.execution.ProtosExecutionOutcome;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedSession;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -58,7 +56,7 @@ final class ProtosStandaloneHostedSessionEmbeddingTest {
 
                 run()
                 """,
-                new BigInteger("55"));
+                55L);
     }
 
     @Test
@@ -81,7 +79,7 @@ final class ProtosStandaloneHostedSessionEmbeddingTest {
 
                 run()
                 """,
-                new BigInteger("40320"));
+                40320L);
     }
 
     /**
@@ -189,27 +187,21 @@ final class ProtosStandaloneHostedSessionEmbeddingTest {
         }
     }
 
-    private void assertRepeatedRun(String source, BigInteger expected) throws Exception {
+    private void assertRepeatedRun(String source, long expected) throws Exception {
         try (ProtosStandaloneHostedSession session = open(source)) {
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, session.initialOutcome().state());
-            assertEquals(
-                    expected,
-                    ProtosTestIntegers.exact(session.initialOutcome().value()));
+            assertEquals(String.valueOf(String.valueOf(expected)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(session.initialOutcome().value()));
             for (int call = 0; call < REPEATS; call++) {
                 ProtosExecutionOutcome outcome = session.invokeTopLevel("run");
                 assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-                assertEquals(
-                        expected,
-                        ProtosTestIntegers.exact(outcome.value()));
+                assertEquals(String.valueOf(String.valueOf(expected)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(outcome.value()));
             }
         }
     }
 
     private static void assertInteger(long expected, ProtosExecutionOutcome outcome) {
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertEquals(
-                BigInteger.valueOf(expected),
-                ProtosTestIntegers.exact(outcome.value()));
+        assertEquals(Long.toString(expected), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(outcome.value()));
     }
 
     private ProtosStandaloneHostedSession open(String source) throws Exception {

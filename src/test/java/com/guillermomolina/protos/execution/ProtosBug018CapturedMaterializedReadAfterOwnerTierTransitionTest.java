@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -35,7 +34,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeTier;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
+
 import java.util.List;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
@@ -101,9 +100,7 @@ final class ProtosBug018CapturedMaterializedReadAfterOwnerTierTransitionTest {
                     Object observed =
                             observedAfterOwnerTransition(
                                     language, new ProtosIntegerValue(42));
-                    assertEquals(
-                            BigInteger.valueOf(42),
-                            ProtosTestIntegers.exact(observed));
+                    assertEquals(String.valueOf("42"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(observed));
                 });
     }
 

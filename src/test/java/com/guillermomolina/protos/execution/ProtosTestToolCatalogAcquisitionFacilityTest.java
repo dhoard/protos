@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -223,7 +222,7 @@ final class ProtosTestToolCatalogAcquisitionFacilityTest {
                     assertInstanceOf(
                             ProtosIntegerValue.class,
                             bytes.indexedAt(index));
-            result[index] = (byte) ProtosTestIntegers.exact(octet).intValueExact();
+            result[index] = (byte) Integer.parseInt(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(octet));
         }
         return result;
     }

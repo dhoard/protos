@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -211,11 +210,8 @@ final class ProtosPlat036Slice3FrameBackedCurrentLocalTest {
         if (value instanceof Long longValue) {
             return longValue;
         }
-        if (value instanceof java.math.BigInteger bigInteger) {
-            return bigInteger.longValueExact();
-        }
         if (value instanceof com.guillermomolina.protos.runtime.ProtosIntegerValue integerValue) {
-            return ProtosTestIntegers.exact(integerValue).longValueExact();
+            return integerValue.longValue();
         }
         throw new AssertionError("expected a Protos integer literal result, got: " + value);
     }

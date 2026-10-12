@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -117,7 +116,7 @@ class ProtosStandardBytesProtocolTest {
         assertSame(two, fixture.send(closed, "atPut", integer(0), two));
         assertDirectError(fixture, () -> fixture.send(closed, "add", integer(3)));
         assertDirectError(fixture, () -> fixture.send(closed, "removeAt", integer(0)));
-        assertEquals(BigInteger.ONE, intValue(fixture.send(closed, "size")));
+        assertEquals("1", intValue(fixture.send(closed, "size")));
         assertSame(two, fixture.send(closed, "at", integer(0)));
 
         ProtosBytesValue frozen = fixture.create();
@@ -136,7 +135,7 @@ class ProtosStandardBytesProtocolTest {
         assertDirectError(fixture, () -> fixture.send(frozen, "add", integer(5)));
         assertDirectError(fixture, () -> fixture.send(frozen, "removeAt", integer(0)));
         assertSame(four, fixture.send(frozen, "at", integer(0)));
-        assertEquals(BigInteger.ONE, intValue(fixture.send(frozen, "size")));
+        assertEquals("1", intValue(fixture.send(frozen, "size")));
     }
 
     // Hidden-factory Closure provenance and the exact Error category for
@@ -169,9 +168,9 @@ class ProtosStandardBytesProtocolTest {
         ProtosIntegerValue max = integer(255);
         assertSame(zero, fixture.add(bytes, zero));
         assertSame(max, fixture.add(bytes, max));
-        Object twoPow63 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63), fixture.prelude);
+        Object twoPow63 = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(63), fixture.prelude);
         Object largeNegative =
-                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).negate(), fixture.prelude);
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(64).negate(), fixture.prelude);
 
         for (Object index : List.of(
                 integer(Integer.MAX_VALUE), integer(Integer.MIN_VALUE),
@@ -225,8 +224,8 @@ class ProtosStandardBytesProtocolTest {
         return new ProtosIntegerValue(value);
     }
 
-    private static BigInteger intValue(Object value) {
-        return ProtosTestIntegers.exact(value);
+    private static String intValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
     }
 
     private static Fixture fixture() throws IOException {
