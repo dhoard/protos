@@ -108,6 +108,14 @@ final class CanonicalToBytecodeLowerer {
             "$inlineCallbackBinding:";
 
     /**
+     * I096 (PLAT057-B) expansion budget: the largest exact positional arity
+     * whose ordinary Closure call site may receive a lexically inlined body.
+     * A wider call keeps the unchanged physical call, so a single site never
+     * grows the caller root by an unbounded staging and parameter prologue.
+     */
+    static final int MAX_INLINE_CLOSURE_CALL_ARGUMENTS = 8;
+
+    /**
      * A send site's PLAT044 B′ inline candidate: the literal's definition, its
      * supplied argument position, the argument local holding its materialized
      * value, and its own plan cell.
@@ -261,6 +269,21 @@ final class CanonicalToBytecodeLowerer {
             java.util.Map.of();
     private java.util.Set<CanonicalClosure> currentRootMaterializedClosures =
             java.util.Set.of();
+
+    /*
+     * I096 (PLAT057-B) nested-Closure admission. The first is true while an
+     * admitted candidate body is lowered inline in its caller root (reset for
+     * every nested root); the second holds the Closure definitions whose own
+     * root this parse of the group has already lowered, and is reset at the
+     * start of every parse, including Bytecode reparses. Together they let a
+     * Closure literal reached again inside an inline body reuse the root and
+     * plan its callee's own root already lowered in this parse, so the group
+     * never gains a duplicate root and every reparse replays the same roots
+     * in the same order (see bytecodeClosurePlan).
+     */
+    private boolean currentInlineClosureCallBody;
+    private java.util.Set<CanonicalClosure> closureRootsLoweredThisParse =
+            java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 
     /*
      * I095-B4: lowering-time marker for a physically inline
@@ -448,11 +471,24 @@ final class CanonicalToBytecodeLowerer {
      * group keeps the same index it had during the original parse, but the
      * plan already frozen then remains valid (the Bytecode DSL patches the
      * same root identity in place on reparse) and must not be rebuilt.
+     *
+     * <p>I096 (PLAT057-B): inside an inline candidate body, a definition
+     * whose root this parse already lowered (inside the callee's own root,
+     * which always precedes the inline site) is not lowered again; the
+     * inline copy materializes its instances with that same root and plan,
+     * exactly as a physical invocation of the callee would. The choice
+     * depends only on the order of this parse, so a reparse makes it
+     * identically. Outside inline bodies nothing changes.
      */
     private ProtosClosureExecutionPlanCell bytecodeClosurePlan(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition) {
         ProtosClosureExecutionPlanCell existing = bytecodeClosurePlans.get(definition);
+        boolean loweredInThisParse = !closureRootsLoweredThisParse.add(definition);
+        if (currentInlineClosureCallBody && loweredInThisParse && existing != null) {
+            currentRootMaterializedClosures.add(definition);
+            return existing;
+        }
 
         ProtosSemanticBytecodeRootNode nestedRoot =
                 lowerNestedClosureRoot(builder, definition);
@@ -566,18 +602,27 @@ final class CanonicalToBytecodeLowerer {
                             language,
                             BytecodeConfig.DEFAULT,
                             builder -> {
-                                /*
-                                 * Root-inside-Source is the Bytecode DSL shape
-                                 * that gives every root in the group a
-                                 * reliable exact source section once lazy
-                                 * source information is materialized.
-                                 */
-                                builder.beginSource(source);
-                                lowerRootInto(
-                                        builder,
-                                        sequence,
-                                        activationDefinition);
-                                builder.endSource();
+                                java.util.Set<CanonicalClosure> savedLoweredThisParse =
+                                        closureRootsLoweredThisParse;
+                                closureRootsLoweredThisParse =
+                                        java.util.Collections.newSetFromMap(
+                                                new java.util.IdentityHashMap<>());
+                                try {
+                                    /*
+                                     * Root-inside-Source is the Bytecode DSL
+                                     * shape that gives every root in the group
+                                     * a reliable exact source section once lazy
+                                     * source information is materialized.
+                                     */
+                                    builder.beginSource(source);
+                                    lowerRootInto(
+                                            builder,
+                                            sequence,
+                                            activationDefinition);
+                                    builder.endSource();
+                                } finally {
+                                    closureRootsLoweredThisParse = savedLoweredThisParse;
+                                }
                             });
 
             /*
@@ -680,7 +725,9 @@ final class CanonicalToBytecodeLowerer {
                 currentRootBindingCallCandidates;
         java.util.Set<CanonicalClosure> savedMaterializedClosures =
                 currentRootMaterializedClosures;
+        boolean savedInlineClosureCallBody = currentInlineClosureCallBody;
         try {
+            currentInlineClosureCallBody = false;
             /*
              * I096-B1: a Closure created by a module root owns a fresh
              * ReturnHome, which the carrier never admits, so a module root
@@ -730,20 +777,23 @@ final class CanonicalToBytecodeLowerer {
             currentRootTerminalIntegerAddition = savedTerminalIntegerAddition;
             currentRootBindingCallCandidates = savedBindingCallCandidates;
             currentRootMaterializedClosures = savedMaterializedClosures;
+            currentInlineClosureCallBody = savedInlineClosureCallBody;
         }
     }
 
     /**
      * I096-B1 (PLAT057-B) static discovery of candidate bodies for ordinary
-     * calls through a lexical binding, restricted to the direct expressions of
-     * one genuine root sequence: a target-less {@code CanonicalCreate} whose
+     * calls through a lexical binding, restricted to the expressions of one
+     * genuine root sequence: a target-less {@code CanonicalCreate} whose
      * value is a Closure literal and whose binding identity is owned by
-     * {@code scope} declares a candidate, and a later direct call (a
-     * statement, or the value of a direct create or assignment) whose
-     * receiver lookup is {@link CanonicalBindingResolution.Resolved} to that
-     * exact identity is associated with it. Identities, never names, decide
-     * membership. An identity created more than once in the sequence keeps
-     * no candidate after its second creation, so each site has at most one.
+     * {@code scope} declares a candidate, and a call in a later expression
+     * whose receiver lookup is {@link CanonicalBindingResolution.Resolved}
+     * to that exact identity is associated with it, whether it is the
+     * expression itself or one of its operands evaluated by this same
+     * activation ({@link #collectBindingClosureCallCandidates}). Identities,
+     * never names, decide membership. An identity created more than once in
+     * the sequence keeps no candidate after its second creation, so each site
+     * has at most one.
      *
      * <p>The association states only which body the site may expect; whether
      * the called value is an instance of it is decided at run time by the
@@ -761,20 +811,8 @@ final class CanonicalToBytecodeLowerer {
                 new java.util.IdentityHashMap<>();
 
         for (CanonicalExpression expression : sequence.expressions()) {
-            CanonicalExpression direct = switch (expression) {
-                case CanonicalCreate create when create.target().isEmpty() -> create.value();
-                case CanonicalAssign assign when assign.target().isEmpty() -> assign.value();
-                default -> expression;
-            };
-            if (direct instanceof CanonicalCall call
-                    && call.receiver() instanceof CanonicalLookup lookup
-                    && analysis.resolutionOf(lookup).orElse(null)
-                            instanceof CanonicalBindingResolution.Resolved resolved) {
-                CanonicalClosure definition = definitions.get(resolved.identity());
-                if (definition != null) {
-                    candidates.put(call, definition);
-                }
-            }
+            collectBindingClosureCallCandidates(
+                    expression, analysis, definitions, candidates);
 
             if (expression instanceof CanonicalCreate create
                     && create.target().isEmpty()) {
@@ -794,6 +832,63 @@ final class CanonicalToBytecodeLowerer {
             }
         }
         return candidates;
+    }
+
+    /**
+     * Associates every ordinary call of {@code expression} whose receiver
+     * lookup resolves to an identity with a current candidate definition.
+     * Only operand positions evaluated by this same activation are visited:
+     * a nested Closure or Object body, a sequence, and any other
+     * scope-introducing or vector-staging form is not entered, so no call is
+     * associated across a heterogeneous scope.
+     */
+    private static void collectBindingClosureCallCandidates(
+            CanonicalExpression expression,
+            CanonicalBindingAnalysis analysis,
+            java.util.Map<CanonicalBindingIdentity, CanonicalClosure> definitions,
+            java.util.Map<CanonicalCall, CanonicalClosure> candidates) {
+        java.util.List<CanonicalExpression> operands = switch (expression) {
+            case CanonicalCall call -> {
+                if (call.receiver() instanceof CanonicalLookup lookup
+                        && analysis.resolutionOf(lookup).orElse(null)
+                                instanceof CanonicalBindingResolution.Resolved resolved) {
+                    CanonicalClosure definition = definitions.get(resolved.identity());
+                    if (definition != null) {
+                        candidates.put(call, definition);
+                    }
+                }
+                java.util.List<CanonicalExpression> callOperands =
+                        new java.util.ArrayList<>(call.arguments());
+                callOperands.add(0, call.receiver());
+                yield callOperands;
+            }
+            case CanonicalSend send -> {
+                java.util.List<CanonicalExpression> sendOperands =
+                        new java.util.ArrayList<>(send.arguments());
+                sendOperands.add(0, send.receiver());
+                yield sendOperands;
+            }
+            case CanonicalCreate create -> java.util.stream.Stream.concat(
+                            create.target().stream(), java.util.stream.Stream.of(create.value()))
+                    .toList();
+            case CanonicalAssign assign -> java.util.stream.Stream.concat(
+                            assign.target().stream(), java.util.stream.Stream.of(assign.value()))
+                    .toList();
+            case CanonicalIndexedAssign indexed ->
+                    java.util.List.of(indexed.receiver(), indexed.index(), indexed.value());
+            case CanonicalMember member -> java.util.List.of(member.receiver());
+            case CanonicalIdentity identity ->
+                    java.util.List.of(identity.left(), identity.right());
+            case CanonicalNotIdentity identity ->
+                    java.util.List.of(identity.left(), identity.right());
+            case CanonicalDerivedInequality inequality ->
+                    java.util.List.of(inequality.left(), inequality.right());
+            case CanonicalReturn returnExpression -> java.util.List.of(returnExpression.value());
+            default -> java.util.List.of();
+        };
+        for (CanonicalExpression operand : operands) {
+            collectBindingClosureCallCandidates(operand, analysis, definitions, candidates);
+        }
     }
 
     /**
@@ -6742,7 +6837,13 @@ final class CanonicalToBytecodeLowerer {
      */
     private BytecodeLocal capturedOwnerBytecodeLocal(
             CanonicalBindingResolution.CapturedResolved captured) {
-        if (!capturedOwnerMatchesCurrentRoot(captured)) {
+        /*
+         * I096: inside an inline candidate body the inlined callee scope has
+         * no physical frame (its own root is closed, and its bindings live on
+         * the invocation's named activation), so no captured owner is proven
+         * here; the runtime-authority path selects the real owner.
+         */
+        if (currentInlineClosureCallBody || !capturedOwnerMatchesCurrentRoot(captured)) {
             return null;
         }
         java.util.Map<String, BytecodeLocal> ownerFrameLocals =
@@ -8625,12 +8726,12 @@ final class CanonicalToBytecodeLowerer {
         boolean stageReceiver = requiresComposedInvocation(receiver);
         boolean stageArguments = hasComposedArgument(call.arguments());
         boolean spreadArguments = hasSpreadArgument(call.arguments());
+        boolean positionalCall =
+                !spreadArguments && !currentInlineCallbackFrameNative;
         boolean tryDirectCall =
-                !spreadArguments
-                        && call.arguments().size() <= 1
-                        && !currentInlineCallbackFrameNative;
+                positionalCall && call.arguments().size() <= 1;
         CanonicalClosure inlineLiteral =
-                tryDirectCall
+                positionalCall
                         ? inlineClosureLiteralCallCandidate(call)
                         : null;
 
@@ -8638,7 +8739,8 @@ final class CanonicalToBytecodeLowerer {
                 stageReceiver
                         || stageArguments
                         || spreadArguments
-                        || tryDirectCall;
+                        || tryDirectCall
+                        || inlineLiteral != null;
         BytecodeLocal receiverValue = null;
         BytecodeLocal suppliedVector = null;
         boolean carrierDirectArgument = false;
@@ -8913,12 +9015,32 @@ final class CanonicalToBytecodeLowerer {
      *
      * <p>Every parameter is ordinary required positional and the supplied
      * count matches exactly, so the selected entry is the body entry, never a
-     * default, rest or arity-rejection entry. As for the PLAT044 B′ callback
-     * candidates, a body creating a nested Closure is excluded: capturing an
-     * inline-owned binding needs durable lexical authority this region does
-     * not establish. That exclusion also bounds expansion: an admitted body
-     * contains no Closure literal and its calls are never candidates of this
-     * root, so each site inlines at most one body, once.
+     * default, rest or arity-rejection entry. Any such arity up to {@link
+     * #MAX_INLINE_CLOSURE_CALL_ARGUMENTS} is admitted through the same
+     * variadic carrier and positional parameter binding: the staged
+     * arguments, evaluated once left to right, become the compact supplied
+     * arguments of the callee's own activation.
+     *
+     * <p>Unlike the PLAT044 B′ callback candidates, a body creating a nested
+     * Closure (directly, or as a method of an object it constructs) is
+     * admitted. Such a body always requires persistent frame authority
+     * ({@link #demandsPersistentFrame}), so {@link #emitInlineLiteralCallback}
+     * never gives it frame-native block-local bindings: its parameters and
+     * locals are bound by name on the invocation's own fresh activation,
+     * materialized from the carrier before the first binding, and every
+     * nested Closure is created over that heap activation by the ordinary
+     * capture operation. The capture is therefore by reference to the
+     * callee's own context, whose lifetime is independent of the caller's
+     * frame, as in a physical call. The nested root, lowered once inside the
+     * callee's own root, reads that context through its ordinary captured
+     * access, which takes the generic lexical path whenever the owner is not
+     * a frame-backed authority.
+     *
+     * <p>Expansion stays bounded: binding candidates are only calls of this
+     * root's own sequence, never calls inside a candidate body, so recursion
+     * through a binding inlines one body once; a literal call inside an
+     * admitted body is a strictly smaller subtree; and nested Closure roots
+     * are never duplicated ({@link #bytecodeClosurePlan}).
      *
      * <p>The selector, the receiver's prototype, the binding resolution and
      * the body's contents are not proofs of selection: the inline region is
@@ -8938,10 +9060,10 @@ final class CanonicalToBytecodeLowerer {
         }
         if (candidate != null
                 && candidate.parameters().size() == call.arguments().size()
+                && call.arguments().size() <= MAX_INLINE_CLOSURE_CALL_ARGUMENTS
                 && candidate.parameters().stream()
                         .allMatch(parameter -> !parameter.rest()
-                                && parameter.defaultValue().isEmpty())
-                && !containsClosure(candidate.body())) {
+                                && parameter.defaultValue().isEmpty())) {
             return candidate;
         }
         return null;
@@ -8968,7 +9090,8 @@ final class CanonicalToBytecodeLowerer {
      * required, reads keep the D179 presence assumptions, and any Context
      * observer materializes the callee's own fresh activation from the
      * carrier. Captured outer bindings keep their existing by-reference
-     * access paths.
+     * access paths. A body creating nested Closures always takes the named
+     * activation path, and reuses their already lowered roots.
      */
     private void emitInlineClosureLiteralCall(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -8998,7 +9121,13 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadConstant(literalPlan);
         builder.endAdmitsInlineClosureLiteralCall();
 
-        emitInlineLiteralCallback(builder, definition, child, result);
+        boolean savedInlineClosureCallBody = currentInlineClosureCallBody;
+        currentInlineClosureCallBody = true;
+        try {
+            emitInlineLiteralCallback(builder, definition, child, result);
+        } finally {
+            currentInlineClosureCallBody = savedInlineClosureCallBody;
+        }
 
         builder.beginBlock();
         emitInlineLiteralFallbackInvocation(

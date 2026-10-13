@@ -111,6 +111,37 @@ final class ProtosI095BooleanControlInlineTest {
         System.out.println("I095_C_EIGHT_ROWS=PASS");
     }
 
+    /**
+     * Large Integer literals (minted with the executing Prelude) inside an
+     * admitted callback body and inside a Closure called from one (the
+     * TOOL009 conformance-case shape).
+     */
+    @Test
+    void largeIntegerLiteralsInsideAdmittedBodies() throws Exception {
+        String called = """
+                run: () => {
+                    big: () => {
+                        999999999999999999999999 * 999999999999999999999999
+                    }
+                    (big() == 999999999999999999999998000000000000000000000001).ifTrue(() => { 7 })
+                }
+                run()
+                """;
+        assertParity(called, 7);
+        assertExecutedOutcome(called, 7);
+
+        String dynamic = """
+                run: (b) => {
+                    b.ifTrue(() => {
+                        (999999999999999999999999.div(3) == 333333333333333333333333).ifTrue(() => { 7 })
+                    })
+                }
+                run(true)
+                """;
+        assertParity(dynamic, 7);
+        assertExecutedOutcome(dynamic, 7);
+    }
+
     /** One site alternates true/false and then sees a non-canonical receiver. */
     @Test
     void dynamicSiteAlternatesAndMissesToOrdinaryDispatch() throws Exception {

@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.349-SNAPSHOT
+
+- `I096` (#884): broaden PLAT057-B lexical inlining of ordinary Closure
+  calls, still entered only behind the run-time selection guard.
+  - Exact positional arities up to `MAX_INLINE_CLOSURE_CALL_ARGUMENTS` (8)
+    are inlined through the variadic carrier; C0/C1 keep their direct fast
+    path, and wider calls keep the unchanged physical call.
+  - Binding calls are recognized in every operand position evaluated by the
+    same activation (send and call operands, create/assign values, member,
+    identity, inequality, indexed-assign and return operands), with the
+    receiver and arguments staged once in order.
+  - Bodies creating nested Closures are admitted. They always take the
+    named-activation path, so nested Closures capture the callee's own fresh
+    activation by reference, including after escaping. Inside an inline
+    body, a Closure whose root this parse already lowered reuses that root
+    and plan, so the group never gains duplicate roots and reparses replay
+    the same roots. Captured reads inside an inline body no longer claim a
+    physical owner frame for the inlined callee scope.
+  - A large Integer literal inside an inline callback region now resolves
+    its Prelude through the inline carrier (`PrepareSendOne.callerPrelude`).
+  - PERF026 B3/C1 RootTag expectations now count the additional I096 inline
+    callee regions.
+
 ## 0.3.348-SNAPSHOT
 
 - `I095` (#878): one shared NORMAL-mode lowering for the canonical Boolean

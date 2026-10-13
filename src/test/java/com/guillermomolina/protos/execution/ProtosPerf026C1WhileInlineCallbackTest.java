@@ -271,7 +271,9 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                     }
                 }
                 run()
-                """);
+                """,
+                // The callback's own RootTag plus the I096 inline body of step().
+                2);
         System.out.println("PERF026_C1_NESTED_CLOSURE_LITERAL_FALLBACK=YES");
     }
 
@@ -564,6 +566,12 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
      * own physical root entered from the structured-dispatch helper root.
      */
     private static void assertStructuredWhilePreserved(String characters) throws Exception {
+        assertStructuredWhilePreserved(characters, 1);
+    }
+
+    /** As above; {@code callbackRootTags} counts the callback's own inline sites. */
+    private static void assertStructuredWhilePreserved(
+            String characters, int callbackRootTags) throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -582,7 +590,7 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                 assertSame(root, stack.get(3));
 
                 callback.getRootNodes().ensureComplete();
-                assertEquals(1, rootTags(callback.getBytecodeNode()), characters);
+                assertEquals(callbackRootTags, rootTags(callback.getBytecodeNode()), characters);
             } finally {
                 context.leave();
             }

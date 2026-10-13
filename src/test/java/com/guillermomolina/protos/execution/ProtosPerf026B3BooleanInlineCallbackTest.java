@@ -146,7 +146,9 @@ final class ProtosPerf026B3BooleanInlineCallbackTest {
                         }
                         run()
                         """,
-                        2);
+                        // run, the B3 callback, and the I096 inline bodies of
+                        // receiver() and record(2).
+                        4);
         assertInteger(123, falseSelected);
 
         Object trueSelected =
@@ -169,7 +171,9 @@ final class ProtosPerf026B3BooleanInlineCallbackTest {
                         }
                         run()
                         """,
-                        2);
+                        // run, the B3 callback, and the I096 inline bodies of
+                        // receiver() and record(2).
+                        4);
         assertInteger(123, trueSelected);
         System.out.println("PERF026_B3_EAGER_ORDERED_ARGUMENT_EVALUATION_PRESERVED=YES");
     }

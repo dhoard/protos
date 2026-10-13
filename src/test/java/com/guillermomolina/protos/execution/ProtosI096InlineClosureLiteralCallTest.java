@@ -62,6 +62,16 @@ import org.junit.jupiter.api.Test;
  * binding whose candidate body is known statically: the candidate runs inline
  * only when the run-time selection proves it, with the effective instance's
  * own captures; every other value takes the prepared physical fallback.
+ *
+ * <p>The I096 coverage completion extends both forms to every exact
+ * positional arity up to the expansion budget, and binding calls to operand
+ * positions of the same activation (compound expressions, arguments of other
+ * calls), with the same run-time admission and fallback.
+ *
+ * <p>The nested-Closure extension admits bodies that create Closures: they
+ * run inline over the callee's own activation (never frame-native storage),
+ * nested Closures keep their own CallTargets and capture that activation by
+ * reference, including after escaping, and the group gains no duplicate root.
  */
 final class ProtosI096InlineClosureLiteralCallTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -431,12 +441,12 @@ final class ProtosI096InlineClosureLiteralCallTest {
     @Test
     void nonAdmittedShapesKeepTheUnchangedCallTopology() throws Exception {
         List<String> sources = List.of(
-                // A nested Closure needs durable capture of a callee binding.
+                // A rest parameter keeps ordinary binding (a nested Closure
+                // body is admitted since the I096 nested-Closure extension).
                 """
                 run: () => {
-                    f: ((v) => { () => v })(5)
                     probe()
-                    f()
+                    ((...items) => { 5 })(1)
                 }
                 run()
                 """,
@@ -498,6 +508,70 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 "automatic RootTag of run plus the inline callee semantic RootTag");
         assertParity(source, 42);
         System.out.println("I096_B1_C0_BINDING_INLINE=YES");
+    }
+
+    /**
+     * I096-B1: structural proof before Graal partial evaluation.
+     * The caller's own bytecode contains the admitted C1 body,
+     * argument binding, guards and physical fallback.
+     */
+    @Test
+    void directC1IdentityIsExpandedByLowererBeforeGraal() throws Exception {
+        String source = """
+                run: () => {
+                    identity: (x) => x
+                    identity(42)
+                }
+                run()
+                """;
+
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosSemanticBytecodeRootNode module = lowerRoot(source);
+                module.getRootNodes().ensureComplete();
+
+                List<ProtosSemanticBytecodeRootNode> callers =
+                        groupRoots(module).stream()
+                                .filter(root ->
+                                        count(instructionNames(root),
+                                                "PrepareInlineClosureLiteralCall") > 0)
+                                .toList();
+
+                assertEquals(1, callers.size(),
+                        "exactly one Root contains the I096 C1 inline site");
+
+                ProtosSemanticBytecodeRootNode caller = callers.get(0);
+                List<String> names = instructionNames(caller);
+
+                int prepare = position(names, "PrepareInlineClosureLiteralCall");
+                int admit = position(names, "AdmitsInlineClosureLiteralCall");
+                int argument = position(names, "LoadInlineClosureArgument");
+                int fallback = position(names, "LoadInlineLiteralFallbackCall");
+                int direct = position(names, "TryDirectCallOne");
+
+                assertEquals(1, count(names, "PrepareInlineClosureLiteralCall"));
+                assertTrue(prepare >= 0, names::toString);
+                assertTrue(admit > prepare, names::toString);
+                assertTrue(argument > admit,
+                        "the C1 parameter is bound inside the caller");
+                assertTrue(fallback > admit,
+                        "the rejected candidate retains its physical fallback");
+                assertTrue(direct > admit,
+                        "the DEBUG branch retains ordinary C1 invocation");
+
+                assertEquals(2, rootTags(caller.getBytecodeNode()),
+                        "caller RootTag plus inline identity body RootTag");
+
+                assertInteger(42,
+                        module.getCallTarget().call(new Probe().module()));
+            } finally {
+                context.leave();
+            }
+        }
+
+        System.out.println("I096_B1_DIRECT_C1_LOWERED=YES");
     }
 
     @Test
@@ -884,20 +958,12 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 }
                 run()
                 """,
-                // C2.
+                // A body creating a nested Closure is admitted, but a default
+                // parameter still keeps ordinary binding.
                 """
                 run: () => {
-                    f: (a, b) => { a + b }
-                    probe()
-                    f(2, 3)
-                }
-                run()
-                """,
-                // A body creating a nested Closure.
-                """
-                run: () => {
-                    f: (v) => {
-                        g: () => v
+                    f: (v, w = 0) => {
+                        g: () => v + w
                         g()
                     }
                     probe()
@@ -935,6 +1001,745 @@ final class ProtosI096InlineClosureLiteralCallTest {
             assertParity(source, 5);
         }
         System.out.println("I096_B1_EXCLUDED_SHAPES_UNCHANGED=YES");
+    }
+
+    // ---- I096 coverage: C2/C3/N, operand positions, budget -----------------
+
+    @Test
+    void twoArgumentLiteralAndBindingCallsRunInlineInCaller() throws Exception {
+        String literal = """
+                run: () => {
+                    ((a, b) => {
+                        probe()
+                        a * 100 + b
+                    })(4, 2)
+                }
+                run()
+                """;
+        Execution normal = execute(false, literal);
+        assertInteger(402, normal.value());
+        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertInlineSiteWithParameters(normal.innermostRoot(), 2);
+        assertParity(literal, 402);
+
+        String binding = """
+                run: () => {
+                    f: (a, b) => {
+                        probe()
+                        a * 100 + b
+                    }
+                    f(4, 2)
+                }
+                run()
+                """;
+        Execution bound = execute(false, binding);
+        assertInteger(402, bound.value());
+        assertEquals(List.of(INLINE_DEPTH), bound.probe().depths(), bound.probe()::toString);
+        assertInlineSiteWithParameters(bound.innermostRoot(), 2);
+        assertParity(binding, 402);
+        System.out.println("I096_C2_INLINE=YES");
+    }
+
+    /**
+     * C3 parameters and an own local named like caller bindings live in the
+     * callee's own scope; the caller's same-named bindings are untouched.
+     */
+    @Test
+    void threeArgumentBindingCallKeepsItsOwnScope() throws Exception {
+        String source = """
+                run: () => {
+                    a: 1
+                    b: 2
+                    sum: 3
+                    f: (a, b, c) => {
+                        sum: a * 100 + b * 10 + c
+                        probe()
+                        sum
+                    }
+                    r: f(4, 5, 6)
+                    r * 1000 + a * 100 + b * 10 + sum
+                }
+                run()
+                """;
+        Execution normal = execute(false, source);
+        assertInteger(456123, normal.value());
+        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertInlineSiteWithParameters(normal.innermostRoot(), 3);
+        assertParity(source, 456123);
+        System.out.println("I096_C3_OWN_SCOPE=YES");
+    }
+
+    /** Arguments are evaluated once each, left to right, before admission. */
+    @Test
+    void multipleArgumentsAreEvaluatedOnceLeftToRight() throws Exception {
+        String source = """
+                run: () => {
+                    log: 0
+                    next: (d) => {
+                        log = log * 10 + d
+                        d
+                    }
+                    f: (a, b, c) => {
+                        probe()
+                        a * 100 + b * 10 + c
+                    }
+                    r: f(next(1), next(2), next(3))
+                    r * 1000 + log
+                }
+                run()
+                """;
+        Execution normal = execute(false, source);
+        assertInteger(123123, normal.value());
+        assertEquals(1, normal.probe().calls.get());
+        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertParity(source, 123123);
+        System.out.println("I096_N_ARGUMENT_ORDER=YES");
+    }
+
+    /**
+     * Binding calls in operand positions of the same activation (a compound
+     * expression and the argument of another call) each get their own
+     * guarded region and their own fresh activation.
+     */
+    @Test
+    void bindingCallsInOperandPositionsRunInline() throws Exception {
+        String source = """
+                run: () => {
+                    f: (x, y) => {
+                        local: x * y
+                        probe()
+                        local
+                    }
+                    g: (v) => {
+                        probe()
+                        v + 1
+                    }
+                    r: f(2, 3) + f(4, 5) * 10
+                    g(f(1, r))
+                }
+                run()
+                """;
+        Execution normal = execute(false, source);
+        assertInteger(207, normal.value());
+        assertEquals(4, normal.probe().calls.get());
+        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        ProtosSemanticBytecodeRootNode runRoot = normal.innermostRoot();
+        assertSame(runRoot, normal.probe().stacks.get(0).get(0));
+        List<String> names = instructionNames(runRoot);
+        // f(2, 3), f(4, 5), f(1, r) and g(...) are four distinct eligible
+        // sites; a duplicated emission of any of them would exceed four.
+        assertEquals(4, count(names, "PrepareInlineClosureLiteralCall"), names::toString);
+        assertEquals(4, count(names, "AdmitsInlineClosureLiteralCall"), names::toString);
+        assertEquals(
+                5,
+                rootTags(runRoot.getBytecodeNode()),
+                "run's RootTag plus one inline callee RootTag per site");
+        assertParity(source, 207);
+        System.out.println("I096_OPERAND_POSITION_INLINE=YES");
+    }
+
+    @Test
+    void multipleArgumentCallOverrideTakesThePhysicalFallback() throws Exception {
+        String source = """
+                run: () => {
+                    f: (a, b) => {
+                        probe()
+                        a * 10 + b
+                    }
+                    f.call: (a, b) => {
+                        probe()
+                        a * 1000 + b * 100
+                    }
+                    g: (a, b, c) => {
+                        probe()
+                        a * 100 + b * 10 + c
+                    }
+                    g.call: (a, b, c) => {
+                        probe()
+                        c * 100 + b * 10 + a
+                    }
+                    x: f(1, 2)
+                    y: g(1, 2, 3)
+                    f.removeSlot("call")
+                    g.removeSlot("call")
+                    x * 1000000 + y * 1000 + f(1, 2) * 1000 + g(1, 2, 3)
+                }
+                run()
+                """;
+        Execution normal = execute(false, source);
+        assertInteger(1200333123L, normal.value());
+        // Execution order: C2 override, C3 override (rejected admission),
+        // then C2 and C3 after removeSlot (canonical selection restored).
+        List<List<RootNode>> stacks = normal.probe().stacks;
+        assertEquals(4, stacks.size(), normal.probe()::toString);
+        assertTrue(stacks.get(0).size() > INLINE_DEPTH, normal.probe()::toString);
+        assertTrue(stacks.get(1).size() > INLINE_DEPTH, normal.probe()::toString);
+        assertEquals(INLINE_DEPTH, stacks.get(2).size(), normal.probe()::toString);
+        assertEquals(INLINE_DEPTH, stacks.get(3).size(), normal.probe()::toString);
+        assertParity(source, 1200333123L);
+        System.out.println("I096_N_CALL_OVERRIDE_FALLBACK=YES");
+    }
+
+    @Test
+    void multipleArgumentDebugModeKeepsThePhysicalCalleeRoot() throws Exception {
+        Execution debug = execute(true, """
+                run: () => {
+                    f: (a, b, c) => {
+                        probe()
+                        a * 100 + b * 10 + c
+                    }
+                    f(1, 2, 3)
+                }
+                run()
+                """);
+        assertInteger(123, debug.value());
+        assertTrue(debug.probe().depths().get(0) > INLINE_DEPTH, debug.probe()::toString);
+        System.out.println("I096_N_DEBUG_TOPOLOGY_PRESERVED=YES");
+    }
+
+    /** C8, the expansion budget itself, runs inline with distinct arguments. */
+    @Test
+    void eightArgumentCallAtTheBudgetRunsInline() throws Exception {
+        String source = """
+                run: () => {
+                    f: (a, b, c, d, e, g, h, i) => {
+                        probe()
+                        ((((((a * 10 + b) * 10 + c) * 10 + d) * 10 + e) * 10 + g) * 10 + h) * 10 + i
+                    }
+                    f(8, 7, 6, 5, 4, 3, 2, 1)
+                }
+                run()
+                """;
+        Execution normal = execute(false, source);
+        assertInteger(87654321, normal.value());
+        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertInlineSiteWithParameters(normal.innermostRoot(), 8);
+        assertParity(source, 87654321);
+        assertTrue(
+                execute(true, source).probe().depths().get(0) > INLINE_DEPTH,
+                "DEBUG keeps the physical C8 call");
+        System.out.println("I096_C8_INLINE=YES");
+    }
+
+    /**
+     * An earlier operand reassigns the binding: the later site reads the
+     * receiver once, after that operand, and takes the fallback for the
+     * other definition; a site whose own argument reassigns the binding
+     * keeps the receiver read before its arguments. Every argument effect
+     * happens exactly once.
+     */
+    @Test
+    void operandReassignmentIsObservedWithoutRereadingTheReceiver() throws Exception {
+        String source = """
+                run: () => {
+                    effects: 0
+                    f: (a, b) => {
+                        probe()
+                        a * 100 + b
+                    }
+                    original: f
+                    swap: (v) => {
+                        effects = effects + 1
+                        f = (a, b) => { a * 1000 + b }
+                        v
+                    }
+                    first: f(1, 2) + swap(0) + f(3, 4)
+                    f = original
+                    second: f(swap(5), 6)
+                    first * 10000 + second * 10 + effects
+                }
+                run()
+                """;
+        // first = 102 + 0 + 3004; second = 506 (the receiver was read first).
+        Execution normal = execute(false, source);
+        assertInteger(31060000L + 5060 + 2, normal.value());
+        assertEquals(2, normal.probe().calls.get(), normal.probe()::toString);
+        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertParity(source, 31060000L + 5060 + 2);
+        System.out.println("I096_OPERAND_REASSIGNMENT_SINGLE_READ=YES");
+    }
+
+    /** A call wider than the expansion budget keeps the unchanged topology. */
+    @Test
+    void arityAboveTheExpansionBudgetIsNotInlined() throws Exception {
+        assertEquals(8, CanonicalToBytecodeLowerer.MAX_INLINE_CLOSURE_CALL_ARGUMENTS);
+        String source = """
+                run: () => {
+                    f: (a, b, c, d, e, g, h, i, j) => {
+                        probe()
+                        (((((((a * 10 + b) * 10 + c) * 10 + d) * 10 + e) * 10 + g) * 10 + h) * 10 + i) * 10 + j
+                    }
+                    f(1, 2, 3, 4, 5, 6, 7, 8, 9)
+                }
+                run()
+                """;
+        Execution normal = execute(false, source);
+        assertInteger(123456789, normal.value());
+        assertTrue(normal.probe().depths().get(0) > INLINE_DEPTH, normal.probe()::toString);
+        List<String> names = instructionNames(normal.outermostGuestRoot());
+        assertFalse(
+                names.stream().anyMatch(name -> name.contains("InlineClosureLiteralCall")),
+                names::toString);
+        assertParity(source, 123456789);
+        assertTrue(
+                execute(true, source).probe().depths().get(0) > INLINE_DEPTH,
+                "DEBUG keeps the physical C9 call");
+        System.out.println("I096_EXPANSION_BUDGET_FALLBACK=YES");
+    }
+
+    // ---- I096 nested Closures: bodies creating Closures ---------------------
+
+    /**
+     * The outer body runs inline in {@code run}; the nested Closure keeps its
+     * own CallTarget, whose caller frame is {@code run} itself, never the
+     * outer callee. The inline region creates it over the callee's own
+     * activation (named path, never the frame-native one), and the group
+     * gains no duplicate root, before or after a reparse.
+     */
+    @Test
+    void nestedClosureWithoutEscapeRunsTheOuterBodyInline() throws Exception {
+        String source = """
+                run: () => {
+                    f: (value) => {
+                        probe()
+                        inner: () => {
+                            probe()
+                            value + 1
+                        }
+                        inner()
+                    }
+                    f(41)
+                }
+                run()
+                """;
+        Execution normal = execute(false, source);
+        assertInteger(42, normal.value());
+        List<List<RootNode>> stacks = normal.probe().stacks;
+        assertEquals(2, stacks.size(), normal.probe()::toString);
+        ProtosSemanticBytecodeRootNode runRoot = normal.innermostRoot();
+        assertEquals(INLINE_DEPTH, stacks.get(0).size(), normal.probe()::toString);
+        assertEquals(INLINE_DEPTH + 1, stacks.get(1).size(), normal.probe()::toString);
+        assertTrue(stacks.get(1).get(0) != runRoot, "inner keeps its own CallTarget");
+        assertSame(runRoot, stacks.get(1).get(1), "inner is called directly from run");
+
+        List<String> region = nestedInlineRegion(runRoot);
+        assertEquals(1, count(region, "MaterializeClosure"), region::toString);
+        assertEquals(
+                2,
+                rootTags(runRoot.getBytecodeNode()),
+                "run's RootTag plus the inline outer callee RootTag");
+
+        Execution debug = execute(true, source);
+        assertInteger(42, debug.value());
+        assertEquals(INLINE_DEPTH + 1, debug.probe().stacks.get(0).size(), debug.probe()::toString);
+        assertEquals(INLINE_DEPTH + 2, debug.probe().stacks.get(1).size(), debug.probe()::toString);
+
+        // f(41, 0) is never a candidate (arity), so it lowers the same
+        // Closure roots without any inline region.
+        assertNoDuplicateRootsAndStableReparse(source, source.replace("f(41)", "f(41, 0)"), 42);
+        System.out.println("I096_NESTED_NO_ESCAPE_INLINE=YES");
+    }
+
+    /** Two nested Closures read and write one shared callee binding. */
+    @Test
+    void nestedClosuresShareOneMutableCapture() throws Exception {
+        String source = """
+                run: () => {
+                    f: (value) => {
+                        local: value
+                        read: () => local
+                        write: (v) => {
+                            local = v
+                            local
+                        }
+                        before: read()
+                        write(42)
+                        probe()
+                        before + read()
+                    }
+                    f(1)
+                }
+                run()
+                """;
+        Execution normal = execute(false, source);
+        assertInteger(43, normal.value());
+        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertEquals(2, count(nestedInlineRegion(normal.innermostRoot()), "MaterializeClosure"));
+        assertParity(source, 43);
+        // Two nested definitions: still no duplicate root, stable reparse.
+        assertNoDuplicateRootsAndStableReparse(source, source.replace("f(1)", "f(1, 0)"), 43);
+        System.out.println("I096_NESTED_MUTABLE_CAPTURE_SHARED=YES");
+    }
+
+    /**
+     * A Closure returned by the inline body outlives it: every later call
+     * updates the same captured binding of the callee's activation, and two
+     * invocations of the outer body never share it.
+     */
+    @Test
+    void escapedNestedClosureOutlivesTheInlineBody() throws Exception {
+        String source = """
+                run: () => {
+                    maker: (seed) => {
+                        value: seed
+                        probe()
+                        () => {
+                            probe()
+                            value = value + 1
+                            value
+                        }
+                    }
+                    counter: maker(40)
+                    a: counter()
+                    b: counter()
+                    a + b
+                }
+                run()
+                """;
+        Execution normal = execute(false, source);
+        assertInteger(83, normal.value());
+        List<List<RootNode>> stacks = normal.probe().stacks;
+        assertEquals(3, stacks.size(), normal.probe()::toString);
+        ProtosSemanticBytecodeRootNode runRoot = normal.innermostRoot();
+        assertEquals(INLINE_DEPTH, stacks.get(0).size(), normal.probe()::toString);
+        for (int call = 1; call < 3; call++) {
+            assertEquals(INLINE_DEPTH + 1, stacks.get(call).size(), normal.probe()::toString);
+            assertSame(runRoot, stacks.get(call).get(1), "the counter is called from run");
+        }
+        assertEquals(1, count(nestedInlineRegion(runRoot), "MaterializeClosure"));
+        assertParity(source, 83);
+
+        String instances = """
+                run: () => {
+                    maker: (seed) => {
+                        value: seed
+                        () => {
+                            value = value + 1
+                            value
+                        }
+                    }
+                    c1: maker(40)
+                    c2: maker(100)
+                    a: c1()
+                    b: c2()
+                    c: c1()
+                    a * 10000 + b * 10 + c
+                }
+                run()
+                """;
+        assertParity(instances, 411052);
+
+        // The counter escapes run itself, the root holding the inline
+        // region, and is called only after run has completed.
+        String afterCaller = """
+                run: () => {
+                    maker: (seed) => {
+                        value: seed
+                        () => {
+                            value = value + 1
+                            value
+                        }
+                    }
+                    maker(40)
+                }
+                counter: run()
+                a: counter()
+                b: counter()
+                a + b
+                """;
+        assertParity(afterCaller, 83);
+        System.out.println("I096_NESTED_ESCAPE_LIFETIME=YES");
+    }
+
+    /**
+     * The callee's Context is fresh per invocation, distinct from the
+     * caller's, and is the context its nested Closures capture: their reads
+     * and writes, and a remove/recreate of the binding, are observed through
+     * it.
+     */
+    @Test
+    void nestedCapturesShareTheCalleesOwnContext() throws Exception {
+        String source = """
+                run: () => {
+                    f: (seed) => {
+                        value: seed
+                        bump: () => { value = value + 1 }
+                        read: () => value
+                        bump()
+                        bump()
+                        before: read()
+                        context.removeSlot("value")
+                        context.value: 100
+                        probe()
+                        after: read()
+                        context
+                    }
+                    a: f(10)
+                    b: f(20)
+                    (a === b).ifTrueIfFalse(() => { -1 }, () => {
+                        (a === context).ifTrueIfFalse(() => { -2 }, () => {
+                            a.before * 1000000 + a.after * 1000 + b.before
+                        })
+                    })
+                }
+                run()
+                """;
+        // ifTrueIfFalse only selects the result here; it is not I096 evidence.
+        Execution normal = execute(false, source);
+        assertInteger(12100022, normal.value());
+        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertParity(source, 12100022);
+        System.out.println("I096_NESTED_CONTEXT_IDENTITY=YES");
+    }
+
+    /**
+     * Reentrant invocations through the inline site keep isolated callee
+     * activations: a nested reader still sees its own invocation's binding
+     * after a deeper invocation of the same site completed.
+     */
+    @Test
+    void reentrantNestedCapturesKeepIsolatedActivations() throws Exception {
+        String source = """
+                step: (k) => {
+                    (k > 0).ifTrueIfFalse(() => { run(k - 1) }, () => { 0 })
+                }
+                run: (n) => {
+                    f: (k) => {
+                        local: k
+                        get: () => local
+                        deeper: step(k)
+                        get() + deeper + get()
+                    }
+                    f(n)
+                }
+                run(3)
+                """;
+        assertInteger(12, execute(false, source).value());
+        assertParity(source, 12);
+        System.out.println("I096_NESTED_REENTRANT_ISOLATION=YES");
+    }
+
+    /**
+     * A nested Closure uses the callee's captured ReturnHome, which is the
+     * caller's: its non-local return leaves {@code run}, as physically.
+     */
+    @Test
+    void nestedNonLocalReturnUsesTheCapturedHome() throws Exception {
+        String source = """
+                run: () => {
+                    f: (value) => {
+                        probe()
+                        escape: () => { ^value + 1 }
+                        escape()
+                        0
+                    }
+                    f(41)
+                    0
+                }
+                run()
+                """;
+        Execution normal = execute(false, source);
+        assertInteger(42, normal.value());
+        assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        assertParity(source, 42);
+        System.out.println("I096_NESTED_RETURN_HOME_PRESERVED=YES");
+    }
+
+    @Test
+    void suspensionAfterNestedCaptureResumesWithoutReplay() throws Exception {
+        String source = """
+                run: () => {
+                    step: (() => { 1 }).future()
+                    visits: 0
+                    f: (value) => {
+                        visits = visits + 1
+                        get: () => value
+                        r: value + step.value()
+                        get() + r
+                    }
+                    f(41) * 10 + visits
+                }
+                run()
+                """;
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        "i096-nested-suspension.protos",
+                        source,
+                        new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation());
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> "outcome=" + outcome.state() + ", error=" + outcome.error());
+        assertInteger(831, outcome.value());
+        System.out.println("I096_NESTED_SUSPENSION_PRESERVED=YES");
+    }
+
+    /**
+     * A self-recursive binding with nested blocks is inlined once at the
+     * caller's site; its recursive calls are never candidates and stay
+     * physical, so lowering does not expand recursively.
+     */
+    @Test
+    void recursiveNestedBodyIsInlinedOnlyAtTheCallerSite() throws Exception {
+        String source = """
+                run: () => {
+                    f: (n) => {
+                        (n > 0).ifTrueIfFalse(() => { n + f(n - 1) }, () => { 0 })
+                    }
+                    f(4)
+                }
+                run()
+                """;
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosSemanticBytecodeRootNode module = lowerRoot(source);
+                module.getRootNodes().ensureComplete();
+                assertEquals(
+                        1,
+                        candidateRegions(groupRoots(module)).stream()
+                                .mapToInt(Integer::intValue).sum(),
+                        "only run's own f(4) site");
+                assertInteger(10, module.getCallTarget().call(new Probe().module()));
+            } finally {
+                context.leave();
+            }
+        }
+        assertParity(source, 10);
+        System.out.println("I096_NESTED_RECURSION_BOUNDED=YES");
+    }
+
+    /**
+     * Negative evidence for the nested class: a nested-Closure body whose
+     * selection is overridden, and a module-level literal owning its own
+     * ReturnHome, keep the physical callee behind the emitted guard.
+     */
+    @Test
+    void nestedBodiesKeepTheFallbackWhenNotAdmitted() throws Exception {
+        String override = """
+                run: () => {
+                    f: (v) => {
+                        probe()
+                        g: () => v
+                        g()
+                    }
+                    f.call: (v) => {
+                        probe()
+                        h: () => v * 10
+                        h()
+                    }
+                    a: f(1)
+                    f.removeSlot("call")
+                    b: f(2)
+                    a * 10 + b
+                }
+                run()
+                """;
+        Execution overridden = execute(false, override);
+        assertInteger(102, overridden.value());
+        assertTrue(
+                overridden.probe().stacks.get(0).size() > INLINE_DEPTH,
+                overridden.probe()::toString);
+        assertEquals(
+                INLINE_DEPTH, overridden.probe().stacks.get(1).size(), overridden.probe()::toString);
+        assertParity(override, 102);
+
+        String moduleLiteral = """
+                g: ((v) => {
+                    probe()
+                    () => v
+                })(5)
+                g()
+                """;
+        Execution module = execute(false, moduleLiteral);
+        assertInteger(5, module.value());
+        List<RootNode> stack = module.probe().stacks.get(0);
+        assertEquals(2, stack.size(), "the literal's physical root over the module root");
+        assertTrue(
+                position(instructionNames(
+                                assertInstanceOf(
+                                        ProtosSemanticBytecodeRootNode.class, stack.get(1))),
+                        "AdmitsInlineClosureLiteralCall") >= 0,
+                "the guarded region exists and rejected the owned ReturnHome");
+        assertParity(moduleLiteral, 5);
+        System.out.println("I096_NESTED_NOT_ADMITTED_FALLBACK=YES");
+    }
+
+    /**
+     * The instructions from the single inline site's admission in {@code
+     * caller} onward: the admitted body
+     * creates nested Closures over the callee's own activation, loaded from
+     * the carrier, and never uses the frame-native callback materialization.
+     */
+    private static List<String> nestedInlineRegion(ProtosSemanticBytecodeRootNode caller) {
+        List<String> names = instructionNames(caller);
+        int admit = position(names, "AdmitsInlineClosureLiteralCall");
+        assertTrue(admit >= 0, names::toString);
+        // Every prepared call inside the body emits its own fallback load, so
+        // the region extends to the end of the root; the fixtures create no
+        // Closure in the caller after the site.
+        List<String> region = names.subList(admit, names.size());
+        assertTrue(count(region, "LoadInlineCallbackActivation") >= 1, region::toString);
+        assertEquals(0, count(region, "MaterializeInlineCallbackActivation"), region::toString);
+        return region;
+    }
+
+    /**
+     * {@code admitted} lowers exactly as many group roots as {@code
+     * notCandidate}, which differs only in a site that is never inlined, so
+     * the inline body duplicated no nested root; a reparse keeps the same
+     * roots, order and candidate regions.
+     */
+    private static void assertNoDuplicateRootsAndStableReparse(
+            String admitted, String notCandidate, long expected) throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosSemanticBytecodeRootNode module = lowerRoot(admitted);
+                List<ProtosSemanticBytecodeRootNode> before = groupRoots(module);
+                List<Integer> regionsBefore = candidateRegions(before);
+                assertEquals(
+                        groupRoots(lowerRoot(notCandidate)).size(),
+                        before.size(),
+                        "no nested root is lowered twice");
+
+                module.getRootNodes().ensureComplete();
+                List<ProtosSemanticBytecodeRootNode> after = groupRoots(module);
+                assertEquals(before.size(), after.size());
+                for (int i = 0; i < before.size(); i++) {
+                    assertSame(before.get(i), after.get(i), "root order at " + i);
+                    assertTrue(after.get(i).getBytecodeNode().getSourceSection() != null,
+                            "source materialized at " + i);
+                }
+                assertEquals(regionsBefore, candidateRegions(after));
+                assertInteger(expected, module.getCallTarget().call(new Probe().module()));
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    /**
+     * Structural lowering evidence: the caller root holds the guarded region,
+     * one inline parameter load per supplied argument after admission, and
+     * the carrier's physical fallback.
+     */
+    private static void assertInlineSiteWithParameters(
+            ProtosSemanticBytecodeRootNode caller, int parameters) {
+        List<String> names = instructionNames(caller);
+        int prepare = position(names, "PrepareInlineClosureLiteralCall");
+        int admit = position(names, "AdmitsInlineClosureLiteralCall");
+        int fallback = position(names, "LoadInlineLiteralFallbackCall");
+        assertTrue(prepare >= 0 && admit > prepare, names::toString);
+        assertTrue(fallback > admit, names::toString);
+        List<String> region = names.subList(admit, fallback);
+        assertEquals(parameters, count(region, "LoadInlineClosureArgument"), names::toString);
+        assertEquals(
+                2,
+                rootTags(caller.getBytecodeNode()),
+                "caller RootTag plus the inline callee semantic RootTag");
     }
 
     private static List<ProtosSemanticBytecodeRootNode> groupRoots(

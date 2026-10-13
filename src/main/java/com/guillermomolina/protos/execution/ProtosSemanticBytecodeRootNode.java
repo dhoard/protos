@@ -2345,7 +2345,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization
         @TruffleBoundary
         public static Object perform(Object caller, java.math.BigInteger value) {
-            ProtosPrelude prelude = TryDirectSendOne.callerPrelude(caller);
+            ProtosPrelude prelude = PrepareSendOne.callerPrelude(caller);
             if (prelude == null) {
                 throw new IllegalStateException(
                         "a large Integer literal requires the executing Core prelude");
@@ -6059,8 +6059,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
     // ---- PLAT057-B inline ordinary Closure-literal call (I096-A) ------------------
     //
-    // An ordinary C0/C1 call whose receiver is the site's own staged Closure
-    // literal (I096-A), or a binding with a candidate literal body (I096-B1),
+    // An ordinary positional call (exact arity up to
+    // CanonicalToBytecodeLowerer#MAX_INLINE_CLOSURE_CALL_ARGUMENTS) whose
+    // receiver is the site's own staged Closure literal (I096-A), or a
+    // binding with a candidate literal body (I096-B1),
     // is prepared through the PLAT044 B′ carrier seam (one ordinary
     // call selection) and admitted only when the carrier's effective body
     // target is that literal's own plan target with an unobservable
