@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.348-SNAPSHOT
+
+- `I095` (#878): one shared NORMAL-mode lowering for the canonical Boolean
+  controls `ifTrue`, `ifFalse`, `if` and `else` (I095-C).
+  - A canonical literal receiver selects its branch statically. Any other
+    receiver is evaluated once and classified by the I092 canonical Boolean
+    classifier. A selected literal Closure whose whole activation passes the
+    existing I095-B proof runs inline in the caller root, with its own
+    semantic RootTag and source section. `if`/`else` discard only the
+    callback's normal result and return the original receiver. A
+    non-canonical receiver performs the ordinary send with the staged
+    receiver, materializing the literal only there.
+  - Unproven callbacks, non-literal callables, spread, and DEBUG keep the
+    established B-prime/ordinary topology. `ifTrueIfFalse`, `and` and `or`
+    are unchanged.
+  - Standard root publication now validates the standard `ifFalse`, `if`
+    and `else` behaviors alongside `ifTrue`.
+  - Adopt the two proven `PROVEN_HANDLER_RETURN` sites of the new
+    `IsCanonicalBooleanFalseClass` operation into the BCI PE topology
+    baseline. Move the I092 branch-profile fixture to an unproven callback
+    so it keeps exercising the I092 branches.
+
 ## 0.3.347-SNAPSHOT
 
 - `I096` (#884): PLAT057-B lexical inlining of ordinary C0/C1 Closure calls

@@ -1120,9 +1120,16 @@ final class ProtosI092CompactBooleanTest {
                 ProtosClosureValue.class,
                 ProtosTestExecutionSupport.evaluate(
                         "i092-branch-definition.protos",
+                        // I095-C inlines a proven callback in NORMAL mode; a
+                        // module-binding read is unproven there, so this site
+                        // keeps exercising the I092 native/generic branches.
                         """
+                        answer: 40
                         run: (receiver) => {
-                            receiver.ifTrue(() => { 41 })
+                            receiver.ifTrue(() => {
+                                inner: 1
+                                answer + inner
+                            })
                         }
                         run
                         """,

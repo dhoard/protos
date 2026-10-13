@@ -688,14 +688,17 @@ public final class ProtosCoreBootstrap {
         validateContextLocalRootExecutionProjection(object, "match");
         /*
          * I092 lowers canonical-Boolean ifTrue natively after publication and
-         * relies on these frozen selections; never publish another behavior.
+         * I095 inlines ifTrue, ifFalse, if and else; both rely on these frozen
+         * selections; never publish another behavior.
          */
-        if (ProtosStandardBooleanProtocol.structuredCallbackKindForCanonicalSelection(
-                        object.readLocalSlot("ifTrue").orElse(null), object)
-                != ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE) {
-            throw new IllegalStateException(
-                    "standard Object root must publish the standard ifTrue behavior");
-        }
+        requireStandardBooleanSelection(object, "ifTrue",
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE);
+        requireStandardBooleanSelection(object, "ifFalse",
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_FALSE);
+        requireStandardBooleanSelection(object, "if",
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF);
+        requireStandardBooleanSelection(object, "else",
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.ELSE);
         if (!ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
                 object.readLocalSlot("call").orElse(null), object)) {
             throw new IllegalStateException(
@@ -706,6 +709,20 @@ public final class ProtosCoreBootstrap {
                 throw new IllegalStateException(
                         "published standard Object behavior must be a frozen Closure");
             }
+        }
+    }
+
+    private static void requireStandardBooleanSelection(
+            ProtosObjectValue object,
+            String selector,
+            ProtosStandardBooleanProtocol.StructuredCallbackKind expected) {
+        if (ProtosStandardBooleanProtocol.structuredCallbackKindForCanonicalSelection(
+                        object.readLocalSlot(selector).orElse(null), object)
+                != expected) {
+            throw new IllegalStateException(
+                    "standard Object root must publish the standard "
+                            + selector
+                            + " behavior");
         }
     }
 

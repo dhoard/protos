@@ -5574,6 +5574,16 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    /** I095-C: the canonical FALSE classification of a dynamic control receiver. */
+    @Operation
+    public static final class IsCanonicalBooleanFalseClass {
+        @Specialization
+        public static boolean perform(int classification) {
+            return classification
+                    == ProtosCanonicalBooleanOneNode.CLASS_FALSE;
+        }
+    }
+
     /**
      * Result when no native callback is selected.
      * MISS remains the Java null sentinel for ordinary dispatch.
