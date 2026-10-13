@@ -23,6 +23,20 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.458] - 2026-10-13
+
+### D200 — Receiver-preserving Boolean `if` / `else` messages
+- `spec/semantics/VALUES_AND_COLLECTIONS.md` §16: add the standard
+  one-argument messages `if(block)` and `else(block)`. `true.if` and
+  `false.else` invoke the selected callback once with zero arguments; all four
+  cases return the original canonical Boolean receiver and ignore the callback's
+  normal result. No pairing exists between the messages, chains evaluate each
+  send after the previous one completes, and no `elseIf` / `elif` is defined;
+  multi-way selection composes with `or` / `||`. Existing `not`, `ifTrue`,
+  `ifFalse`, `ifTrueIfFalse`, `and` and `or` are unchanged.
+- `spec/PROTOS_GRAMMAR.md` §36: clarify that these are ordinary member names;
+  no grammar change.
+
 ## [0.1.457] - 2026-10-12
 
 ### D198 — Public Complex construction, arithmetic, and `std:math/Math.sqrt`

@@ -186,6 +186,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                         "ifTrue",
                         "ifFalse",
                         "ifTrueIfFalse",
+                        "if",
+                        "else",
                         "and",
                         "or",
                         "hash",

@@ -79,6 +79,56 @@ arguments, and its exact normal result is returned unchanged.
 This gives an ordinary-protocol spelling for a complete two-branch conditional
 without introducing `if` or `else` as Core v0.1 syntax.
 
+## Result-producing versus receiver-preserving conditionals
+
+D200 adds two more ordinary messages, `if(block)` and `else(block)`. They are
+for running an *action*, not for computing a value:
+
+```text
+true.if(block)    -> invoke block(); return true
+false.if(block)   -> false
+true.else(block)  -> true
+false.else(block) -> invoke block(); return false
+```
+
+The selected callback's normal result is ignored, whatever it is (`null`, a
+Boolean, any object, or a Future, which is not awaited). The message always
+returns the same canonical Boolean that received it. That makes chaining
+natural:
+
+```protos
+ready.if() {
+    start()
+}.else() {
+    wait()
+}
+```
+
+Each `.if` / `.else` is an independent ordinary send with its own trailing
+Closure; there is no syntactic pairing and no new grammar. The order may be
+reversed (`ready.else(...).if(...)`), and `false.else(a).else(b)` runs both `a`
+and `b` because both sends receive `false`.
+
+So choose by what you need back:
+
+- `ifTrue`, `ifFalse`, and `ifTrueIfFalse` **produce** the selected callback's
+  result (or `null` when `ifTrue`/`ifFalse` select nothing);
+- `if` and `else` **preserve** the Boolean, so the next send in a chain can
+  still branch on it.
+
+There is no `elseIf`. Multi-way action selection composes with the existing
+lazy `or`, because each `if` returns whether its alternative was selected:
+
+```protos
+(n == 1).if() { actionA() }
+    .or(() => { (n == 2).if() { actionB() } })
+    .or(() => { (n == 3).if() { actionC() } })
+    .else() { actionDefault() }
+```
+
+Once an alternative is selected, `or` does not evaluate the later conditions.
+The same holds with `||`, which lowers to `or`.
+
 ## Boolean negation and two-way selection
 
 Canonical Booleans also provide ordinary zero-argument `not()`:
@@ -464,7 +514,9 @@ created.
 2. Remember that trailing Closure syntax supplies an ordinary call argument; it
    does not create a separate control construct.
 3. Use `ifTrue` or `ifFalse` for one-branch conditional execution, and
-   `ifTrueIfFalse` when exactly one of two lazy callbacks must be selected.
+   `ifTrueIfFalse` when exactly one of two lazy callbacks must be selected and
+   its result is needed; use `if` / `else` for actions whose results are
+   discarded and whose receiver Boolean should keep flowing through a chain.
 4. Use `not()` or unary `!` for strict canonical-Boolean negation.
 5. Use `and` and `or` for lazy Boolean short-circuiting, and return an actual
    Boolean from a selected callback.
@@ -492,7 +544,11 @@ Representative Boolean cases include:
   demonstrates true-branch selection and exact result propagation (`iftrueiffalse true selected`
   case), tolerance of an unselected non-invokable value (`iftrueiffalse unselected noninvokable`
   case), and ordinary eager evaluation of callback-producing argument expressions
-  (`iftrueiffalse argument expressions eager` case).
+  (`iftrueiffalse argument expressions eager` case);
+- [`../../protos/tests/conformance/boolean/receiver-preserving-if-else.protos`](../../protos/tests/conformance/boolean/receiver-preserving-if-else.protos)
+  demonstrates that `if` / `else` return the exact receiver and ignore the
+  callback result, chaining in both orders, and multi-way selection through
+  `or` and `||`.
 
 Representative loop cases include:
 
@@ -519,7 +575,7 @@ For exact behavior, consult:
   transfer, suspension, and cancellation composition;
 - [`../../spec/semantics/VALUES_AND_COLLECTIONS.md`](../../spec/semantics/VALUES_AND_COLLECTIONS.md)
   for canonical Booleans and the standard `not`, `ifTrue`, `ifFalse`,
-  `ifTrueIfFalse`, `and`, and `or` protocols;
+  `ifTrueIfFalse`, `if`, `else`, `and`, and `or` protocols;
 - [`../../spec/semantics/CALLABLES.md`](../../spec/semantics/CALLABLES.md) for
   Closure receiver domains, ordinary `Object.whileTrue` placement, lookup,
   extraction, shadowing, and activation;

@@ -278,7 +278,7 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
 
     /**
      * PERF015: canonical represented Booleans are admitted to the guarded
-     * structured selection for exactly the five Boolean callbacks, with the
+     * structured selection for exactly the seven Boolean callbacks (D200 adds if/else), with the
      * canonical behavior/home provenance of the generic D013 selection.
      */
     @SuppressWarnings("try")
@@ -287,13 +287,15 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
             ProtosActivation module = activation(prelude, new ProtosActorExecutionDomain());
-            String[] selectors = {"ifTrue", "ifFalse", "ifTrueIfFalse", "and", "or"};
+            String[] selectors = {"ifTrue", "ifFalse", "ifTrueIfFalse", "and", "or", "if", "else"};
             ProtosStandardBooleanProtocol.StructuredCallbackKind[] kinds = {
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_FALSE,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE_IF_FALSE,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.AND,
-                ProtosStandardBooleanProtocol.StructuredCallbackKind.OR
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.OR,
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF,
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.ELSE
             };
             for (ProtosBooleanValue receiver :
                     new ProtosBooleanValue[] {ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE}) {

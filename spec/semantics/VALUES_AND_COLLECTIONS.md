@@ -113,12 +113,14 @@ not()
 ifTrue(block)
 ifFalse(block)
 ifTrueIfFalse(trueBlock, falseBlock)
+if(block)
+else(block)
 and(block)
 or(block)
 ```
 
 The standard arities are exact: `not` accepts zero arguments; `ifTrue`,
-`ifFalse`, `and`, and `or` accept exactly one argument; and
+`ifFalse`, `if`, `else`, `and`, and `or` accept exactly one argument; and
 `ifTrueIfFalse` accepts exactly two arguments. Any other supplied positional
 argument count signals an `Error` under the ordinary invocation boundary.
 
@@ -186,6 +188,12 @@ true.ifTrueIfFalse(trueBlock, falseBlock)
 false.ifTrueIfFalse(trueBlock, falseBlock)
                      -> invoke falseBlock(); return its exact normal result
 
+true.if(block)       -> invoke block(); ignore its normal result; return true
+false.if(block)      -> false
+
+true.else(block)     -> true
+false.else(block)    -> invoke block(); ignore its normal result; return false
+
 true.and(block)      -> invoke block(); require Boolean result; return it
 false.and(block)     -> false
 
@@ -199,6 +207,20 @@ For `ifTrue`, `ifFalse`, and `ifTrueIfFalse`, a selected callback's normal resul
 is returned unchanged. It may therefore be `null`, either Boolean, an arbitrary
 ordinary object, or a `Future`; the Boolean method performs no conversion,
 awaiting, Future adoption, or result validation on that value.
+
+For `if` and `else`, the normal result is always the original canonical Boolean
+receiver itself, whether or not a callback was selected. A selected callback's
+normal result is ignored without conversion, awaiting, Future adoption, or
+validation, whatever its value. `if` and `else` are independent ordinary
+messages: no syntactic or semantic pairing exists between them. In a chain such
+as `b.if(x).else(y)`, the second send occurs only after the first completes
+normally, and its argument expressions are evaluated at that point; because the
+first send returns `b`, exactly one of `x` and `y` is invoked, in either chain
+order. Repeated sends are not merged: `false.else(x).else(y)` invokes both `x`
+and `y`. Core v0.1 defines no standard `elseIf` or `elif` selector; multi-way
+action selection composes with standard `or` (or `||`), for example
+`c1.if(a).or(() => c2.if(b)).else(d)`, whose short-circuit prevents evaluating
+later conditions once an alternative was selected.
 
 For standard `and` and `or`, the result of an invoked callback must be exactly
 canonical `true` or canonical `false`. Any other normal result, including
@@ -219,7 +241,8 @@ an invalid `and`/`or` result is detected are not rolled back.
 The Boolean protocol itself introduces no hidden suspension point, task, lock,
 or scheduling boundary. A selected callback may of course reach an explicit
 suspension point according to its own ordinary semantics; an unselected callback
-cannot suspend because it is not invoked.
+cannot suspend because it is not invoked. When an `if` or `else` callback leaves
+by a non-normal transfer, no Boolean result is produced.
 
 The mandatory source lowering and precedence of `!`, `&&`, and `||` are owned by
 `../PROTOS_GRAMMAR.md`. Unary `!value` lowers to the ordinary zero-argument
@@ -231,8 +254,11 @@ short-circuit behavior defined above, while a custom receiver may override
 the generated RHS Closure. Implementations may specialize the canonical Boolean
 cases only when observable behavior remains identical to the ordinary protocol.
 
-Possible future `if`/`else` syntax may be defined as sugar, but it does not
-create a second Boolean or truthiness semantics.
+The `if` and `else` selectors above are ordinary messages, not syntax. Core v0.1
+defines no dedicated `if`/`else` conditional grammar (`../PROTOS_GRAMMAR.md`);
+a form such as `b.if() { ... }.else() { ... }` is two ordinary sends, each with a
+trailing Closure argument, and introduces no second Boolean or truthiness
+semantics.
 
 ## 21. Equality and Identity
 
@@ -926,7 +952,7 @@ behavior, and the absence of language-wide truthiness, is owned by §16
 **Booleans** above.
 
 This section records only the general dispatch consequence: the selectors
-`ifTrue`, `ifFalse`, `and`, and `or` are ordinary messages. Any object may define
+`ifTrue`, `ifFalse`, `if`, `else`, `and`, and `or` are ordinary messages. Any object may define
 or override them with its own behavior. Such customization does not make the
 object a semantic Boolean and does not establish a language-wide truthiness
 conversion. Values such as `0`, `""`, `null`, arrays, and arbitrary objects are

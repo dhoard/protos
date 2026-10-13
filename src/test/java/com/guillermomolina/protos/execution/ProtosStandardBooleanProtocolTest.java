@@ -38,6 +38,10 @@ class ProtosStandardBooleanProtocolTest {
         assertEquals(true, object.hasLocalSlot("ifTrueIfFalse"));
         assertEquals(true, object.hasLocalSlot("and"));
         assertEquals(true, object.hasLocalSlot("or"));
+        assertEquals(true, object.hasLocalSlot("if"));
+        assertEquals(true, object.hasLocalSlot("else"));
+        assertEquals(false, object.hasLocalSlot("elseIf"));
+        assertEquals(false, object.hasLocalSlot("elif"));
         assertEquals(false, prelude.bindings().hasLocalSlot("Boolean"));
     }
 

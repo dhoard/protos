@@ -33,7 +33,9 @@ public final class ProtosStandardBooleanProtocol {
         IF_FALSE(1),
         IF_TRUE_IF_FALSE(2),
         AND(1),
-        OR(1);
+        OR(1),
+        IF(1),
+        ELSE(1);
 
         private final int arity;
 
@@ -58,6 +60,10 @@ public final class ProtosStandardBooleanProtocol {
             ProtosStandardBooleanProtocol::and;
     private static final ProtosNativeClosureBody STANDARD_OR_BODY =
             ProtosStandardBooleanProtocol::or;
+    private static final ProtosNativeClosureBody STANDARD_IF_BODY =
+            ProtosStandardBooleanProtocol::ifMessage;
+    private static final ProtosNativeClosureBody STANDARD_ELSE_BODY =
+            ProtosStandardBooleanProtocol::elseMessage;
 
     private static final ProtosClosureValue STANDARD_NOT =
             standardNative(STANDARD_NOT_BODY);
@@ -71,13 +77,17 @@ public final class ProtosStandardBooleanProtocol {
             standardNative(STANDARD_AND_BODY);
     private static final ProtosClosureValue STANDARD_OR =
             standardNative(STANDARD_OR_BODY);
+    private static final ProtosClosureValue STANDARD_IF =
+            standardNative(STANDARD_IF_BODY);
+    private static final ProtosClosureValue STANDARD_ELSE =
+            standardNative(STANDARD_ELSE_BODY);
 
     private ProtosStandardBooleanProtocol() {}
 
     /*
      * Keep the audited Core native-provider boundary at one lexical provider. The six
-     * Boolean selectors were already native before PLAT028; stable Closure/body identities
-     * let C-prime recognize the structured callback operations without expanding that boundary.
+     * original Boolean selectors were already native before PLAT028, and D200 adds if/else
+     * through the same helper; stable Closure/body identities let C-prime recognize the structured callback operations without expanding that boundary.
      */
     private static ProtosClosureValue standardNative(ProtosNativeClosureBody body) {
         return ProtosClosureValue.nativeClosure(body);
@@ -91,6 +101,8 @@ public final class ProtosStandardBooleanProtocol {
         if (body == STANDARD_IF_TRUE_IF_FALSE_BODY) return StructuredCallbackKind.IF_TRUE_IF_FALSE;
         if (body == STANDARD_AND_BODY) return StructuredCallbackKind.AND;
         if (body == STANDARD_OR_BODY) return StructuredCallbackKind.OR;
+        if (body == STANDARD_IF_BODY) return StructuredCallbackKind.IF;
+        if (body == STANDARD_ELSE_BODY) return StructuredCallbackKind.ELSE;
         return null;
     }
 
@@ -103,6 +115,8 @@ public final class ProtosStandardBooleanProtocol {
         if (behavior == STANDARD_IF_TRUE_IF_FALSE) return StructuredCallbackKind.IF_TRUE_IF_FALSE;
         if (behavior == STANDARD_AND) return StructuredCallbackKind.AND;
         if (behavior == STANDARD_OR) return StructuredCallbackKind.OR;
+        if (behavior == STANDARD_IF) return StructuredCallbackKind.IF;
+        if (behavior == STANDARD_ELSE) return StructuredCallbackKind.ELSE;
         return null;
     }
 
@@ -114,6 +128,8 @@ public final class ProtosStandardBooleanProtocol {
         install(object, "ifTrueIfFalse", STANDARD_IF_TRUE_IF_FALSE);
         install(object, "and", STANDARD_AND);
         install(object, "or", STANDARD_OR);
+        install(object, "if", STANDARD_IF);
+        install(object, "else", STANDARD_ELSE);
     }
 
     private static void install(
@@ -165,6 +181,28 @@ public final class ProtosStandardBooleanProtocol {
         return requireBooleanResult(
                 ProtosInvocation.invoke(supplied.get(0), List.of(), activation),
                 activation);
+    }
+
+    /*
+     * D200: if/else return the original canonical receiver, never the callback result. Like
+     * the other callback selectors they are StructuredCallbackKind members, because a Task
+     * cannot invoke a callback synchronously from a native body (C-prime owns that call);
+     * these bodies serve only non-Task ordinary invocation.
+     */
+    private static Object ifMessage(ProtosActivation activation, List<?> supplied) {
+        Object receiver = requireReceiverAndArity(activation, supplied, 1);
+        if (receiver == ProtosBooleanValue.TRUE) {
+            ProtosInvocation.invoke(supplied.get(0), List.of(), activation);
+        }
+        return receiver;
+    }
+
+    private static Object elseMessage(ProtosActivation activation, List<?> supplied) {
+        Object receiver = requireReceiverAndArity(activation, supplied, 1);
+        if (receiver == ProtosBooleanValue.FALSE) {
+            ProtosInvocation.invoke(supplied.get(0), List.of(), activation);
+        }
+        return receiver;
     }
 
     private static Object requireReceiverAndArity(

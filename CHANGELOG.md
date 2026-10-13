@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.345-SNAPSHOT
+
+- `I097` (#885): implement the D200 receiver-preserving Boolean messages
+  `if(block)` and `else(block)` on the standard Object root.
+  - `true.if` / `false.else` invoke the selected callback once with zero
+    arguments; every case returns the original canonical receiver and
+    discards the callback's normal result without validation or awaiting.
+  - Route both selectors through the existing structured Boolean callback
+    dispatch (C-prime inside Tasks), with native bodies for synchronous
+    invocation; `ifTrue`, `ifFalse`, `ifTrueIfFalse`, `and`, `or` and `not`
+    are unchanged.
+  - Extend Object publication, native-boundary and structured-send guards,
+    and add Protos-native conformance coverage.
+
 ## 0.3.344-SNAPSHOT
 
 - `PERF043` (#877): fold provable canonical Integer additions during

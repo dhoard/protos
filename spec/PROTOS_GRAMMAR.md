@@ -2410,7 +2410,11 @@ Canonical conditional execution is expressed through the ordinary strict-Boolean
 protocol defined by `semantics/VALUES_AND_COLLECTIONS.md`, including
 `ifTrue(block)`, `ifFalse(block)`, and
 `ifTrueIfFalse(trueBlock, falseBlock)`. D051 adds no second conditional
-semantics and no truthiness rule.
+semantics and no truthiness rule. The standard Boolean messages `if(block)` and
+`else(block)` defined there (D200) are ordinary member names reached through
+`.`; they confer no grammar role on the spellings `if` and `else`, and a form
+such as `b.if() { ... }.else() { ... }` is two ordinary sends with trailing
+Closures, not a paired construct.
 
 A future language version may reconsider conditional surface ergonomics only as
 a separate explicit design decision. Such a future design must account for the

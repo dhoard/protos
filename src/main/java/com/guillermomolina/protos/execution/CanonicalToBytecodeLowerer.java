@@ -5076,7 +5076,7 @@ final class CanonicalToBytecodeLowerer {
      * the structured dispatcher does.
      *
      * <p>PLAT043 narrows the structured case: a prepared standard Boolean call
-     * (IF_TRUE, IF_FALSE, IF_TRUE_IF_FALSE, AND, OR) is sequenced in this root
+     * (IF_TRUE, IF_FALSE, IF_TRUE_IF_FALSE, AND, OR, IF, ELSE) is sequenced in this root
      * (see {@link #emitLocalBooleanInvocation}), so a reached callback is
      * entered directly from this root without an intermediate helper root.
      */

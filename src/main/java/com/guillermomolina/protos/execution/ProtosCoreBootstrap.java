@@ -620,6 +620,8 @@ public final class ProtosCoreBootstrap {
                         "slotValue",
                         "ifTrue",
                         "ifFalse",
+                        "if",
+                        "else",
                         "and",
                         "or",
                         "hash",

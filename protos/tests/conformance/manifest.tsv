@@ -19,6 +19,7 @@ boolean/lazy-binary.protos	suite-native	-
 boolean/negation-and-receiver.protos	suite-native	-
 boolean/if-true-if-false.protos	suite-native	-
 boolean/callback-dispatch-and-control.protos	suite-native	-
+boolean/receiver-preserving-if-else.protos	suite-native	-
 numeric-equality/finite-and-domain.protos	suite-native	-
 numeric-equality/special-values.protos	suite-native	-
 equality/identity-and-default-equality.protos	suite-native	-
