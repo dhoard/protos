@@ -362,6 +362,92 @@ class BoundaryTest(unittest.TestCase):
         self.assertNotIn("IGV", source.replace("BGV", ""))
 
 
+
+class RealCompilationProbeTest(unittest.TestCase):
+    def test_probe_options_only_differ_by_compile_only(self):
+        unfiltered = diag.probe_options(
+            "target/truffle-compilation/probe/unfiltered", False
+        )
+        filtered = diag.probe_options(
+            "target/truffle-compilation/probe/filtered", True
+        )
+        unfiltered = [
+            part.replace("/unfiltered", "/same") for part in unfiltered
+        ]
+        filtered = [
+            part.replace("/filtered", "/same") for part in filtered
+        ]
+        option = diag.ENGINE + "CompileOnly=protos-root:"
+        self.assertEqual(filtered.count(option), 1)
+        self.assertEqual(
+            [part for part in filtered if part != option], unfiltered
+        )
+
+    def test_real_compilation_required_even_when_program_passes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bgv = Path(directory) / "graph.bgv"
+            bgv.write_bytes(b"BIGV")
+            output = "600\n200\n"
+            self.assertEqual(
+                diag.assess_probe(output, 0, [str(bgv)], False)["status"],
+                "FAIL",
+            )
+            self.assertEqual(
+                diag.assess_probe(output, 0, [str(bgv)], True)["status"],
+                "FAIL",
+            )
+
+    def test_unfiltered_compilation_and_filtered_naming_are_independent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bgv = Path(directory) / "graph.bgv"
+            bgv.write_bytes(b"BIGV")
+            plain = (
+                "[engine] opt done   engine=1  id=7  "
+                "ProtosSemanticBytecodeRootNodeGen@100 |Tier 2|"
+            )
+            output = plain + "\n600\n200\n"
+            self.assertEqual(
+                diag.assess_probe(output, 0, [str(bgv)], False)["status"],
+                "PASS",
+            )
+            filtered = diag.assess_probe(
+                output, 0, [str(bgv)], True
+            )
+            self.assertEqual(filtered["status"], "FAIL")
+            self.assertTrue(any(
+                "NO_FILTERED_SEMANTIC_TARGET" in x
+                for x in filtered["problems"]
+            ))
+            named = diag.assess_probe(
+                done(NAME) + "\n600\n200\n",
+                0, [str(bgv)], True,
+            )
+            self.assertEqual(named["status"], "PASS")
+            bgv.write_bytes(b"")
+            self.assertEqual(
+                diag.assess_probe(
+                    done(NAME) + "\n600\n200\n",
+                    0, [str(bgv)], True,
+                )["status"],
+                "FAIL",
+            )
+
+    def test_target_not_found_reports_missing_compilation_events_without_guessing(self):
+        output = catalog_line() + "\n" + SUMMARY + "\n"
+        evidence = diag.classify(
+            output, 0, SELECTOR, "none", []
+        )
+        self.assertEqual(evidence["result"], diag.NOT_FOUND)
+        self.assertEqual(
+            evidence["selected_root_catalog_occurrences"], 1
+        )
+        self.assertEqual(evidence["compilation_events_seen"], 0)
+        self.assertTrue(any(
+            "NO_COMPILATION_EVENTS" in x
+            for x in evidence["problems"]
+        ))
+
+
 class MainTest(unittest.TestCase):
 
     def test_arguments_reach_the_selected_command(self):

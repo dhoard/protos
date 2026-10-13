@@ -245,6 +245,164 @@ def bgv_files(dump_directory: Path) -> List[str]:
     return sorted(str(path) for path in dump_directory.rglob("*.bgv")) if dump_directory.is_dir() else []
 
 
+
+# TEST009-V real-JVM calibration, independent of any source root selected by a Test Case.
+PROBE_PREFIX = "protos-root:"
+PROBE_SUBDIR = "probe"
+
+
+def probe_options(dump_path: str, filtered: bool) -> List[str]:
+    """The two JVM runs differ only in the presence of the CompileOnly filter."""
+    options = diagnostic_options(PROBE_PREFIX, "none", "1", dump_path)
+    if not filtered:
+        options.remove(ENGINE + "CompileOnly=" + PROBE_PREFIX)
+    return options
+
+
+def assess_probe(output: str, exit_code: int, dumps: Sequence[str], filtered: bool):
+    """A guest PASS without a real compiled graph is not a successful calibration."""
+    from java_generated_bytecode_bci_compilation_check import EXPECTED_OUTPUT
+
+    events = [
+        line for line in output.splitlines()
+        if ENGINE_COMPILATION_EVENT.match(line)
+    ]
+    done = [
+        line for line in events
+        if line.lstrip().startswith("[engine] opt done")
+    ]
+    named = sorted(set(
+        name for line in done for name in TARGET_NAME.findall(line)
+    ))
+    observed = [
+        line.strip() for line in output.splitlines()
+        if line.strip() in EXPECTED_OUTPUT
+    ]
+    problems = []
+
+    if exit_code != 0:
+        problems.append("PROGRAM_EXIT_CODE %d" % exit_code)
+    if observed != list(EXPECTED_OUTPUT):
+        problems.append(
+            "SEMANTIC_OUTPUT expected %s got %s"
+            % (list(EXPECTED_OUTPUT), observed)
+        )
+    if not done:
+        problems.append("NO_OPT_DONE no completed real Graal compilation")
+    if filtered and not named:
+        problems.append(
+            "NO_FILTERED_SEMANTIC_TARGET CompileOnly did not compile a named semantic root"
+        )
+    if not dumps:
+        problems.append("MISSING_BGV no fresh graph dump")
+    for path in dumps:
+        if not os.path.isfile(path) or os.path.getsize(path) == 0:
+            problems.append("INVALID_BGV %s" % path)
+
+    return OrderedDict([
+        ("status", "PASS" if not problems else "FAIL"),
+        ("compilation_events", len(events)),
+        ("compilations_done", len(done)),
+        ("semantic_targets_compiled", named),
+        ("bgv_files", list(dumps)),
+        ("problems", problems),
+    ])
+
+
+def probe(root: Path, java: str, timeout: int, artifacts: Path, out=sys.stdout) -> int:
+    """A paired real compilation distinguishes a broken runtime from failed target naming/filtering."""
+    from java_generated_bytecode_bci_compilation_check import PROGRAM
+
+    try:
+        directory = target_directory(root, artifacts) / PROBE_SUBDIR
+    except CheckError as error:
+        print(
+            "TRUFFLE_ROOT_PROBE=ACQUISITION_FAILED ARTIFACT %s" % error,
+            file=out,
+        )
+        return 1
+
+    lanes = OrderedDict()
+
+    for label, filtered in (("unfiltered", False), ("filtered", True)):
+        lane = directory / label
+        if lane.exists():
+            shutil.rmtree(lane)
+        lane.mkdir(parents=True)
+
+        dumps = lane / "graal_dumps"
+        options = probe_options(relative_to_root(root, dumps), filtered)
+        log = lane / "probe.log"
+        launch_failure = None
+        output, code = "", -1
+
+        try:
+            command = cli_command(root, java, options, ["-e", PROGRAM])
+            code, output, _ = run_cli(root, command, timeout)
+        except (OSError, CheckError) as error:
+            launch_failure = "LAUNCH %s" % error
+        except subprocess.TimeoutExpired as error:
+            launch_failure = "TIMEOUT after %d s" % timeout
+            output = (error.output or b"").decode(
+                "utf-8", errors="replace"
+            )
+
+        log.write_text(output, encoding="utf-8")
+        record = assess_probe(
+            output, code, bgv_files(dumps), filtered
+        )
+        record["log"] = str(log)
+        record["options"] = options
+
+        if launch_failure:
+            record["status"] = "FAIL"
+            record["problems"].insert(0, launch_failure)
+
+        lanes[label] = record
+
+        print(
+            "PROBE_%s=%s" % (label.upper(), record["status"]),
+            file=out,
+        )
+        print(
+            "PROBE_%s_COMPILATIONS_DONE=%d"
+            % (label.upper(), record["compilations_done"]),
+            file=out,
+        )
+        print(
+            "PROBE_%s_NAMED_TARGETS=%d"
+            % (label.upper(), len(record["semantic_targets_compiled"])),
+            file=out,
+        )
+        print(
+            "PROBE_%s_BGV=%d"
+            % (label.upper(), len(record["bgv_files"])),
+            file=out,
+        )
+        print(
+            "PROBE_%s_LOG=%s" % (label.upper(), log),
+            file=out,
+        )
+        for problem in record["problems"]:
+            print("  %s" % problem, file=out)
+
+    if lanes["unfiltered"]["status"] != "PASS":
+        outcome = "BASELINE_FAILED"
+    elif lanes["filtered"]["status"] != "PASS":
+        outcome = "FILTER_OR_NAMING_FAILED"
+    else:
+        outcome = "PASS"
+
+    report = directory / "probe.json"
+    report.write_text(
+        json.dumps({"status": outcome, "lanes": lanes}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    print("TRUFFLE_ROOT_PROBE_REPORT=%s" % report, file=out)
+    print("TRUFFLE_ROOT_PROBE=%s" % outcome, file=out)
+    return 0 if outcome == "PASS" else 1
+
+
 def classify(output: str, exit_code: Optional[int], selector: str, expansion: str,
              bgv: Sequence[str]) -> "OrderedDict[str, object]":
     """Fail-closed classification of one single-root diagnostic run from its retained evidence."""
@@ -296,6 +454,20 @@ def classify(output: str, exit_code: Optional[int], selector: str, expansion: st
     evidence = OrderedDict()
     evidence["result"] = result
     evidence["target_names"] = names
+    evidence["compilation_events_seen"] = sum(
+        1 for line in output.splitlines()
+        if ENGINE_COMPILATION_EVENT.match(line)
+    )
+    evidence["selected_root_catalog_occurrences"] = sum(
+        1 for line in output.splitlines()
+        if line.startswith(CATALOG_PREFIX)
+        and "selector=" + selector + " " in line
+    )
+    if result == NOT_FOUND and evidence["compilation_events_seen"] == 0:
+        problems.append(
+            "NO_COMPILATION_EVENTS selected root was cataloged but no target compilation was traced; "
+            "this does not prove the root was executed or that its name matched CompileOnly"
+        )
     evidence["failure_records"] = records
     evidence["expansion_trees"] = expansion_trees
     evidence["bgv_files"] = list(bgv)
@@ -363,6 +535,17 @@ def finish(report, directory: Optional[Path], out, usage: bool = False) -> int:
         print("  " + record.splitlines()[0].strip(), file=out)
     if "log" in report:
         print("TRUFFLE_ROOT_DIAGNOSTIC_LOG=%s" % report["log"], file=out)
+    if report["result"] == NOT_FOUND:
+        print(
+            "TRUFFLE_ROOT_COMPILATION_EVENTS=%d"
+            % report.get("compilation_events_seen", 0),
+            file=out,
+        )
+        print(
+            "TRUFFLE_ROOT_CATALOG_OCCURRENCES=%d"
+            % report.get("selected_root_catalog_occurrences", 0),
+            file=out,
+        )
     for problem in report["problems"]:
         print("  " + problem, file=out)
     if usage:
@@ -379,7 +562,7 @@ def finish(report, directory: Optional[Path], out, usage: bool = False) -> int:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=("catalog", "diagnose"))
+    parser.add_argument("command", choices=("catalog", "diagnose", "probe"))
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--java", default=None)
     parser.add_argument("--timeout", type=int, default=3600, help="JVM timeout in seconds")
@@ -400,6 +583,12 @@ def main(argv=None) -> int:
     artifacts = args.artifacts if args.artifacts.is_absolute() else root / args.artifacts
     if args.command == "catalog":
         return catalog(root, java, test_arguments, args.timeout, artifacts)
+    if args.command == "probe":
+        if test_arguments:
+            parser.error(
+                "probe runs an internal controlled guest program and accepts no --case arguments"
+            )
+        return probe(root, java, args.timeout, artifacts)
     return diagnose(root, java, args.selector, args.expansion, args.dump_level, test_arguments,
                     args.timeout, artifacts)
 
