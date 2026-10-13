@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.343-SNAPSHOT
+
+- `I095` (#878) / `PERF041` (#863): checkpoint experimental
+  canonical Boolean `ifTrue` control lowering and Closure callback inlining.
+  - Introduce compiler-side canonical Boolean control specialization,
+    constant folding and direct emission of eligible literal callback bodies.
+  - Preserve ordinary overridable message semantics, evaluation order,
+    selected-only invocation and the established B-prime fallback.
+  - Extend NORMAL-mode inline lowering to callback-owned scalar bindings
+    and proven direct-parent lexical captures, including reads and writes.
+  - Preserve lexical ownership, shadowing and D179 presence semantics;
+    retain generic execution wherever the required proof is unavailable.
+  - Preserve DEBUG behavior and project virtual inline callback bindings
+    through Truffle debugger scopes without requiring a physical callback
+    activation in the NORMAL path.
+  - Extend regression coverage for semantic behavior, bytecode topology,
+    captured bindings, debugger scopes and DAP integration.
+  - Reconcile TEST009-C Bytecode API and TEST009-D generated-dispatch
+    PE-safety baselines with the validated implementation.
+  - Leave I095 open pending investigation of general Closure inlining,
+    activation elimination and matched graph/performance evidence.
+
 ## 0.3.342-SNAPSHOT
 
 - `PERF040` (#862): specialize canonical primitive numeric arithmetic without

@@ -246,16 +246,22 @@ final class ProtosI026EScopeTest {
                         .toList();
 
         assertEquals(
-                1,
+                2,
                 instanceFields.size(),
-                "scope retains only its Activation");
+                "scope retains its Activation and one virtual callback binding snapshot");
 
-        assertTrue(
-                instanceFields.stream()
-                        .allMatch(
-                                field ->
-                                        field.getType()
-                                                == ProtosActivation.class));
+        assertTrue(instanceFields.stream().allMatch(
+                field -> Modifier.isFinal(field.getModifiers())),
+                "scope must not acquire mutable registry or frame references");
+        assertTrue(instanceFields.stream().anyMatch(
+                field -> field.getType() == ProtosActivation.class));
+        assertTrue(instanceFields.stream().anyMatch(
+                field -> field.getName().equals("inlineCallbackBindings")
+                        && field.getType() == java.util.Map.class));
+        assertTrue(Arrays.stream(ProtosDebuggerScope.class.getDeclaredFields())
+                .noneMatch(field -> Modifier.isStatic(field.getModifiers())
+                        && java.util.Map.class.isAssignableFrom(field.getType())),
+                "no global scope binding registry is allowed");
     }
 
     private List<String> memberNames(Object scope) throws Exception {

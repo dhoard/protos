@@ -242,6 +242,28 @@ final class CanonicalToBytecodeLowerer {
     private java.util.Set<String> currentRootScalarLocals =
             java.util.Set.of();
 
+    /*
+     * I095-B4: lowering-time marker for a physically inline
+     * zero-parameter callback whose reads were proven to belong
+     * to this root. It is saved/restored around the inline body.
+     */
+    private boolean currentNormalDirectParentCaptureReads;
+
+    /*
+     * I095-B6a: independent, lexically scoped Bytecode locals belonging to
+     * one NORMAL inline callback. Only the existing PERF034/036 straight-line
+     * scalar proof permits this lane. No callback invocation/activation is
+     * created, and none of these locals can alias a root binding by name.
+     */
+    // Physical storage is in the parent root; lexical ownership remains the callback.
+    // Tooling uses this prefix to project a virtual callback scope on demand.
+    static final String NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX =
+            "i095CallbackScalar:";
+    private java.util.Map<String, BytecodeLocal> currentNormalCallbackScalarLocals =
+            java.util.Map.of();
+    private CanonicalBindingAnalysis currentNormalCallbackScalarAnalysis;
+    private CanonicalLexicalScope currentNormalCallbackScalarScope;
+
     /**
      * PLAT041 C′ lowering-time source of the current {@link
      * com.guillermomolina.protos.runtime.ProtosActivation} consumed by {@link
@@ -1543,7 +1565,8 @@ final class CanonicalToBytecodeLowerer {
      * the root being lowered (outside any inline activation region).
      */
     private boolean isScalarLocalRead(CanonicalLookup lookup) {
-        return currentActivationLocal == null
+        return currentNormalCallbackScalarLocals.isEmpty()
+                && currentActivationLocal == null
                 && currentRootScalarLocals.contains(lookup.name());
     }
 
@@ -3711,6 +3734,26 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (!currentNormalCallbackScalarLocals.isEmpty()) {
+            BytecodeLocal own = currentNormalCallbackScalarLocals.get(create.name());
+            CanonicalBindingIdentity identity =
+                    currentNormalCallbackScalarAnalysis.identityOf(create).orElse(null);
+            if (create.target().isPresent()
+                    || own == null
+                    || identity == null
+                    || identity.owner() != currentNormalCallbackScalarScope) {
+                throw new AssertionError(
+                        "I095-B6a unproven callback creation: " + create.name());
+            }
+            builder.beginStoreLocal(own);
+            emitExpression(builder, create.value());
+            builder.endStoreLocal();
+
+            builder.beginStoreLocal(result);
+            builder.emitLoadLocal(own);
+            builder.endStoreLocal();
+            return;
+        }
         boolean scalarCreate =
                 create.target().isEmpty()
                         && currentActivationLocal == null
@@ -3830,6 +3873,28 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (!currentNormalCallbackScalarLocals.isEmpty()
+                && currentNormalCallbackScalarLocals.containsKey(assign.name())) {
+            BytecodeLocal own = currentNormalCallbackScalarLocals.get(assign.name());
+            CanonicalBindingResolution resolution =
+                    currentNormalCallbackScalarAnalysis.resolutionOf(assign)
+                            .orElse(null);
+            if (assign.target().isPresent()
+                    || own == null
+                    || !(resolution instanceof CanonicalBindingResolution.Resolved resolved)
+                    || resolved.identity().owner() != currentNormalCallbackScalarScope) {
+                throw new AssertionError(
+                        "I095-B6a unproven callback assignment: " + assign.name());
+            }
+            builder.beginStoreLocal(own);
+            emitExpression(builder, assign.value());
+            builder.endStoreLocal();
+
+            builder.beginStoreLocal(result);
+            builder.emitLoadLocal(own);
+            builder.endStoreLocal();
+            return;
+        }
         if (isScalarLocalAssign(assign)) {
             emitScalarAssign(
                     builder, assign, result, preparedCall, childResult, resumeValue);
@@ -3846,7 +3911,8 @@ final class CanonicalToBytecodeLowerer {
      * #scalarLocalNamesForRoot}.
      */
     private boolean isScalarLocalAssign(CanonicalAssign assign) {
-        return assign.target().isEmpty()
+        return currentNormalCallbackScalarLocals.isEmpty()
+                && assign.target().isEmpty()
                 && currentActivationLocal == null
                 && currentRootScalarLocals.contains(assign.name());
     }
@@ -3915,6 +3981,41 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal capturedOwnerLocal =
                 capturedResolution.map(this::capturedOwnerBytecodeLocal).orElse(null);
         BytecodeLocal currentFrameLocal = currentResolvedAssignmentBytecodeLocal(assign);
+
+        /*
+         * I095-B5: the captured destination was proven to
+         * belong to this exact physical root.
+         *
+         * The existing root operations preserve destination
+         * selection before evaluation of the RHS.
+         */
+        if (currentNormalDirectParentCaptureReads
+                && capturedResolution.isPresent()) {
+            CanonicalBindingResolution.CapturedResolved captured =
+                    capturedResolution.orElseThrow();
+
+            if (captured.lexicalDepth() != 1
+                    || captured.identity().owner() != currentRootTopScope
+                    || !captured.identity().name().equals(assign.name())
+                    || currentRootFrameLayout == null) {
+                throw new AssertionError(
+                        "I095-B5 unproven captured assignment: "
+                                + assign.name());
+            }
+
+            currentFrameLocal =
+                    currentRootFrameLocals.get(assign.name());
+
+            if (currentFrameLocal == null
+                    || currentRootFrameLayout.offsetOf(assign.name())
+                            == null) {
+                throw new AssertionError(
+                        "I095-B5 missing parent frame local: "
+                                + assign.name());
+            }
+
+            capturedResolution = java.util.Optional.empty();
+        }
 
         if (assign.target().isPresent()) {
             BytecodeLocal rawTarget = builder.createLocal("assignRawTarget", null);
@@ -4720,11 +4821,25 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal nativeIfTrue = null;
         if (tryNativeIfTrue) {
             nativeIfTrue = builder.createLocal("defaultNativeIfTrue", null);
-            builder.beginStoreLocal(nativeIfTrue);
-            emitNativeIfTrueCandidate(
-                    builder, receiverValue, spreadArguments, suppliedVector,
-                    spreadArguments ? null : argumentValues.get(0), null);
-            builder.endStoreLocal();
+
+            if (!spreadArguments && !currentInlineCallbackFrameNative) {
+                emitCanonicalIfTrueOneCandidate(
+                        builder,
+                        receiver,
+                        receiverValue,
+                        argumentValues.get(0),
+                        null,
+                        nativeIfTrue);
+            } else {
+                emitNativeIfTrueCandidate(
+                        builder,
+                        receiverValue,
+                        spreadArguments,
+                        suppliedVector,
+                        spreadArguments ? null : argumentValues.get(0),
+                        null,
+                        nativeIfTrue);
+            }
 
             builder.beginIfThenElse();
             builder.beginIsCompactCanonicalBooleanMiss();
@@ -5519,6 +5634,59 @@ final class CanonicalToBytecodeLowerer {
      * retained, B-prime admission is unchanged, and no callback
      * RootCallTarget/FrameInstance is fabricated.
      */
+    /*
+     * I095-B1: shared emission of the complete canonical body.
+     *
+     * B-prime owns a prepared callback and binds its parameters.
+     * The activation-transparent lane has a proven zero-argument
+     * block and needs neither parameter binding nor a carrier.
+     *
+     * All statements, including ordinary sends and their
+     * continuations, use the existing canonical Bytecode lowering.
+     */
+    private void emitInlinedClosureBodyStatements(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalClosure definition,
+            BytecodeLocal result,
+            boolean bindParameters) {
+        if (bindParameters) {
+            emitClosureParameterBindings(
+                    builder, definition, null, null, null, null);
+        }
+
+        if (definition.body().expressions().isEmpty()) {
+            emitStoreConstant(
+                    builder, result, ProtosNullValue.INSTANCE);
+        } else if (!bindParameters
+                && definition.body().expressions().size() > 1
+                && definition.body().expressions().subList(
+                        0,
+                        definition.body().expressions().size() - 1
+                ).stream().allMatch(
+                        this::isNormalPureControlExpression)
+                && isDirectTerminalValue(
+                        definition.body().expressions().get(
+                                definition.body().expressions().size() - 1))
+                && !requiresComposedInvocation(
+                        definition.body().expressions().get(
+                                definition.body().expressions().size() - 1))) {
+            /*
+             * Preserve A3's dead-prefix elimination.
+             * This is an optimization AFTER block admission,
+             * not the criterion deciding inlineability.
+             */
+            builder.beginStoreLocal(result);
+            emitExpression(
+                    builder,
+                    definition.body().expressions().get(
+                            definition.body().expressions().size() - 1));
+            builder.endStoreLocal();
+        } else {
+            emitStatementsToLocal(
+                    builder, definition.body(), result);
+        }
+    }
+
     private void emitInlineLiteralCallback(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition,
@@ -5623,24 +5791,8 @@ final class CanonicalToBytecodeLowerer {
                 currentRootIndexedParameterLayout = null;
             }
 
-            emitClosureParameterBindings(
-                    builder,
-                    definition,
-                    null,
-                    null,
-                    null,
-                    null);
-
-            if (definition.body().expressions().isEmpty()) {
-                builder.beginStoreLocal(bodyResult);
-                builder.emitLoadConstant(ProtosNullValue.INSTANCE);
-                builder.endStoreLocal();
-            } else {
-                emitStatementsToLocal(
-                        builder,
-                        definition.body(),
-                        bodyResult);
-            }
+            emitInlinedClosureBodyStatements(
+                    builder, definition, bodyResult, true);
         } finally {
             currentRootAnalysis = savedAnalysis;
             currentRootTopScope = savedTopScope;
@@ -6031,6 +6183,75 @@ final class CanonicalToBytecodeLowerer {
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup,
             boolean carrierOperand) {
+        if (!currentNormalCallbackScalarLocals.isEmpty()
+                && currentNormalCallbackScalarLocals.containsKey(lookup.name())) {
+            CanonicalBindingResolution resolution =
+                    currentNormalCallbackScalarAnalysis.resolutionOf(lookup)
+                            .orElse(null);
+            BytecodeLocal own = currentNormalCallbackScalarLocals.get(lookup.name());
+            if (own == null
+                    || !(resolution instanceof CanonicalBindingResolution.Resolved resolved)
+                    || resolved.identity().owner() != currentNormalCallbackScalarScope) {
+                throw new AssertionError(
+                        "I095-B6a unproven callback lookup: " + lookup.name());
+            }
+            builder.emitLoadLocal(own);
+            return;
+        }
+        if (currentNormalDirectParentCaptureReads) {
+            /*
+             * The admitted lookup originally had lexical depth one
+             * because it lived in a callback invocation. That
+             * invocation has been eliminated physically, so read
+             * its proven owner directly from the enclosing root.
+             *
+             * ReadRootFrameLocal retains D179 presence handling and
+             * the same private numeric-carrier contract.
+             */
+            CanonicalBindingResolution resolution =
+                    currentRootAnalysis == null
+                            ? null
+                            : currentRootAnalysis.resolutionOf(lookup)
+                                    .orElse(null);
+
+            if (!(resolution
+                    instanceof CanonicalBindingResolution.CapturedResolved
+                            captured)
+                    || captured.identity().owner() != currentRootTopScope
+                    || captured.lexicalDepth() != 1
+                    || currentRootFrameLayout == null) {
+                throw new AssertionError(
+                        "I095-B4 admitted an unproven captured lookup: "
+                                + lookup.name());
+            }
+
+            String name = captured.identity().name();
+            BytecodeLocal owner = currentRootFrameLocals.get(name);
+            Integer ordinal = currentRootFrameLayout.offsetOf(name);
+
+            if (owner == null || ordinal == null) {
+                throw new AssertionError(
+                        "I095-B4 captured owner has no root frame local: "
+                                + name);
+            }
+
+            if (!carrierOperand) {
+                builder.beginMaterializePrimitiveNumericCarrier();
+            }
+
+            builder.beginReadRootFrameLocal(
+                    owner,
+                    currentRootFrameLayout.presentContinuityAt(ordinal));
+            builder.emitLoadConstant(name);
+            builder.endReadRootFrameLocal();
+
+            if (!carrierOperand) {
+                builder.emitLoadConstant(true);
+                builder.endMaterializePrimitiveNumericCarrier();
+            }
+            return;
+        }
+
         if (currentRootAnalysis != null) {
             java.util.Optional<CanonicalBindingResolution> resolution =
                     currentRootAnalysis.resolutionOf(lookup);
@@ -6463,47 +6684,188 @@ final class CanonicalToBytecodeLowerer {
                 && ProtosObjectValue.rootObject().isFrozen();
     }
 
-    /** Emits the native ifTrue candidate; see TryCompactCanonicalBooleanOne. */
+    /**
+     * PERF041-D1: the ordinary non-inline One site classifies a
+     * canonical receiver before preparing any callback.
+     *
+     * Receiver and argument staging have already completed.
+     */
+    private void emitCanonicalIfTrueOneCandidate(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression sourceReceiver,
+            BytecodeLocal receiverValue,
+            BytecodeLocal argument,
+            ProtosClosureExecutionPlanCell literalPlan,
+            BytecodeLocal candidate) {
+
+        /*
+         * I095-A1: after frozen-standard-control admission, a
+         * canonical Boolean literal cannot miss this native path.
+         *
+         * Source arguments have already been evaluated in order.
+         * This changes physical classification only; the selected
+         * callback still follows the established B-prime protocol.
+         */
+        if (sourceReceiver instanceof CanonicalLiteral literal) {
+            if (literal.kind() == CanonicalLiteral.Kind.FALSE) {
+                emitStoreConstant(
+                        builder, candidate, ProtosNullValue.INSTANCE);
+                return;
+            }
+
+            if (literal.kind() == CanonicalLiteral.Kind.TRUE) {
+                builder.beginStoreLocal(candidate);
+                builder.beginPrepareCanonicalIfTrueCallback();
+                emitSendCallerOperand(builder);
+                builder.emitLoadLocal(argument);
+                builder.emitLoadConstant(
+                        literalPlan == null
+                                ? ProtosNullValue.INSTANCE
+                                : literalPlan);
+                builder.endPrepareCanonicalIfTrueCallback();
+                builder.endStoreLocal();
+                return;
+            }
+        }
+
+        BytecodeLocal classification =
+                builder.createLocal("canonicalIfTrueClass", null);
+
+        builder.beginStoreLocal(classification);
+        builder.beginTryCompactCanonicalBooleanOne();
+        builder.emitLoadLocal(receiverValue);
+        builder.endTryCompactCanonicalBooleanOne();
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+        builder.beginIsCanonicalIfTrueTrue();
+        builder.emitLoadLocal(classification);
+        builder.endIsCanonicalIfTrueTrue();
+
+        // TRUE: only this branch prepares a callback and observes caller.
+        builder.beginBlock();
+        builder.beginStoreLocal(candidate);
+        builder.beginPrepareCanonicalIfTrueCallback();
+        emitSendCallerOperand(builder);
+        builder.emitLoadLocal(argument);
+        builder.emitLoadConstant(
+                literalPlan == null ? ProtosNullValue.INSTANCE : literalPlan);
+        builder.endPrepareCanonicalIfTrueCallback();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        // FALSE -> guest null; MISS -> Java null for ordinary dispatch.
+        builder.beginBlock();
+        builder.beginStoreLocal(candidate);
+        builder.beginCanonicalIfTrueNonTrueResult();
+        builder.emitLoadLocal(classification);
+        builder.endCanonicalIfTrueNonTrueResult();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.endIfThenElse();
+    }
+
+    /**
+     * Existing spread and frame-native canonical Boolean candidates.
+     */
+    /**
+     * PERF041-D2: primitive classification and deferred callback
+     * preparation for spread and frame-native Boolean sends.
+     *
+     * Ordinary One is handled by emitCanonicalIfTrueOneCandidate.
+     */
     private void emitNativeIfTrueCandidate(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             BytecodeLocal receiverValue,
             boolean spreadArguments,
             BytecodeLocal suppliedVector,
             BytecodeLocal argument,
-            ProtosClosureExecutionPlanCell literalPlan) {
+            ProtosClosureExecutionPlanCell literalPlan,
+            BytecodeLocal candidate) {
+
+        BytecodeLocal classification =
+                builder.createLocal("canonicalIfTrueClass", null);
+
+        builder.beginStoreLocal(classification);
+
         if (spreadArguments) {
             if (currentInlineCallbackFrameNative) {
-                builder.beginTryCompactCanonicalBooleanInlineVector(
-                        currentRootFrameNativeLocals, currentRootFrameNativeLayout);
+                builder.beginTryCompactCanonicalBooleanInlineVector();
             } else {
                 builder.beginTryCompactCanonicalBooleanVector();
             }
+
             builder.emitLoadLocal(receiverValue);
-            emitSendCallerOperand(builder);
             builder.emitLoadLocal(suppliedVector);
+
             if (currentInlineCallbackFrameNative) {
                 builder.endTryCompactCanonicalBooleanInlineVector();
             } else {
                 builder.endTryCompactCanonicalBooleanVector();
             }
-            return;
-        }
-        if (currentInlineCallbackFrameNative) {
-            builder.beginTryCompactCanonicalBooleanInlineOne(
-                    currentRootFrameNativeLocals, currentRootFrameNativeLayout);
         } else {
-            builder.beginTryCompactCanonicalBooleanOne();
-        }
-        builder.emitLoadLocal(receiverValue);
-        emitSendCallerOperand(builder);
-        builder.emitLoadLocal(argument);
-        builder.emitLoadConstant(
-                literalPlan == null ? ProtosNullValue.INSTANCE : literalPlan);
-        if (currentInlineCallbackFrameNative) {
+            if (!currentInlineCallbackFrameNative) {
+                throw new AssertionError(
+                        "Ordinary One uses its dedicated classifier");
+            }
+
+            builder.beginTryCompactCanonicalBooleanInlineOne();
+            builder.emitLoadLocal(receiverValue);
             builder.endTryCompactCanonicalBooleanInlineOne();
-        } else {
-            builder.endTryCompactCanonicalBooleanOne();
         }
+
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+        builder.beginIsCanonicalIfTrueTrue();
+        builder.emitLoadLocal(classification);
+        builder.endIsCanonicalIfTrueTrue();
+
+        // TRUE: prepare a callback only after canonical selection.
+        builder.beginBlock();
+        builder.beginStoreLocal(candidate);
+
+        if (currentInlineCallbackFrameNative) {
+            if (spreadArguments) {
+                builder.beginPrepareCanonicalIfTrueInlineVectorCallback(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+                emitSendCallerOperand(builder);
+                builder.emitLoadLocal(suppliedVector);
+                builder.endPrepareCanonicalIfTrueInlineVectorCallback();
+            } else {
+                builder.beginPrepareCanonicalIfTrueInlineCallback(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+                emitSendCallerOperand(builder);
+                builder.emitLoadLocal(argument);
+                builder.emitLoadConstant(
+                        literalPlan == null
+                                ? ProtosNullValue.INSTANCE
+                                : literalPlan);
+                builder.endPrepareCanonicalIfTrueInlineCallback();
+            }
+        } else {
+            builder.beginPrepareCanonicalIfTrueVectorCallback();
+            emitSendCallerOperand(builder);
+            builder.emitLoadLocal(suppliedVector);
+            builder.endPrepareCanonicalIfTrueVectorCallback();
+        }
+
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        // FALSE or MISS: no callback preparation or caller observation.
+        builder.beginBlock();
+        builder.beginStoreLocal(candidate);
+        builder.beginCanonicalIfTrueNonTrueResult();
+        builder.emitLoadLocal(classification);
+        builder.endCanonicalIfTrueNonTrueResult();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.endIfThenElse();
     }
 
     /** Native hit of an ifTrue site without an inline literal candidate. */
@@ -6584,16 +6946,21 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal structuredBoolean =
                 builder.createLocal("ifTrueSiteBoolean", null);
         BytecodeLocal child = builder.createLocal("ifTrueSiteChild", null);
+        BytecodeLocal genericMiss = builder.createLocal("ifTrueSiteGenericMiss", null);
 
         builder.beginBlock();
         emitStoreConstant(builder, outer, ProtosNullValue.INSTANCE);
         emitStoreConstant(builder, inlineChild, ProtosNullValue.INSTANCE);
 
-        // Generic selection: same lifecycle position as the ordinary send.
-        builder.beginIfThenElse();
+        builder.beginStoreLocal(genericMiss);
         builder.beginIsCompactCanonicalBooleanMiss();
         builder.emitLoadLocal(compact);
         builder.endIsCompactCanonicalBooleanMiss();
+        builder.endStoreLocal();
+
+        // Generic selection: same lifecycle position as the ordinary send.
+        builder.beginIfThen();
+        builder.emitLoadLocal(genericMiss);
         builder.beginBlock();
         builder.beginStoreLocal(preparedCall);
         beginPrepareSend(builder, 1);
@@ -6604,9 +6971,7 @@ final class CanonicalToBytecodeLowerer {
         endPrepareSend(builder, 1);
         builder.endStoreLocal();
         builder.endBlock();
-        builder.beginBlock();
-        builder.endBlock();
-        builder.endIfThenElse();
+        builder.endIfThen();
 
         builder.beginTryFinally(
                 () -> {
@@ -6617,9 +6982,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
 
         builder.beginIfThenElse();
-        builder.beginIsCompactCanonicalBooleanMiss();
-        builder.emitLoadLocal(compact);
-        builder.endIsCompactCanonicalBooleanMiss();
+        builder.emitLoadLocal(genericMiss);
 
         // Generic: emitLocalBooleanInvocation, with admission deferred.
         builder.beginBlock();
@@ -6725,7 +7088,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endIfThenElse();
 
         // The site's only inline callback region.
-        builder.beginIfThenElse();
+        builder.beginIfThen();
         builder.beginIsNativeIfTrueInlineCallback();
         builder.emitLoadLocal(inlineChild);
         builder.endIsNativeIfTrueInlineCallback();
@@ -6733,9 +7096,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
         emitInlineLiteralCallback(builder, definition, inlineChild, childResult);
         builder.beginIfThenElse();
-        builder.beginIsCompactCanonicalBooleanMiss();
-        builder.emitLoadLocal(compact);
-        builder.endIsCompactCanonicalBooleanMiss();
+        builder.emitLoadLocal(genericMiss);
         builder.beginBlock();
         builder.beginStoreLocal(result);
         builder.beginFinishStructuredBooleanCallback();
@@ -6749,10 +7110,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
         builder.endIfThenElse();
         builder.endBlock();
-
-        builder.beginBlock();
-        builder.endBlock();
-        builder.endIfThenElse();
+        builder.endIfThen();
 
         builder.endBlock();
         builder.endTryFinally();
@@ -6770,6 +7128,11 @@ final class CanonicalToBytecodeLowerer {
                 childResult, resumeValue, false);
     }
 
+    /*
+     * I095-A2: open-code an admitted constant Boolean-control site
+     * in NORMAL mode. The existing path is retained independently
+     * for DEBUG and for all non-admitted sends.
+     */
     private void emitComposedSend(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
@@ -6786,6 +7149,331 @@ final class CanonicalToBytecodeLowerer {
                     "Bytecode send result/scratch locals were not allocated");
         }
 
+        if (admitsNormalConstantIfTrue(send)) {
+            builder.beginIfThenElse();
+            builder.emitIsNormalExecutionMode();
+
+            builder.beginBlock();
+            emitNormalConstantIfTrue(builder, send, result);
+            builder.endBlock();
+
+            builder.beginBlock();
+            emitComposedSendUnfolded(
+                    builder, send, result, preparedCall,
+                    childResult, resumeValue, primitiveCarrierResult);
+            builder.endBlock();
+
+            builder.endIfThenElse();
+            return;
+        }
+
+        emitComposedSendUnfolded(
+                builder, send, result, preparedCall,
+                childResult, resumeValue, primitiveCarrierResult);
+    }
+
+    /*
+     * A constant receiver is insufficient by itself: the selected
+     * callback must have a body whose execution is independent of
+     * lexical activation, invocation state and contextual authority.
+     *
+     * The frozen standard-control publication proves that the
+     * ordinary canonical Boolean selector has its standard meaning.
+     */
+    /*
+     * I095-A3: a canonical FALSE receiver never invokes its
+     * supplied callback. The source argument must be a literal
+     * Closure so omitting its physical materialization cannot
+     * suppress an argument-producing expression's side effects.
+     *
+     * TRUE admits a parameterless Closure containing only
+     * effect-free canonical literals. Discarded prefix values
+     * cannot affect the result or execution state.
+     */
+    /*
+     * I095-B1: admission belongs to the entire callback
+     * activation, not to individual expression categories.
+     *
+     * A canonical FALSE never enters the callback.
+     *
+     * For TRUE, this first activation-transparent lane accepts
+     * any body whose own lexical scope, return home and context
+     * authority are unobservable. Its statements are lowered
+     * through the existing general Bytecode DSL machinery.
+     *
+     * A failed proof retains the established B-prime path.
+     */
+    private boolean admitsNormalConstantIfTrue(CanonicalSend send) {
+        if (currentInlineCallbackFrameNative
+                || currentActivationLocal != null
+                || !admitsNativeIfTrue(send, false)
+                || send.arguments().size() != 1
+                || !(send.receiver() instanceof CanonicalLiteral receiver)
+                || (receiver.kind() != CanonicalLiteral.Kind.TRUE
+                        && receiver.kind() != CanonicalLiteral.Kind.FALSE)
+                || !(send.arguments().get(0)
+                        instanceof CanonicalClosure closure)) {
+            return false;
+        }
+
+        if (receiver.kind() == CanonicalLiteral.Kind.FALSE) {
+            return true;
+        }
+
+        if (!closure.parameters().isEmpty()
+                || CanonicalReturnHomeAnalysis.mayObserveReturnHome(
+                        closure)) {
+            return false;
+        }
+
+        CanonicalBindingAnalysis analysis =
+                CanonicalBindingAnalyzer.analyzeClosure(closure);
+        CanonicalLexicalScope scope =
+                analysis.scopeOf(closure).orElseThrow();
+
+        java.util.Set<String> scalarNames = scalarLocalNamesForRoot(
+                closure.body(), closure, analysis, scope);
+        boolean ownScalarBindings =
+                !scope.declaredNames().isEmpty()
+                        && scalarNames.equals(scope.declaredNames());
+        boolean noOwnBindingsAndProvenCaptures =
+                scope.declaredNames().isEmpty()
+                        && analysis.admitsDirectParentCaptures(
+                                currentRootAnalysis,
+                                currentRootTopScope,
+                                currentRootFrameLocals.keySet(),
+                                currentRootFrameLayout != null);
+
+        boolean mixedOwnBindingsAndParentCaptures =
+                !scope.declaredNames().isEmpty()
+                        && admitsNormalMixedCallbackOwnCreations(
+                                closure.body(), analysis, scope)
+                        && analysis.admitsOwnBindingsAndDirectParentCaptures(
+                                currentRootAnalysis,
+                                scope,
+                                currentRootTopScope,
+                                currentRootFrameLocals.keySet(),
+                                currentRootFrameLayout != null);
+
+        return (ownScalarBindings
+                        || noOwnBindingsAndProvenCaptures
+                        || mixedOwnBindingsAndParentCaptures)
+                && !requiresPersistentFrameAuthority(
+                        closure.body(), closure, analysis, scope);
+    }
+
+    /**
+     * I095-B6b: prove that every own binding is created once, at top level,
+     * before any admitted own read or write. The isolated binding analysis
+     * supplies presence proof for reads/writes; the exact create-site count
+     * excludes hidden creations inside an operand. Direct owner creation and
+     * assignment deliberately remain scalar-value-shaped in this slice.
+     * All other statements can use the existing general body lowering.
+     */
+    private static boolean admitsNormalMixedCallbackOwnCreations(
+            CanonicalSequence body,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        java.util.LinkedHashSet<String> established =
+                new java.util.LinkedHashSet<>();
+        int createSites = 0;
+        for (CanonicalExpression expression : body.expressions()) {
+            if (expression instanceof CanonicalCreate create) {
+                if (create.target().isPresent()
+                        || !(create.value() instanceof CanonicalLiteral
+                                || (create.value() instanceof CanonicalLookup read
+                                        && readsEstablishedScalar(
+                                                read, analysis, scope, established)))
+                        || analysis.identityOf(create)
+                                .map(identity -> identity.owner() != scope
+                                        || !identity.name().equals(create.name()))
+                                .orElse(true)
+                        || !established.add(create.name())) {
+                    return false;
+                }
+                createSites++;
+                continue;
+            }
+            if (expression instanceof CanonicalAssign assign) {
+                if (assign.target().isPresent()
+                        || containsMutationInMixedInlineOperand(assign.value())) {
+                    return false;
+                }
+                if (scope.declaresName(assign.name())
+                        && !(assign.value() instanceof CanonicalLiteral
+                                || (assign.value() instanceof CanonicalLookup read
+                                        && readsEstablishedScalar(
+                                                read, analysis, scope, established)))) {
+                    return false;
+                }
+                continue;
+            }
+            if (containsMutationInMixedInlineOperand(expression)) {
+                return false;
+            }
+        }
+        return !established.isEmpty()
+                && established.equals(scope.declaredNames())
+                && analysis.lexicalCreateSiteCount() == createSites;
+    }
+
+    /** Reject nested binding mutations; ordinary side-effectful sends stay allowed. */
+    private static boolean containsMutationInMixedInlineOperand(
+            CanonicalExpression expression) {
+        return switch (expression) {
+            case CanonicalCreate ignored -> true;
+            case CanonicalMultipleCreate ignored -> true;
+            case CanonicalAssign ignored -> true;
+            case CanonicalIndexedAssign ignored -> true;
+            case CanonicalClosure ignored -> true;
+            case CanonicalObject ignored -> true;
+            case CanonicalCompose ignored -> true;
+            case CanonicalSequence sequence ->
+                    sequence.expressions().stream()
+                            .anyMatch(CanonicalToBytecodeLowerer::containsMutationInMixedInlineOperand);
+            case CanonicalCall call ->
+                    containsMutationInMixedInlineOperand(call.receiver())
+                            || call.arguments().stream().anyMatch(
+                                    CanonicalToBytecodeLowerer::containsMutationInMixedInlineOperand);
+            case CanonicalSend send ->
+                    containsMutationInMixedInlineOperand(send.receiver())
+                            || send.arguments().stream().anyMatch(
+                                    CanonicalToBytecodeLowerer::containsMutationInMixedInlineOperand);
+            case CanonicalSuperSend send ->
+                    send.arguments().stream().anyMatch(
+                            CanonicalToBytecodeLowerer::containsMutationInMixedInlineOperand);
+            case CanonicalMember member ->
+                    containsMutationInMixedInlineOperand(member.receiver());
+            case CanonicalIdentity identity ->
+                    containsMutationInMixedInlineOperand(identity.left())
+                            || containsMutationInMixedInlineOperand(identity.right());
+            case CanonicalNotIdentity identity ->
+                    containsMutationInMixedInlineOperand(identity.left())
+                            || containsMutationInMixedInlineOperand(identity.right());
+            case CanonicalDerivedInequality inequality ->
+                    containsMutationInMixedInlineOperand(inequality.left())
+                            || containsMutationInMixedInlineOperand(inequality.right());
+            case CanonicalMapConstruction map ->
+                    containsMutationInMixedInlineOperand(map.factory())
+                            || map.entries().stream().anyMatch(entry ->
+                                    containsMutationInMixedInlineOperand(entry.key())
+                                            || containsMutationInMixedInlineOperand(entry.value()));
+            case CanonicalReturn result ->
+                    containsMutationInMixedInlineOperand(result.value());
+            case CanonicalSpread spread ->
+                    containsMutationInMixedInlineOperand(spread.expression());
+            case CanonicalIntrinsic ignored -> false;
+            case CanonicalLiteral ignored -> false;
+            case CanonicalLookup ignored -> false;
+        };
+    }
+
+    private boolean isNormalPureControlExpression(
+            CanonicalExpression expression) {
+        if (expression instanceof CanonicalLiteral literal) {
+            return switch (literal.kind()) {
+                case TRUE, FALSE, NULL -> true;
+                case NUMBER ->
+                        !(numberLiteralDescriptor(literal)
+                                instanceof BigInteger);
+                case STRING -> false;
+            };
+        }
+
+        if (expression instanceof CanonicalIdentity identity) {
+            return isNormalPureControlExpression(identity.left())
+                    && isNormalPureControlExpression(identity.right());
+        }
+
+        if (expression instanceof CanonicalNotIdentity identity) {
+            return isNormalPureControlExpression(identity.left())
+                    && isNormalPureControlExpression(identity.right());
+        }
+
+        return false;
+    }
+
+    private void emitNormalConstantIfTrue(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal result) {
+        CanonicalLiteral receiver =
+                (CanonicalLiteral) send.receiver();
+        CanonicalClosure closure =
+                (CanonicalClosure) send.arguments().get(0);
+
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+
+        if (receiver.kind() == CanonicalLiteral.Kind.FALSE) {
+            emitStoreConstant(
+                    builder, result, ProtosNullValue.INSTANCE);
+        } else {
+            SourceSpan bodySpan = closure.body().span();
+            builder.beginSourceSection(
+                    bodySpan.startOffset(), bodySpan.length());
+            builder.beginTag(StandardTags.RootTag.class);
+            builder.beginBlock();
+
+            boolean savedDirectParentReads =
+                    currentNormalDirectParentCaptureReads;
+            java.util.Map<String, BytecodeLocal> savedCallbackScalars =
+                    currentNormalCallbackScalarLocals;
+            CanonicalBindingAnalysis savedCallbackScalarAnalysis =
+                    currentNormalCallbackScalarAnalysis;
+            CanonicalLexicalScope savedCallbackScalarScope =
+                    currentNormalCallbackScalarScope;
+            try {
+                CanonicalBindingAnalysis callbackAnalysis =
+                        CanonicalBindingAnalyzer.analyzeClosure(closure);
+                CanonicalLexicalScope callbackScope =
+                        callbackAnalysis.scopeOf(closure).orElseThrow();
+                if (!callbackScope.declaredNames().isEmpty()) {
+                    java.util.Set<String> admitted = scalarLocalNamesForRoot(
+                            closure.body(), closure, callbackAnalysis, callbackScope);
+                    if (!admitted.equals(callbackScope.declaredNames())
+                            && !admitsNormalMixedCallbackOwnCreations(
+                                    closure.body(), callbackAnalysis, callbackScope)) {
+                        throw new AssertionError(
+                                "I095-B6 inline callback lost its lexical proof");
+                    }
+                    java.util.LinkedHashMap<String, BytecodeLocal> own =
+                            new java.util.LinkedHashMap<>();
+                    for (String name : callbackScope.declaredNames()) {
+                        own.put(name, builder.createLocal(
+                                NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + name, null));
+                    }
+                    currentNormalCallbackScalarLocals = java.util.Map.copyOf(own);
+                    currentNormalCallbackScalarAnalysis = callbackAnalysis;
+                    currentNormalCallbackScalarScope = callbackScope;
+                }
+                currentNormalDirectParentCaptureReads = true;
+                emitInlinedClosureBodyStatements(
+                        builder, closure, result, false);
+            } finally {
+                currentNormalDirectParentCaptureReads = savedDirectParentReads;
+                currentNormalCallbackScalarLocals = savedCallbackScalars;
+                currentNormalCallbackScalarAnalysis = savedCallbackScalarAnalysis;
+                currentNormalCallbackScalarScope = savedCallbackScalarScope;
+            }
+
+            builder.endBlock();
+            builder.endTag(StandardTags.RootTag.class);
+            builder.endSourceSection();
+        }
+
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    private void emitComposedSendUnfolded(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
         CanonicalExpression receiver = send.receiver();
         boolean tryPrimitiveNumericSend = primitiveNumericSendCandidate(send);
         boolean stageReceiver = requiresComposedInvocation(receiver);
@@ -6975,14 +7663,25 @@ final class CanonicalToBytecodeLowerer {
             compactBooleanResult =
                     builder.createLocal("compactCanonicalBoolean", null);
 
-            builder.beginStoreLocal(compactBooleanResult);
-            emitNativeIfTrueCandidate(
-                    builder, receiverValue, spreadArguments, suppliedVector,
-                    spreadArguments ? null : argumentValues.get(0),
+            ProtosClosureExecutionPlanCell candidatePlan =
                     compactBooleanDefinition == null
                             ? null
-                            : bytecodeClosurePlans.get(compactBooleanDefinition));
-            builder.endStoreLocal();
+                            : bytecodeClosurePlans.get(compactBooleanDefinition);
+
+            if (!spreadArguments && !currentInlineCallbackFrameNative) {
+                emitCanonicalIfTrueOneCandidate(
+                        builder,
+                        receiver,
+                        receiverValue,
+                        argumentValues.get(0),
+                        candidatePlan,
+                        compactBooleanResult);
+            } else {
+                emitNativeIfTrueCandidate(
+                        builder, receiverValue, spreadArguments, suppliedVector,
+                        spreadArguments ? null : argumentValues.get(0),
+                        candidatePlan, compactBooleanResult);
+            }
 
             if (compactBooleanDefinition != null) {
                 emitCanonicalIfTrueLiteralSite(

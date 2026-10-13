@@ -78,6 +78,163 @@ final class CanonicalBindingAnalysis {
         return Collections.unmodifiableMap(new IdentityHashMap<>(source));
     }
 
+    /*
+     * I095-B1: an activation-transparent inline body cannot
+     * contain lexical binding sites belonging to the callback.
+     * Analyze the callback in isolation; do not accidentally
+     * include sites belonging to its enclosing module/root.
+     *
+     * This is a conservative whole-block eligibility proof,
+     * not a classification of expression or message types.
+     */
+    /*
+     * I095-B4: this callback may read the direct enclosing root
+     * without its own physical activation only when every lookup
+     * is statically captured from that exact root, at depth one.
+     *
+     * The isolated analysis supplies precisely this callback's
+     * lookup sites. The enclosing whole-tree analysis supplies
+     * their real lexical owners.
+     *
+     * All writes, creations, parameters, dynamic lookups and
+     * unknown/candidate resolutions remain on B-prime.
+     */
+    boolean admitsDirectParentCaptures(
+            CanonicalBindingAnalysis enclosing,
+            CanonicalLexicalScope parentScope,
+            java.util.Set<String> parentFrameNames,
+            boolean parentHasFrameLayout) {
+        if (!createIdentities.isEmpty()
+                || !multipleCreateIdentities.isEmpty()
+                || !parameterIdentities.isEmpty()) {
+            return false;
+        }
+
+        if (lookupResolutions.isEmpty()
+                && assignResolutions.isEmpty()) {
+            return true;
+        }
+
+        if (enclosing == null
+                || parentScope == null
+                || !parentHasFrameLayout) {
+            return false;
+        }
+
+        for (CanonicalLookup lookup : lookupResolutions.keySet()) {
+            CanonicalBindingResolution resolution =
+                    enclosing.resolutionOf(lookup).orElse(null);
+
+            if (!(resolution
+                    instanceof CanonicalBindingResolution.CapturedResolved
+                            captured)) {
+                return false;
+            }
+
+            if (captured.identity().owner() != parentScope
+                    || captured.lexicalDepth() != 1
+                    || !parentFrameNames.contains(
+                            captured.identity().name())) {
+                return false;
+            }
+        }
+
+        for (CanonicalAssign assign : assignResolutions.keySet()) {
+            if (assign.target().isPresent()) {
+                return false;
+            }
+
+            CanonicalBindingResolution resolution =
+                    enclosing.resolutionOf(assign).orElse(null);
+
+            if (!(resolution
+                    instanceof CanonicalBindingResolution.CapturedResolved
+                            captured)) {
+                return false;
+            }
+
+            if (captured.identity().owner() != parentScope
+                    || captured.lexicalDepth() != 1
+                    || !parentFrameNames.contains(
+                            captured.identity().name())) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * I095-B6b: a callback with its own local bindings may also reference
+     * statically established names owned by its immediate physical parent.
+     * Isolated analysis supplies callback-owned identities; enclosing analysis
+     * supplies the exact capture owner. Neither name spelling nor a candidate
+     * binding is sufficient evidence for the parent route.
+     */
+    boolean admitsOwnBindingsAndDirectParentCaptures(
+            CanonicalBindingAnalysis enclosing,
+            CanonicalLexicalScope ownScope,
+            CanonicalLexicalScope parentScope,
+            java.util.Set<String> parentFrameNames,
+            boolean parentHasFrameLayout) {
+        if (enclosing == null
+                || ownScope == null
+                || parentScope == null
+                || !parentHasFrameLayout
+                || !multipleCreateIdentities.isEmpty()
+                || !parameterIdentities.isEmpty()) {
+            return false;
+        }
+
+        for (CanonicalBindingIdentity identity : createIdentities.values()) {
+            if (identity.owner() != ownScope) {
+                return false;
+            }
+        }
+
+        for (var entry : lookupResolutions.entrySet()) {
+            CanonicalBindingResolution local = entry.getValue();
+            if (local instanceof CanonicalBindingResolution.Resolved resolved
+                    && resolved.identity().owner() == ownScope) {
+                continue;
+            }
+            if (!directParentCapture(
+                    enclosing.resolutionOf(entry.getKey()).orElse(null),
+                    parentScope, parentFrameNames)) {
+                return false;
+            }
+        }
+
+        for (var entry : assignResolutions.entrySet()) {
+            CanonicalBindingResolution local = entry.getValue();
+            if (local instanceof CanonicalBindingResolution.Resolved resolved
+                    && resolved.identity().owner() == ownScope) {
+                continue;
+            }
+            if (!directParentCapture(
+                    enclosing.resolutionOf(entry.getKey()).orElse(null),
+                    parentScope, parentFrameNames)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean directParentCapture(
+            CanonicalBindingResolution resolution,
+            CanonicalLexicalScope parentScope,
+            java.util.Set<String> parentFrameNames) {
+        return resolution
+                        instanceof CanonicalBindingResolution.CapturedResolved captured
+                && captured.identity().owner() == parentScope
+                && captured.lexicalDepth() == 1
+                && parentFrameNames.contains(captured.identity().name());
+    }
+
+    int lexicalCreateSiteCount() {
+        return createIdentities.size();
+    }
+
     CanonicalLexicalScope topScope() {
         return topScope;
     }

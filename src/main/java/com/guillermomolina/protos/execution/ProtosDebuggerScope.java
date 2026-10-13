@@ -33,6 +33,7 @@ import com.oracle.truffle.api.library.ExportMessage;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -45,12 +46,20 @@ import java.util.Optional;
 @ExportLibrary(InteropLibrary.class)
 final class ProtosDebuggerScope implements TruffleObject {
     private final ProtosActivation activation;
+    private final Map<String, Object> inlineCallbackBindings;
 
     ProtosDebuggerScope(ProtosActivation activation) {
-        this.activation =
-                Objects.requireNonNull(
-                        activation,
-                        "activation");
+        this(activation, Map.of());
+    }
+
+    /** Tooling-only virtual callback scope; no guest activation is constructed. */
+    ProtosDebuggerScope(
+            ProtosActivation activation,
+            Map<String, Object> inlineCallbackBindings) {
+        this.activation = Objects.requireNonNull(activation, "activation");
+        this.inlineCallbackBindings = java.util.Collections.unmodifiableMap(
+                new java.util.LinkedHashMap<>(Objects.requireNonNull(
+                        inlineCallbackBindings, "inlineCallbackBindings")));
     }
 
     @ExportMessage
@@ -112,6 +121,7 @@ final class ProtosDebuggerScope implements TruffleObject {
 
     private List<String> visibleNamesSnapshot() {
         ArrayList<String> names = new ArrayList<>();
+        names.addAll(inlineCallbackBindings.keySet());
 
         appendLocalNames(
                 activation.context(),
@@ -122,6 +132,10 @@ final class ProtosDebuggerScope implements TruffleObject {
             appendLocalNames(lexical, names);
         }
         appendReceiverDelegationNames(names);
+        if (!inlineCallbackBindings.isEmpty()) {
+            // The callback shadows a parent binding without duplicating its name.
+            return List.copyOf(new java.util.LinkedHashSet<>(names));
+        }
         return List.copyOf(names);
     }
 
@@ -155,6 +169,9 @@ final class ProtosDebuggerScope implements TruffleObject {
     }
 
     private Optional<Object> rawVisibleValue(String member) {
+        if (inlineCallbackBindings.containsKey(member)) {
+            return Optional.of(inlineCallbackBindings.get(member));
+        }
         Optional<Object> local =
                 activation.context()
                         .readLocalSlot(member);

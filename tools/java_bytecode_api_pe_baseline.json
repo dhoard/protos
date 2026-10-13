@@ -5,6 +5,30 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeTagTreeNodeExports.java",
       "class": "ProtosBytecodeTagTreeNodeExports",
+      "method": "normalInlineCallbackBindings(TagTreeNode,MaterializedFrame)",
+      "family": "BytecodeNode",
+      "operation": "getLocalNames",
+      "arity": 1,
+      "arguments": "BYTECODE_INDEX=index",
+      "occurrence": 0,
+      "provenance": "BYTECODE_INDEX=RUNTIME_VALUE",
+      "pe_reachability": "BOUNDARY_CUT"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeTagTreeNodeExports.java",
+      "class": "ProtosBytecodeTagTreeNodeExports",
+      "method": "normalInlineCallbackBindings(TagTreeNode,MaterializedFrame)",
+      "family": "BytecodeNode",
+      "operation": "getLocalValue",
+      "arity": 3,
+      "arguments": "BYTECODE_INDEX=index, LOCAL_OFFSET=offset",
+      "occurrence": 0,
+      "provenance": "BYTECODE_INDEX=RUNTIME_VALUE;LOCAL_OFFSET=RUNTIME_VALUE",
+      "pe_reachability": "BOUNDARY_CUT"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeTagTreeNodeExports.java",
+      "class": "ProtosBytecodeTagTreeNodeExports",
       "method": "inlineCallbackFrameBindings(TagTreeNode,MaterializedFrame)",
       "family": "BytecodeNode",
       "operation": "getLocalNames",

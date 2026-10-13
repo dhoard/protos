@@ -9625,7 +9625,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * and control transfer remain in the existing Bytecode DSL machinery.
      */
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
-    private static PreparedInlineLiteralCall prepareNativeIfTrueCallbackFallback(
+    static PreparedInlineLiteralCall prepareNativeIfTrueCallbackFallback(
             Object caller,
             Object supplied) {
         return prepareInlineLiteralCall(
@@ -9644,7 +9644,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * provenance only when the compact caller is proven equivalent to its own
      * caller.
      */
-    private static PreparedInlineLiteralCall compactCanonicalIfTrue(
+    static PreparedInlineLiteralCall compactCanonicalIfTrue(
             Object caller,
             Object supplied,
             ProtosClosureExecutionPlanCell literalPlan,
@@ -9674,23 +9674,52 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return null;
         }
 
-        ProtosClosureExecutionPlan plan =
-                taskOwnedBytecodePlan(closure, enteredContext);
+        /*
+         * PERF041-E1: this cell is frozen before guest execution.
+         * A Closure using exactly its template plan requires no
+         * Context-owned projection when the entered language agrees.
+         *
+         * A distinct template or foreign language still takes the
+         * authoritative taskOwnedBytecodePlan resolution below.
+         */
+        ProtosClosureExecutionPlan literalTemplate = literalPlan.plan();
+        boolean localLanguage =
+                enteredContext == null
+                        || literalTemplate.language().orElseThrow()
+                                == enteredContext.languageForRuntime();
+
+        ProtosClosureExecutionPlan plan;
+        if (localLanguage
+                && closure.executionPlanForRuntimeInvocation()
+                        == literalTemplate) {
+            plan = literalTemplate;
+        } else {
+            plan = taskOwnedBytecodePlan(closure, enteredContext);
+        }
+
         if (plan == null
-                || plan.bytecodeActivationTargetForComposition()
-                        != literalPlan.plan().bytecodeActivationTargetForComposition()) {
+                || (plan != literalTemplate
+                        && plan.bytecodeActivationTargetForComposition()
+                                != literalTemplate
+                                        .bytecodeActivationTargetForComposition())) {
             return null;
         }
 
-        PreparedInlineLiteralCall child =
-                PreparedInlineLiteralCall.direct(
-                        plan.bytecodeActivationTargetForComposition(),
-                        ProtosFrameArguments.compactDirectClosureCallZeroPrepared(
-                                closure,
-                                provenance,
-                                closure.returnHome().orElseThrow()));
-
-        return child.admits(literalPlan) ? child : null;
+        /*
+         * The preceding guards already proved:
+         *  - the exact callback target;
+         *  - a non-owning ReturnHome (closure.returnHome is present);
+         *  - canonical Closure.call selection.
+         *
+         * PreparedInlineLiteralCall.direct therefore satisfies
+         * admits(literalPlan) without a second admission check.
+         */
+        return PreparedInlineLiteralCall.direct(
+                literalTemplate.bytecodeActivationTargetForComposition(),
+                ProtosFrameArguments.compactDirectClosureCallZeroPrepared(
+                        closure,
+                        provenance,
+                        closure.returnHome().orElseThrow()));
     }
 
     @Operation

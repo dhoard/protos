@@ -67,6 +67,72 @@ final class ProtosPerf032ExecutionModeTest {
     Path directory;
 
     @Test
+    void i095B6aOwnScalarNormalDebugParity() throws Exception {
+        String source = """
+                run: () => {
+                    value: 9
+                    inside: true.ifTrue(() => {
+                        value: 41
+                        value = 42
+                        value
+                    })
+                    inside + value
+                }
+                0
+                """;
+        for (ProtosExecutionMode mode : new ProtosExecutionMode[] {
+                ProtosExecutionMode.NORMAL, ProtosExecutionMode.DEBUG}) {
+            Path file = directory.resolve("i095-b6a-" + mode + ".protos");
+            Files.writeString(file, source, StandardCharsets.UTF_8);
+            try (ProtosStandaloneHostedSession session =
+                    ProtosStandaloneHostedSession.openForTesting(CORE, file, mode)) {
+                assertEquals(ProtosExecutionOutcome.State.COMPLETED,
+                        session.initialOutcome().state(), mode.toString());
+                Value run = session.prepareTopLevel("run").executable();
+                for (int i = 0; i < 3; i++) {
+                    assertEquals(51, run.execute().asInt(), mode.toString());
+                }
+                assertNoTask(session);
+            }
+        }
+        System.out.println("I095_B6A_NORMAL_DEBUG=PASS");
+    }
+
+    @Test
+    void i095B6bMixedCaptureNormalDebugParity() throws Exception {
+        String source = """
+                run: () => {
+                    outer: 40
+                    shadow: 11
+                    inside: true.ifTrue(() => {
+                        shadow: 1
+                        outer = outer + shadow
+                        shadow = 2
+                        outer + shadow
+                    })
+                    inside + outer + shadow
+                }
+                0
+                """;
+        for (ProtosExecutionMode mode : new ProtosExecutionMode[] {
+                ProtosExecutionMode.NORMAL, ProtosExecutionMode.DEBUG}) {
+            Path file = directory.resolve("i095-b6b-" + mode + ".protos");
+            Files.writeString(file, source, StandardCharsets.UTF_8);
+            try (ProtosStandaloneHostedSession session =
+                    ProtosStandaloneHostedSession.openForTesting(CORE, file, mode)) {
+                assertEquals(ProtosExecutionOutcome.State.COMPLETED,
+                        session.initialOutcome().state(), mode.toString());
+                Value run = session.prepareTopLevel("run").executable();
+                for (int i = 0; i < 3; i++) {
+                    assertEquals(95, run.execute().asInt(), mode.toString());
+                }
+                assertNoTask(session);
+            }
+        }
+        System.out.println("I095_B6B_NORMAL_DEBUG=PASS");
+    }
+
+    @Test
     void normalModeEntersTheEligibleClosureHeaderless() throws Exception {
         try (ProtosStandaloneHostedSession session = open(ProtosExecutionMode.NORMAL)) {
             assertFalse(session.runtimeHostForTesting().isDebugMode());
@@ -216,6 +282,188 @@ final class ProtosPerf032ExecutionModeTest {
             assertNoTask(session);
         }
         System.out.println("PERF032_NORMAL_SCOPE_REJECTED=PASS");
+    }
+
+    @Test
+    void normalAndDebugExecuteTheSameWholeInlineBody()
+            throws Exception {
+        String program = """
+                run: () => {
+                    true.ifTrue(() => {
+                        1 + 2
+                        3 * 4
+                    })
+                }
+                0
+                """;
+
+        Path normalFile = directory.resolve(
+                "i095-b2-normal.protos");
+        Path debugFile = directory.resolve(
+                "i095-b2-debug.protos");
+
+        Files.writeString(
+                normalFile, program, StandardCharsets.UTF_8);
+        Files.writeString(
+                debugFile, program, StandardCharsets.UTF_8);
+
+        try (ProtosStandaloneHostedSession normal =
+                        ProtosStandaloneHostedSession.openForTesting(
+                                CORE, normalFile, ProtosExecutionMode.NORMAL);
+                ProtosStandaloneHostedSession debug =
+                        ProtosStandaloneHostedSession.openForTesting(
+                                CORE, debugFile, ProtosExecutionMode.DEBUG)) {
+
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    normal.initialOutcome().state());
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    debug.initialOutcome().state());
+
+            Value normalRun =
+                    normal.prepareTopLevel("run").executable();
+            Value debugRun =
+                    debug.prepareTopLevel("run").executable();
+
+            for (int iteration = 0; iteration < 3; iteration++) {
+                assertEquals(12, normalRun.execute().asInt());
+                assertEquals(12, debugRun.execute().asInt());
+            }
+
+            assertNoTask(normal);
+            assertNoTask(debug);
+        }
+
+        System.out.println(
+                "I095_B2_NORMAL_DEBUG_WHOLE_BODY=PASS");
+    }
+
+    @Test
+    void i095WholeBlockCallerProvenanceParity() throws Exception {
+        record Case(String name, String program, int expected) {}
+
+        var cases = java.util.List.of(
+                new Case(
+                        "arithmetic",
+                        """
+                        run: () => {
+                            true.ifTrue(() => {
+                                1 + 2
+                                3 * 4
+                            })
+                        }
+                        0
+                        """,
+                        12),
+                new Case(
+                        "receiver",
+                        """
+                        run: () => {
+                            obj: {
+                                read: () => {
+                                    (true.ifTrue(() => { this }) === this)
+                                        .ifTrueIfFalse(() => { 41 }, () => { 0 })
+                                }
+                            }
+                            obj.read()
+                        }
+                        0
+                        """,
+                        41),
+                new Case(
+                        "super",
+                        """
+                        run: () => {
+                            base: {
+                                read: () => { 41 }
+                            }
+                            middle: base {
+                                read: () => {
+                                    true.ifTrue(() => {
+                                        super.read() + 1
+                                    })
+                                }
+                            }
+                            middle.read()
+                        }
+                        0
+                        """,
+                        42),
+                new Case(
+                        "handled-error",
+                        """
+                        run: () => {
+                            Error.handle(
+                                () => {
+                                    true.ifTrue(() => { 1 / 0 })
+                                    0
+                                },
+                                (caught) => { 73 })
+                        }
+                        0
+                        """,
+                        73));
+
+        for (Case scenario : cases) {
+            Path normalFile = directory.resolve(
+                    "i095-b3-" + scenario.name() + "-normal.protos");
+            Path debugFile = directory.resolve(
+                    "i095-b3-" + scenario.name() + "-debug.protos");
+
+            Files.writeString(
+                    normalFile, scenario.program(),
+                    StandardCharsets.UTF_8);
+            Files.writeString(
+                    debugFile, scenario.program(),
+                    StandardCharsets.UTF_8);
+
+            try (ProtosStandaloneHostedSession normal =
+                            ProtosStandaloneHostedSession.openForTesting(
+                                    CORE,
+                                    normalFile,
+                                    ProtosExecutionMode.NORMAL);
+                    ProtosStandaloneHostedSession debug =
+                            ProtosStandaloneHostedSession.openForTesting(
+                                    CORE,
+                                    debugFile,
+                                    ProtosExecutionMode.DEBUG)) {
+
+                assertEquals(
+                        ProtosExecutionOutcome.State.COMPLETED,
+                        normal.initialOutcome().state(),
+                        scenario.name());
+                assertEquals(
+                        ProtosExecutionOutcome.State.COMPLETED,
+                        debug.initialOutcome().state(),
+                        scenario.name());
+
+                Value normalRun =
+                        normal.prepareTopLevel("run").executable();
+                Value debugRun =
+                        debug.prepareTopLevel("run").executable();
+
+                for (int iteration = 0; iteration < 3; iteration++) {
+                    assertEquals(
+                            scenario.expected(),
+                            normalRun.execute().asInt(),
+                            "NORMAL: " + scenario.name());
+                    assertEquals(
+                            scenario.expected(),
+                            debugRun.execute().asInt(),
+                            "DEBUG: " + scenario.name());
+                }
+
+                assertNoTask(normal);
+                assertNoTask(debug);
+            }
+
+            System.out.println(
+                    "I095_B3_" + scenario.name()
+                            .toUpperCase(java.util.Locale.ROOT)
+                            .replace('-', '_')
+                            + "=PASS");
+        }
     }
 
     @Test

@@ -161,7 +161,9 @@ final class ProtosLm009DPublicDebugCliTest {
             assertFalse(
                     cliThread.isAlive(),
                     "public protos debug invocation must complete after DAP transport teardown");
-            assertEquals(0, exitCode.get());
+            assertEquals(0, exitCode.get(),
+                    () -> "Public debug CLI exited nonzero; diagnostics:\n"
+                            + diagnostics.toString(StandardCharsets.UTF_8));
 
             String controlText = controlOut.toString(StandardCharsets.UTF_8);
             assertEquals(readiness + System.lineSeparator(), controlText);

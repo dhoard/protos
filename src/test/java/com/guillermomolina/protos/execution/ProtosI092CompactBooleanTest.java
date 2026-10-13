@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import java.nio.file.Path;
@@ -45,6 +46,729 @@ final class ProtosI092CompactBooleanTest {
                 }
                 run()
                 """));
+    }
+
+    @Test
+    void constantBooleanControlHasDirectNormalBranch()
+            throws Exception {
+        for (String booleanLiteral : List.of("true", "false")) {
+            ProtosActivation module =
+                    new ProtosCoreBootstrap()
+                            .bootstrap(CORE)
+                            .newModuleActivation();
+
+            ProtosClosureValue run = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    ProtosTestExecutionSupport.evaluate(
+                            "i095-constant-control.protos",
+                            "run: () => { "
+                                    + booleanLiteral
+                                    + ".ifTrue(() => { 41 }) }"
+                                    + System.lineSeparator()
+                                    + "run",
+                            module));
+
+            var root = run.executionPlan().orElseThrow()
+                    .bytecodeActivationRootForTesting();
+            root.getRootNodes().ensureComplete();
+
+            List<String> names = root.getBytecodeNode()
+                    .getInstructionsAsList()
+                    .stream()
+                    .map(Instruction::getName)
+                    .toList();
+
+            int mode = position(names, "IsNormalExecutionMode");
+            int generic = position(names, "PrepareSendOne");
+
+            assertTrue(mode >= 0, names.toString());
+            assertTrue(generic > mode, names.toString());
+
+            // The DEBUG alternative retains the established
+            // canonical/generic protocol and its callback.
+            assertTrue(
+                    position(names, "IsCompactCanonicalBooleanMiss")
+                            > mode,
+                    names.toString());
+
+            Object value = ProtosTestExecutionSupport.evaluate(
+                    "i095-constant-control-run.protos",
+                    "run()",
+                    module);
+
+            if ("true".equals(booleanLiteral)) {
+                assertInteger(41, value);
+            } else {
+                assertSame(ProtosNullValue.INSTANCE, value);
+            }
+        }
+    }
+
+    @Test
+    void normalConstantTrueFoldsPureLiteralSequence()
+            throws Exception {
+        ProtosActivation module =
+                new ProtosCoreBootstrap()
+                        .bootstrap(CORE)
+                        .newModuleActivation();
+
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-pure-sequence.protos",
+                        """
+                        run: () => {
+                            true.ifTrue(() => {
+                                3
+                                false
+                                41
+                            })
+                        }
+                        run
+                        """,
+                        module));
+
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+
+        var names = root.getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(Instruction::getName)
+                .toList();
+
+        assertTrue(
+                position(names, "IsNormalExecutionMode") >= 0,
+                names.toString());
+
+        assertInteger(
+                41,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-pure-sequence-run.protos",
+                        "run()",
+                        module));
+    }
+
+    @Test
+    void normalConstantFalseDiscardsUnselectedParameterizedClosure()
+            throws Exception {
+        ProtosActivation module =
+                new ProtosCoreBootstrap()
+                        .bootstrap(CORE)
+                        .newModuleActivation();
+
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-unselected-closure.protos",
+                        """
+                        run: () => {
+                            false.ifTrue((ignored) => {
+                                ^99
+                            })
+                        }
+                        run
+                        """,
+                        module));
+
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+
+        var names = root.getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(Instruction::getName)
+                .toList();
+
+        assertTrue(
+                position(names, "IsNormalExecutionMode") >= 0,
+                names.toString());
+
+        assertSame(
+                ProtosNullValue.INSTANCE,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-unselected-closure-run.protos",
+                        "run()",
+                        module));
+    }
+
+    @Test
+    void normalConstantTrueInlinesPrimitiveIdentityTree()
+            throws Exception {
+        ProtosActivation module =
+                new ProtosCoreBootstrap()
+                        .bootstrap(CORE)
+                        .newModuleActivation();
+
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-identity-tree.protos",
+                        """
+                        run: () => {
+                            true.ifTrue(() => {
+                                true === false
+                                (true === false) !== true
+                            })
+                        }
+                        run
+                        """,
+                        module));
+
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+
+        var names = root.getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(Instruction::getName)
+                .toList();
+
+        assertTrue(
+                position(names, "IsNormalExecutionMode") >= 0,
+                names.toString());
+
+        assertTrue(
+                position(names, "Identity") >= 0,
+                names.toString());
+
+        assertTrue(
+                position(names, "NotIdentity") >= 0,
+                names.toString());
+
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-identity-tree-run.protos",
+                        "run()",
+                        module));
+    }
+
+    @Test
+    void ordinaryArithmeticInsideIfTrueUsesWholeBlockInline()
+            throws Exception {
+        ProtosActivation module =
+                new ProtosCoreBootstrap()
+                        .bootstrap(CORE)
+                        .newModuleActivation();
+
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-ordinary-arithmetic.protos",
+                        """
+                        run: () => {
+                            true.ifTrue(() => { 1 + 2 })
+                        }
+                        run
+                        """,
+                        module));
+
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+
+        var names = root.getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(Instruction::getName)
+                .toList();
+
+        assertTrue(
+                position(names, "IsNormalExecutionMode") >= 0,
+                names.toString());
+
+        assertInteger(
+                3,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-ordinary-arithmetic-run.protos",
+                        "run()",
+                        module));
+    }
+
+    @Test
+    void normalTrueInlinesWholeOrdinaryArithmeticSequence()
+            throws Exception {
+        ProtosActivation module =
+                new ProtosCoreBootstrap()
+                        .bootstrap(CORE)
+                        .newModuleActivation();
+
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-whole-arithmetic.protos",
+                        """
+                        run: () => {
+                            true.ifTrue(() => {
+                                1 + 2
+                                3 * 4
+                            })
+                        }
+                        run
+                        """,
+                        module));
+
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+
+        var names = root.getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(Instruction::getName)
+                .toList();
+
+        assertTrue(
+                position(names, "IsNormalExecutionMode") >= 0,
+                names.toString());
+
+        assertTrue(
+                position(names, "TryPrimitiveNumericSendOne") >= 0,
+                names.toString());
+
+        assertInteger(
+                12,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-whole-arithmetic-run.protos",
+                        "run()",
+                        module));
+    }
+
+    @Test
+    void capturedBindingUsesDirectParentInlineRead()
+            throws Exception {
+        ProtosActivation module =
+                new ProtosCoreBootstrap()
+                        .bootstrap(CORE)
+                        .newModuleActivation();
+
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-captured-fallback.protos",
+                        """
+                        run: () => {
+                            value: 8
+                            true.ifTrue(() => {
+                                value + 1
+                            })
+                        }
+                        run
+                        """,
+                        module));
+
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+
+        var names = root.getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(Instruction::getName)
+                .toList();
+
+        assertTrue(
+                position(names, "IsNormalExecutionMode") >= 0,
+                names.toString());
+
+        assertInteger(
+                9,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-captured-fallback-run.protos",
+                        "run()",
+                        module));
+    }
+
+    @Test
+    void normalTrueInlinesReadOnlyParentCapture() throws Exception {
+        ProtosActivation module =
+                new ProtosCoreBootstrap()
+                        .bootstrap(CORE)
+                        .newModuleActivation();
+
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-b4-read-capture.protos",
+                        """
+                        run: () => {
+                            outer: 41
+                            true.ifTrue(() => {
+                                outer + 1
+                            })
+                        }
+                        run
+                        """,
+                        module));
+
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+
+        var names = root.getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(Instruction::getName)
+                .toList();
+
+        assertTrue(
+                position(names, "IsNormalExecutionMode") >= 0,
+                names.toString());
+
+        assertTrue(
+                position(names, "ReadRootFrameLocal") >= 0,
+                names.toString());
+
+        for (int index = 0; index < 3; index++) {
+            assertInteger(
+                    42,
+                    ProtosTestExecutionSupport.evaluate(
+                            "i095-b4-read-capture-run.protos",
+                            "run()",
+                            module));
+        }
+    }
+
+    @Test
+    void callbackOwnedBindingCannotAliasParentFrame()
+            throws Exception {
+        ProtosActivation module =
+                new ProtosCoreBootstrap()
+                        .bootstrap(CORE)
+                        .newModuleActivation();
+
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-b4-owned-binding.protos",
+                        """
+                        run: () => {
+                            outer: 41
+                            true.ifTrue(() => {
+                                outer: 7
+                                outer + 1
+                            })
+                        }
+                        run
+                        """,
+                        module));
+
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+
+        var names = root.getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(Instruction::getName)
+                .toList();
+
+        assertTrue(
+                position(names, "IsNormalExecutionMode") >= 0,
+                names.toString());
+
+        assertInteger(
+                8,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-b4-owned-binding-run.protos",
+                        "run()",
+                        module));
+    }
+
+    @Test
+    void normalTrueInlinesCapturedParentWrite() throws Exception {
+        ProtosActivation module =
+                new ProtosCoreBootstrap()
+                        .bootstrap(CORE)
+                        .newModuleActivation();
+
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-b5-captured-write.protos",
+                        """
+                        run: () => {
+                            count: 40
+                            true.ifTrue(() => {
+                                count = count + 2
+                                count
+                            })
+                        }
+                        run
+                        """,
+                        module));
+
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+
+        var names = root.getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(Instruction::getName)
+                .toList();
+
+        assertTrue(
+                position(names, "IsNormalExecutionMode") >= 0,
+                names.toString());
+
+        assertTrue(
+                position(names, "ResolveRootFrameLocalWriteTarget") >= 0,
+                names.toString());
+
+        assertTrue(
+                position(names, "AssignRootFrameLocal") >= 0,
+                names.toString());
+
+        for (int index = 0; index < 3; index++) {
+            assertInteger(
+                    42,
+                    ProtosTestExecutionSupport.evaluate(
+                            "i095-b5-captured-write-run.protos",
+                            "run()",
+                            module));
+        }
+    }
+
+    @Test
+    void callbackOwnedWriteStillUsesItsOwnActivation()
+            throws Exception {
+        ProtosActivation module =
+                new ProtosCoreBootstrap()
+                        .bootstrap(CORE)
+                        .newModuleActivation();
+
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-b5-owned-write.protos",
+                        """
+                        run: () => {
+                            count: 40
+                            true.ifTrue(() => {
+                                count: 2
+                                count = count + 1
+                                count
+                            })
+                        }
+                        run
+                        """,
+                        module));
+
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+
+        var names = root.getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(Instruction::getName)
+                .toList();
+
+        assertTrue(
+                position(names, "IsNormalExecutionMode") < 0,
+                names.toString());
+
+        assertInteger(
+                3,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-b5-owned-write-run.protos",
+                        "run()",
+                        module));
+    }
+
+    @Test
+    void i095B6aOwnScalarScopeDoesNotAliasParent() throws Exception {
+        ProtosActivation module = new ProtosCoreBootstrap()
+                .bootstrap(CORE).newModuleActivation();
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-b6a-own-scope.protos",
+                        """
+                        run: () => {
+                            value: 9
+                            inside: true.ifTrue(() => {
+                                value: 41
+                                value = 42
+                                value
+                            })
+                            inside + value
+                        }
+                        run
+                        """, module));
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+        var names = root.getBytecodeNode().getInstructionsAsList()
+                .stream().map(Instruction::getName).toList();
+        assertTrue(position(names, "IsNormalExecutionMode") >= 0, names.toString());
+        for (int i = 0; i < 3; i++) {
+            assertInteger(51, ProtosTestExecutionSupport.evaluate(
+                    "i095-b6a-own-scope-call.protos", "run()", module));
+        }
+        System.out.println("I095_B6A_OWN_SCOPE=PASS");
+    }
+
+    @Test
+    void i095B6aIndependentCallbackBindings() throws Exception {
+        ProtosActivation module = new ProtosCoreBootstrap()
+                .bootstrap(CORE).newModuleActivation();
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-b6a-two-callbacks.protos",
+                        """
+                        run: () => {
+                            a: true.ifTrue(() => {
+                                item: 1
+                                item = 2
+                                item
+                            })
+                            b: true.ifTrue(() => {
+                                item: 40
+                                item = 41
+                                item
+                            })
+                            a + b
+                        }
+                        run
+                        """, module));
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+        var names = root.getBytecodeNode().getInstructionsAsList()
+                .stream().map(Instruction::getName).toList();
+        assertTrue(position(names, "IsNormalExecutionMode") >= 0, names.toString());
+        for (int i = 0; i < 3; i++) {
+            assertInteger(43, ProtosTestExecutionSupport.evaluate(
+                    "i095-b6a-two-callbacks-call.protos", "run()", module));
+        }
+        System.out.println("I095_B6A_MULTIPLE_CALLBACK_SCOPES=PASS");
+    }
+
+    @Test
+    void i095B6aUnprovenPresenceKeepsBPrime() throws Exception {
+        for (String body : List.of(
+                "item\nitem: 7\nitem",
+                "item: 1\nitem: 2\nitem")) {
+            ProtosActivation module = new ProtosCoreBootstrap()
+                    .bootstrap(CORE).newModuleActivation();
+            ProtosClosureValue run = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    ProtosTestExecutionSupport.evaluate(
+                            "i095-b6a-fallback.protos",
+                            "run: () => { true.ifTrue(() => { " + body + " }) }\nrun",
+                            module));
+            var root = run.executionPlan().orElseThrow()
+                    .bytecodeActivationRootForTesting();
+            root.getRootNodes().ensureComplete();
+            var names = root.getBytecodeNode().getInstructionsAsList()
+                    .stream().map(Instruction::getName).toList();
+            assertTrue(position(names, "IsNormalExecutionMode") < 0, names.toString());
+        }
+        System.out.println("I095_B6A_UNPROVEN_PRESENCE=B_PRIME");
+    }
+
+    @Test
+    void i095B6bOwnLocalsAndParentCaptureWrite() throws Exception {
+        ProtosActivation module = new ProtosCoreBootstrap()
+                .bootstrap(CORE).newModuleActivation();
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-b6b-mixed-write.protos",
+                        """
+                        run: () => {
+                            outer: 40
+                            shadow: 11
+                            inside: true.ifTrue(() => {
+                                shadow: 1
+                                outer = outer + shadow
+                                shadow = 2
+                                outer + shadow
+                            })
+                            inside + outer + shadow
+                        }
+                        run
+                        """, module));
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+        var names = root.getBytecodeNode().getInstructionsAsList()
+                .stream().map(Instruction::getName).toList();
+        assertTrue(position(names, "IsNormalExecutionMode") >= 0, names.toString());
+        assertTrue(position(names, "ReadRootFrameLocal") >= 0, names.toString());
+        assertTrue(position(names, "ResolveRootFrameLocalWriteTarget") >= 0, names.toString());
+        assertTrue(position(names, "AssignRootFrameLocal") >= 0, names.toString());
+        for (int i = 0; i < 3; i++) {
+            assertInteger(95, ProtosTestExecutionSupport.evaluate(
+                    "i095-b6b-mixed-write-call.protos", "run()", module));
+        }
+        System.out.println("I095_B6B_MIXED_CAPTURE_WRITE=PASS");
+    }
+
+    @Test
+    void i095B6bOwnLocalsAndParentRead() throws Exception {
+        ProtosActivation module = new ProtosCoreBootstrap()
+                .bootstrap(CORE).newModuleActivation();
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-b6b-mixed-read.protos",
+                        """
+                        run: () => {
+                            outer: 41
+                            true.ifTrue(() => {
+                                inner: 1
+                                outer + inner
+                            })
+                        }
+                        run
+                        """, module));
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+        var names = root.getBytecodeNode().getInstructionsAsList()
+                .stream().map(Instruction::getName).toList();
+        assertTrue(position(names, "IsNormalExecutionMode") >= 0, names.toString());
+        assertTrue(position(names, "ReadRootFrameLocal") >= 0, names.toString());
+        for (int i = 0; i < 3; i++) {
+            assertInteger(42, ProtosTestExecutionSupport.evaluate(
+                    "i095-b6b-mixed-read-call.protos", "run()", module));
+        }
+        System.out.println("I095_B6B_MIXED_CAPTURE_READ=PASS");
+    }
+
+    @Test
+    void i095B6bCandidateCaptureKeepsBPrime() throws Exception {
+        ProtosActivation module = new ProtosCoreBootstrap()
+                .bootstrap(CORE).newModuleActivation();
+        ProtosClosureValue run = assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i095-b6b-candidate-fallback.protos",
+                        """
+                        run: () => {
+                            outer: 41
+                            true.ifTrue(() => {
+                                inner: 1
+                                missing + inner
+                            })
+                        }
+                        run
+                        """, module));
+        var root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+        var names = root.getBytecodeNode().getInstructionsAsList()
+                .stream().map(Instruction::getName).toList();
+        assertTrue(position(names, "IsNormalExecutionMode") < 0, names.toString());
+        System.out.println("I095_B6B_DYNAMIC_FALLBACK=B_PRIME");
     }
 
     @Test
@@ -133,7 +857,10 @@ final class ProtosI092CompactBooleanTest {
         int generic = position(names, "PrepareStructuredBooleanCall");
         int nativeBranch = position(names, "IsCompactCanonicalBooleanNoCallback");
 
-        assertTrue(selection >= 0 && miss > selection, names.toString());
+        assertTrue(selection < 0 && miss >= 0, names.toString());
+        assertTrue(
+                position(names, "PrepareCanonicalIfTrueCallback") >= 0,
+                names.toString());
         assertTrue(fallback > miss && generic > fallback, names.toString());
         assertTrue(nativeBranch > generic, names.toString());
         assertFalse(Arrays.stream(ProtosBytecodeRootNode.class.getDeclaredClasses())
@@ -188,7 +915,8 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(Instruction::getName).toList();
 
-        assertTrue(position(names, "TryCompactCanonicalBooleanOne") >= 0);
+        assertTrue(position(names, "TryCompactCanonicalBooleanOne") < 0);
+        assertTrue(position(names, "PrepareCanonicalIfTrueCallback") >= 0);
         assertTrue(position(names, "IsCompactCanonicalBooleanNoCallback") >= 0);
         assertTrue(position(names, "LoadInlineLiteralFallbackCall") >= 0, names.toString());
         assertNoSyntheticIfTrueActivation();
@@ -258,7 +986,8 @@ final class ProtosI092CompactBooleanTest {
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(Instruction::getName).toList();
-        assertTrue(position(names, "TryCompactCanonicalBooleanOne") >= 0);
+        assertTrue(position(names, "TryCompactCanonicalBooleanOne") < 0);
+        assertTrue(position(names, "PrepareCanonicalIfTrueCallback") >= 0);
         assertTrue(position(names, "IsCompactCanonicalBooleanNoCallback") >= 0);
         // Default-parameter sites have no B-prime region: ordinary callback invocation.
         int nativeCheck = position(names, "IsCompactCanonicalBooleanNoCallback");
@@ -313,6 +1042,12 @@ final class ProtosI092CompactBooleanTest {
                 .stream().map(Instruction::getName).toList();
 
         assertTrue(position(names, "TryCompactCanonicalBooleanVector") >= 0);
+        assertTrue(
+                position(names, "IsCanonicalIfTrueTrue")
+                        > position(names, "TryCompactCanonicalBooleanVector"));
+        assertTrue(
+                position(names, "PrepareCanonicalIfTrueVectorCallback")
+                        > position(names, "IsCanonicalIfTrueTrue"));
         assertTrue(position(names, "IsCompactCanonicalBooleanMiss") >= 0);
         assertTrue(position(names, "IsCompactCanonicalBooleanNoCallback") >= 0);
     }
@@ -367,6 +1102,12 @@ final class ProtosI092CompactBooleanTest {
 
         assertTrue(position(names, "TryCompactCanonicalBooleanInlineOne") >= 0);
         assertTrue(position(names, "TryCompactCanonicalBooleanInlineVector") >= 0);
+        assertTrue(
+                position(names, "PrepareCanonicalIfTrueInlineCallback")
+                        > position(names, "TryCompactCanonicalBooleanInlineOne"));
+        assertTrue(
+                position(names, "PrepareCanonicalIfTrueInlineVectorCallback")
+                        > position(names, "TryCompactCanonicalBooleanInlineVector"));
         assertTrue(position(names, "IsCompactCanonicalBooleanNoCallback") >= 0);
     }
 
@@ -408,7 +1149,23 @@ final class ProtosI092CompactBooleanTest {
 
         var instructions = root.getBytecodeNode().getInstructionsAsList();
         var names = instructions.stream().map(Instruction::getName).toList();
+        assertEquals(
+                1L,
+                names.stream()
+                        .filter(name -> name.contains(
+                                "IsCompactCanonicalBooleanMiss"))
+                        .count(),
+                "Canonical/generic classification must occur once");
+
         int candidate = position(names, "TryCompactCanonicalBooleanOne");
+        int primitiveBranch = position(names, "IsCanonicalIfTrueTrue");
+        int nativePreparation = position(names, "PrepareCanonicalIfTrueCallback");
+        assertTrue(
+                candidate >= 0
+                        && primitiveBranch > candidate
+                        && nativePreparation > primitiveBranch,
+                () -> "Primitive classification must precede callback preparation: "
+                        + names);
         int miss = position(names, "IsCompactCanonicalBooleanMiss");
         int generic = position(names, "PrepareSendOne");
         int nativeCheck = position(names, "IsCompactCanonicalBooleanNoCallback");

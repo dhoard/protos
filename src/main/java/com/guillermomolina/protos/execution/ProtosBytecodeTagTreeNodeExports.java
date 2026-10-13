@@ -97,7 +97,51 @@ final class ProtosBytecodeTagTreeNodeExports {
         }
         ProtosActivation activation = ProtosFrameArguments.activation(frame);
         projectFrameNativeBindings(node, frame, activation);
+        java.util.Map<String, Object> ownInlineBindings =
+                normalInlineCallbackBindings(node, frame.materialize());
+        if (ownInlineBindings != null) {
+            // I095-B6: virtual lexical scope; no carrier or guest activation.
+            return new ProtosDebuggerScope(activation, ownInlineBindings);
+        }
         return debuggerScope(activation);
+    }
+
+    /**
+     * I095-B6 tooling-only projection for physically inlined callbacks.
+     * BytecodeLocal names are implementation details and are never visible to
+     * the guest; the unprefixed source names identify the callback's bindings.
+     * An uninitialized/cleared local remains ABSENT rather than host null.
+     * No Frame is retained in the resulting debugger view.
+     */
+    @TruffleBoundary
+    private static java.util.Map<String, Object> normalInlineCallbackBindings(
+            TagTreeNode node, MaterializedFrame frame) {
+        if (node == null) {
+            return null;
+        }
+        BytecodeNode bytecode = node.getBytecodeNode();
+        int index = node.getEnterBytecodeIndex();
+        Object[] names = bytecode.getLocalNames(index);
+        String prefix = CanonicalToBytecodeLowerer
+                .NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX;
+        boolean inNormalInlineCallback = false;
+        java.util.LinkedHashMap<String, Object> bindings =
+                new java.util.LinkedHashMap<>();
+        for (int offset = 0; offset < names.length; offset++) {
+            if (!(names[offset] instanceof String name)
+                    || !name.startsWith(prefix)) {
+                continue;
+            }
+            inNormalInlineCallback = true;
+            Object value = ProtosNumericValueSupport.guestValue(
+                    bytecode.getLocalValue(index, frame, offset));
+            if (value != null) {
+                bindings.put(name.substring(prefix.length()), value);
+            }
+        }
+        return inNormalInlineCallback
+                ? java.util.Collections.unmodifiableMap(bindings)
+                : null;
     }
 
     /**

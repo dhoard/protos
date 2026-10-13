@@ -68,6 +68,7 @@ import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.bytecode.MaterializedLocalAccessor;
 import com.oracle.truffle.api.bytecode.Operation;
+import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.bytecode.Variadic;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
@@ -120,6 +121,7 @@ import com.oracle.truffle.api.profiles.InlinedBranchProfile;
         enableUncachedInterpreter = true,
         boxingEliminationTypes = {int.class, long.class, double.class},
         tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class)
+@OperationProxy(value = ProtosCanonicalBooleanOneNode.class, name = "TryCompactCanonicalBooleanOne")
 abstract class ProtosSemanticBytecodeRootNode extends RootNode implements BytecodeRootNode {
     protected ProtosSemanticBytecodeRootNode(
             ProtosLanguage language,
@@ -5558,38 +5560,51 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * for false, otherwise the selected callback as a PreparedInlineLiteralCall
      * invoked from the send's own caller. No standard ifTrue activation exists.
      */
+
+    /**
+     * PERF041-D1: the primitive classification decides only whether
+     * canonical Boolean.ifTrue selects its callback.
+     */
     @Operation
-    public static final class TryCompactCanonicalBooleanOne {
-
-        static CanonicalBooleanMissProfile createMissProfile() {
-            return CanonicalBooleanMissProfile.create();
-        }
-
-        static CanonicalBooleanMissProfile uncachedMissProfile() {
-            return CanonicalBooleanMissProfile.uncached();
-        }
-
+    public static final class IsCanonicalIfTrueTrue {
         @Specialization
-        public static Object perform(
-                Object receiver,
+        public static boolean perform(int classification) {
+            return classification
+                    == ProtosCanonicalBooleanOneNode.CLASS_TRUE;
+        }
+    }
+
+    /**
+     * Result when no native callback is selected.
+     * MISS remains the Java null sentinel for ordinary dispatch.
+     */
+    @Operation
+    public static final class CanonicalIfTrueNonTrueResult {
+        @Specialization
+        public static Object perform(int classification) {
+            return classification
+                    == ProtosCanonicalBooleanOneNode.CLASS_FALSE
+                            ? ProtosNullValue.INSTANCE
+                            : null;
+        }
+    }
+
+    /**
+     * Prepare the selected callback only on canonical TRUE.
+     * The generic callable protocol remains the existing fallback.
+     */
+    @Operation
+    public static final class PrepareCanonicalIfTrueCallback {
+        @Specialization
+        public static PreparedInlineLiteralCall perform(
                 Object caller,
                 Object supplied,
                 Object literalPlan,
                 @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Cached(
-                        value = "createMissProfile()",
-                        uncached = "uncachedMissProfile()")
-                        CanonicalBooleanMissProfile missProfile) {
-            if (!ProtosValueLookup.isCanonicalBoolean(receiver)) {
-                missProfile.observeMiss();
-                return null;
-            }
-            if (receiver == com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE) {
-                return ProtosNullValue.INSTANCE;
-            }
-            return ProtosBytecodeRootNode.nativeIfTrueCallback(
-                    caller, supplied, literalPlan, enteredContext);
+                    ProtosLanguageContext context,
+                @Cached ProtosNativeIfTrueCallbackNode callback) {
+            return callback.execute(
+                    caller, supplied, literalPlan, context);
         }
 
         @NonIdempotent
@@ -5598,7 +5613,31 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
-    /** Spread form: native only for exactly one supplied argument. */
+    /** Spread: exact arity is part of canonical classification. */
+
+    /*
+     * I095-A2: Context mode is fixed at Context construction.
+     * The lowering does not inspect mutable debugger state.
+     */
+    /*
+     * I095-B2: execution mode is immutable per Context.
+     *
+     * A cached Context has a constant mode for the lifetime of
+     * the specialization. The generic path remains correct for
+     * other Contexts and uncached interpretation.
+     *
+     * This is not a debugger-attachment test.
+     */
+    @Operation
+    public static final class IsNormalExecutionMode {
+        @Specialization
+        public static boolean perform(@Bind Node node) {
+            return ProtosLanguageContext.current(node)
+                            .executionMode()
+                    == ProtosExecutionMode.NORMAL;
+        }
+    }
+
     @Operation
     public static final class TryCompactCanonicalBooleanVector {
 
@@ -5610,31 +5649,42 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return CanonicalBooleanMissProfile.uncached();
         }
 
-        @Specialization
-        public static Object perform(
-                Object receiver, Object caller, PreparedArgumentVector vector,
+        static boolean canonicalFalse(Object receiver, PreparedArgumentVector vector) {
+            return vector.soleValueOrNull() != null && receiver == ProtosBooleanValue.FALSE;
+        }
+
+        static boolean canonicalTrue(Object receiver, PreparedArgumentVector vector) {
+            return vector.soleValueOrNull() != null && receiver == ProtosBooleanValue.TRUE;
+        }
+
+        @Specialization(guards = "canonicalFalse(receiver, vector)")
+        public static int falseBranch(Object receiver, PreparedArgumentVector vector) {
+            return ProtosCanonicalBooleanOneNode.CLASS_FALSE;
+        }
+
+        @Specialization(guards = "canonicalTrue(receiver, vector)")
+        public static int trueBranch(Object receiver, PreparedArgumentVector vector) {
+            return ProtosCanonicalBooleanOneNode.CLASS_TRUE;
+        }
+
+        @Specialization(guards = {
+                "!canonicalFalse(receiver, vector)",
+                "!canonicalTrue(receiver, vector)"
+        })
+        public static int genericMiss(
+                Object receiver, PreparedArgumentVector vector,
                 @Cached(
-                        value = "createMissProfile()",
-                        uncached = "uncachedMissProfile()")
-                        CanonicalBooleanMissProfile missProfile) {
-            Object supplied = vector.soleValueOrNull();
-            if (supplied == null || !ProtosValueLookup.isCanonicalBoolean(receiver)) {
-                missProfile.observeMiss();
-                return null;
-            }
-            if (receiver == com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE) {
-                return ProtosNullValue.INSTANCE;
-            }
-            // No literal plan: the callback keeps ordinary call selection.
-            return ProtosBytecodeRootNode.nativeIfTrueCallback(
-                    caller, supplied, null, null);
+                    value = "createMissProfile()",
+                    uncached = "uncachedMissProfile()")
+                    CanonicalBooleanMissProfile missProfile) {
+            missProfile.observeMiss();
+            return ProtosCanonicalBooleanOneNode.CLASS_MISS;
         }
     }
 
-    /** Frame-native inline-callback form of TryCompactCanonicalBooleanOne. */
+    /** Frame-native One: classification does not observe the caller. */
+
     @Operation
-    @ConstantOperand(type = LocalRangeAccessor.class, name = "frameBackedLocals")
-    @ConstantOperand(type = ProtosFrameLexicalLayout.class, name = "frameBackedLayout")
     public static final class TryCompactCanonicalBooleanInlineOne {
 
         static CanonicalBooleanMissProfile createMissProfile() {
@@ -5645,42 +5695,42 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return CanonicalBooleanMissProfile.uncached();
         }
 
-        @Specialization
-        public static Object perform(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                Object receiver, PreparedInlineLiteralCall child,
-                Object supplied, Object literalPlan,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame,
-                @Bind("currentEnteredContext($node)") ProtosLanguageContext context,
-                @Cached(
-                        value = "createMissProfile()",
-                        uncached = "uncachedMissProfile()")
-                        CanonicalBooleanMissProfile missProfile) {
-            if (!ProtosValueLookup.isCanonicalBoolean(receiver)) {
-                missProfile.observeMiss();
-                return null;
-            }
-            if (receiver == com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE) {
-                return ProtosNullValue.INSTANCE;
-            }
-            // Deferred activation: the inline frame's exact invocation caller.
-            ProtosActivation caller = ProtosInlineCallbackFrameBindings.invocationCaller(
-                    child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame);
-            return ProtosBytecodeRootNode.nativeIfTrueCallback(
-                    caller, supplied, literalPlan, context);
+        static boolean canonicalFalse(Object receiver) {
+            return receiver == ProtosBooleanValue.FALSE;
         }
 
-        @NonIdempotent
-        static ProtosLanguageContext currentEnteredContext(Node node) {
-            return ProtosLanguageContext.current(node);
+        static boolean canonicalTrue(Object receiver) {
+            return receiver == ProtosBooleanValue.TRUE;
+        }
+
+        @Specialization(guards = "canonicalFalse(receiver)")
+        public static int falseBranch(Object receiver) {
+            return ProtosCanonicalBooleanOneNode.CLASS_FALSE;
+        }
+
+        @Specialization(guards = "canonicalTrue(receiver)")
+        public static int trueBranch(Object receiver) {
+            return ProtosCanonicalBooleanOneNode.CLASS_TRUE;
+        }
+
+        @Specialization(guards = {
+                "!canonicalFalse(receiver)",
+                "!canonicalTrue(receiver)"
+        })
+        public static int genericMiss(
+                Object receiver,
+                @Cached(
+                    value = "createMissProfile()",
+                    uncached = "uncachedMissProfile()")
+                    CanonicalBooleanMissProfile missProfile) {
+            missProfile.observeMiss();
+            return ProtosCanonicalBooleanOneNode.CLASS_MISS;
         }
     }
 
+    /** Frame-native Vector: caller observation is deferred. */
+
     @Operation
-    @ConstantOperand(type = LocalRangeAccessor.class, name = "frameBackedLocals")
-    @ConstantOperand(type = ProtosFrameLexicalLayout.class, name = "frameBackedLayout")
     public static final class TryCompactCanonicalBooleanInlineVector {
 
         static CanonicalBooleanMissProfile createMissProfile() {
@@ -5691,25 +5741,124 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return CanonicalBooleanMissProfile.uncached();
         }
 
+        static boolean canonicalFalse(Object receiver, PreparedArgumentVector vector) {
+            return vector.soleValueOrNull() != null && receiver == ProtosBooleanValue.FALSE;
+        }
+
+        static boolean canonicalTrue(Object receiver, PreparedArgumentVector vector) {
+            return vector.soleValueOrNull() != null && receiver == ProtosBooleanValue.TRUE;
+        }
+
+        @Specialization(guards = "canonicalFalse(receiver, vector)")
+        public static int falseBranch(Object receiver, PreparedArgumentVector vector) {
+            return ProtosCanonicalBooleanOneNode.CLASS_FALSE;
+        }
+
+        @Specialization(guards = "canonicalTrue(receiver, vector)")
+        public static int trueBranch(Object receiver, PreparedArgumentVector vector) {
+            return ProtosCanonicalBooleanOneNode.CLASS_TRUE;
+        }
+
+        @Specialization(guards = {
+                "!canonicalFalse(receiver, vector)",
+                "!canonicalTrue(receiver, vector)"
+        })
+        public static int genericMiss(
+                Object receiver, PreparedArgumentVector vector,
+                @Cached(
+                    value = "createMissProfile()",
+                    uncached = "uncachedMissProfile()")
+                    CanonicalBooleanMissProfile missProfile) {
+            missProfile.observeMiss();
+            return ProtosCanonicalBooleanOneNode.CLASS_MISS;
+        }
+    }
+
+    /**
+     * Selected spread callback. The vector has already passed the
+     * one-argument classification guard.
+     */
+    @Operation
+    public static final class PrepareCanonicalIfTrueVectorCallback {
         @Specialization
-        public static Object perform(
-                LocalRangeAccessor frameBackedLocals, ProtosFrameLexicalLayout frameBackedLayout,
-                Object receiver, PreparedInlineLiteralCall child,
+        public static PreparedInlineLiteralCall perform(
+                Object caller,
+                PreparedArgumentVector vector,
+                @Cached ProtosNativeIfTrueCallbackNode callback) {
+            return callback.execute(
+                    caller, vector.soleValueOrNull(), null, null);
+        }
+    }
+
+    /**
+     * The inline callback's exact caller is observed only when TRUE
+     * selects its child. FALSE and MISS never enter this operation.
+     */
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class PrepareCanonicalIfTrueInlineCallback {
+        @Specialization
+        public static PreparedInlineLiteralCall perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                PreparedInlineLiteralCall child,
+                Object supplied,
+                Object literalPlan,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
+                @Bind("currentEnteredContext($node)")
+                    ProtosLanguageContext context,
+                @Cached ProtosNativeIfTrueCallbackNode callback) {
+
+            ProtosActivation caller =
+                    ProtosInlineCallbackFrameBindings.invocationCaller(
+                            child, frameBackedLocals,
+                            frameBackedLayout, bytecodeNode, frame);
+
+            return callback.execute(
+                    caller, supplied, literalPlan, context);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+    }
+
+    /**
+     * Inline spread: preserve the original vector callback protocol,
+     * including its null entered-context fallback.
+     */
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class PrepareCanonicalIfTrueInlineVectorCallback {
+        @Specialization
+        public static PreparedInlineLiteralCall perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                PreparedInlineLiteralCall child,
                 PreparedArgumentVector vector,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame,
-                @Cached(
-                        value = "createMissProfile()",
-                        uncached = "uncachedMissProfile()")
-                        CanonicalBooleanMissProfile missProfile) {
-            if (vector.soleValueOrNull() == null) {
-                missProfile.observeMiss();
-                return null;
-            }
-            return TryCompactCanonicalBooleanInlineOne.perform(
-                    frameBackedLocals, frameBackedLayout, receiver, child,
-                    vector.soleValueOrNull(), null, bytecodeNode, frame, null,
-                    missProfile);
+                @Cached ProtosNativeIfTrueCallbackNode callback) {
+
+            ProtosActivation caller =
+                    ProtosInlineCallbackFrameBindings.invocationCaller(
+                            child, frameBackedLocals,
+                            frameBackedLayout, bytecodeNode, frame);
+
+            return callback.execute(
+                    caller, vector.soleValueOrNull(), null, null);
         }
     }
 
