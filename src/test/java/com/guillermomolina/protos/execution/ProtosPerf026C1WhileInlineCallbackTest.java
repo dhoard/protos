@@ -95,7 +95,8 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                                 run()
                                 """);
 
-                assertSame(ProtosNullValue.INSTANCE, root.getCallTarget().call(probe.module()));
+                // D201: the last body result is the value of its final assignment.
+                assertInteger(3, root.getCallTarget().call(probe.module()));
 
                 assertEquals(7, probe.calls.get(), "four conditions and three bodies");
                 assertEquals(List.of(2), probe.depths(), () -> "stacks=" + probe.stacks);
@@ -120,7 +121,105 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
         System.out.println("PERF026_C1_WHILE_HELPER_ROOT_REMOVED=YES");
         System.out.println("PERF026_C1_WHILE_CALLBACK_ROOTS_REMOVED=YES");
         System.out.println("PERF026_C1_WHILE_INLINE_ROOTTAGS=YES");
-        System.out.println("PERF026_C1_WHILE_NORMAL_RESULT_NULL=YES");
+        System.out.println("D201_INLINE_WHILE_TRUE_RETURNS_LAST_BODY=YES");
+    }
+
+    @Test
+    void eligibleLiteralPairOfStandardWhileRunsLocallyAndReturnsFalse() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                ProtosSemanticBytecodeRootNode root =
+                        lowerRoot(
+                                """
+                                run: () => {
+                                    n: 0
+                                    (() => {
+                                        probe()
+                                        n < 3
+                                    }).while() {
+                                        probe()
+                                        n = n + 1
+                                    }
+                                }
+                                run()
+                                """);
+
+                assertSame(ProtosBooleanValue.FALSE, root.getCallTarget().call(probe.module()));
+                assertEquals(7, probe.calls.get(), "four conditions and three bodies");
+                assertEquals(List.of(2), probe.depths(), () -> "stacks=" + probe.stacks);
+            } finally {
+                context.leave();
+            }
+        }
+        System.out.println("D201_INLINE_WHILE_RETURNS_FINAL_FALSE=YES");
+    }
+
+    /**
+     * D201 path equivalence: the inline local loop, the structured-dispatch
+     * loop (dynamic condition) and an inline candidate that falls back to the
+     * structured loop (nested Closure literal) produce the same normal results
+     * for both selectors.
+     */
+    @Test
+    void inlineStructuredAndFallbackLoopsAgreeOnBothResultPolicies() throws Exception {
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        "d201-path-equivalence.protos",
+                        """
+                        run: () => {
+                            box: {}
+                            n: 0
+                            inlineTrue: (() => { n < 2 }).whileTrue() {
+                                n = n + 1
+                                box
+                            }
+                            n = 0
+                            condition: () => { n < 2 }
+                            structuredTrue: condition.whileTrue() {
+                                n = n + 1
+                                box
+                            }
+                            n = 0
+                            fallbackTrue: (() => { n < 2 }).whileTrue() {
+                                step: () => { 1 }
+                                n = n + step()
+                                box
+                            }
+                            n = 0
+                            inlineWhile: (() => { n < 2 }).while() {
+                                n = n + 1
+                                box
+                            }
+                            n = 0
+                            structuredWhile: condition.while() {
+                                n = n + 1
+                                box
+                            }
+                            n = 0
+                            fallbackWhile: (() => { n < 2 }).while() {
+                                step: () => { 1 }
+                                n = n + step()
+                                box
+                            }
+                            zeroTrue: (() => { false }).whileTrue() { box }
+                            zeroWhile: (() => { false }).while() { box }
+                            ((inlineTrue === box) &&
+                                (structuredTrue === box) &&
+                                (fallbackTrue === box) &&
+                                (inlineWhile === false) &&
+                                (structuredWhile === false) &&
+                                (fallbackWhile === false) &&
+                                (zeroTrue === null) &&
+                                (zeroWhile === false)).ifTrueIfFalse(() => { 1 }, () => { 0 })
+                        }
+                        run()
+                        """,
+                        new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation());
+        assertCompletedWith(1, outcome);
+        System.out.println("D201_INLINE_STRUCTURED_FALLBACK_RESULTS_EQUAL=YES");
     }
 
     @Test
@@ -193,7 +292,7 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                                 }
                                 """);
 
-                assertSame(ProtosNullValue.INSTANCE, root.getCallTarget().call(probe.module()));
+                assertInteger(1, root.getCallTarget().call(probe.module()));
                 assertEquals(List.of(3), probe.depths(), () -> "stacks=" + probe.stacks);
                 List<RootNode> stack = probe.stacks.get(0);
                 assertInstanceOf(ProtosSemanticBytecodeRootNode.class, stack.get(0));
@@ -472,7 +571,8 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                 Probe probe = new Probe();
                 ProtosSemanticBytecodeRootNode root = lowerRoot(characters);
 
-                assertSame(ProtosNullValue.INSTANCE, root.getCallTarget().call(probe.module()));
+                // Every preserved shape runs exactly one body ending in n = 1 (D201).
+                assertInteger(1, root.getCallTarget().call(probe.module()));
 
                 assertEquals(List.of(4), probe.depths(), () -> characters + " stacks=" + probe.stacks);
                 List<RootNode> stack = probe.stacks.get(0);

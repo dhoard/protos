@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.346-SNAPSHOT
+
+- `I098` (#886): implement D201: `whileTrue` returns its last normal body
+  result, and a new distinct standard `while` selector returns `false`.
+  - `whileTrue` returns the exact result of the last normally completed body
+    activation (canonical `null` for zero iterations), preserving identity and
+    never awaiting or adopting a returned Future.
+  - Install `Object.while`, which runs the same pre-test loop and returns the
+    final canonical `false` condition result.
+  - Share one loop algorithm across the direct, structured-dispatch and
+    inline-literal paths; the selected native body decides the return
+    policy, and `while` releases each body result before the next condition.
+  - Update Object publication, native-boundary and BCI PE topology baselines,
+    and add Protos-native and Java conformance coverage for both selectors.
+
 ## 0.3.345-SNAPSHOT
 
 - `I097` (#885): implement the D200 receiver-preserving Boolean messages

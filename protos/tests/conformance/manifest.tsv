@@ -197,6 +197,7 @@ control/while-basic-and-validation.protos	suite-native	-
 control/while-binding-and-transfer.protos	suite-native	-
 control/while-future-ownership.protos	suite-native	-
 control/while-suspension-and-cancellation.protos	suite-native	-
+control/while-loop-results.protos	suite-native	-
 reflection/close.protos	suite-native	-
 reflection/freeze.protos	suite-native	-
 reflection/has-slot.protos	suite-native	-

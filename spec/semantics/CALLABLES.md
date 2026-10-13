@@ -207,25 +207,28 @@ like every other Core Closure.
 ### Standard Closure-specific behavior ownership
 
 Core v0.1 installs the standard Closure-specific selectors `future`, `parallel`,
-`ensure`, and `whileTrue` as ordinary **local Closure-valued slots of `Object`**.
+`ensure`, `whileTrue`, and `while` as ordinary **local Closure-valued slots of
+`Object`**.
 They are not hidden runtime methods, per-Closure materialized slots, entries in a
 separate method table, or slots on a standard `Closure` prototype. Core defines
 no standard `Closure` prototype.
 
 This location is ordinary and observable. Under the portable topology in
 `OBJECT_MODEL.md`, every Closure delegates directly to `Object`, so ordinary
-lookup of `closure.future`, `closure.parallel`, `closure.ensure`, or
-`closure.whileTrue` reaches the corresponding local slot on `Object` unless a nearer
-ordinary slot shadows it. Consequently `Object.hasSlot("future")`,
-`Object.hasSlot("parallel")`, `Object.hasSlot("ensure")`, and
-`Object.hasSlot("whileTrue")` are true, and `Object.slotNames()` includes all four
+lookup of `closure.future`, `closure.parallel`, `closure.ensure`,
+`closure.whileTrue`, or `closure.while` reaches the corresponding local slot on
+`Object` unless a nearer ordinary slot shadows it. Consequently
+`Object.hasSlot("future")`, `Object.hasSlot("parallel")`,
+`Object.hasSlot("ensure")`, `Object.hasSlot("whileTrue")`, and
+`Object.hasSlot("while")` are true, and `Object.slotNames()` includes all five
 names under the ordinary reflection rules. Any other receiver whose delegation
 chain reaches `Object` can likewise find these selectors by ordinary lookup.
 
-The **standard** behaviors stored in those four `Object` slots have the semantic
+The **standard** behaviors stored in those five `Object` slots have the semantic
 Closure family as their receiver domain. Finding one of those behaviors does not
 make the original receiver a Closure. If ordinary lookup selects the standard
-`Object.future`, `Object.parallel`, `Object.ensure`, or `Object.whileTrue` behavior
+`Object.future`, `Object.parallel`, `Object.ensure`, `Object.whileTrue`, or
+`Object.while` behavior
 for an original receiver that is not a semantic Closure, invocation signals the
 ordinary invalid-receiver `Error` required by `OBJECT_MODEL.md` before the
 selected standard operation performs its Closure-specific effect. Failure of
@@ -233,15 +236,15 @@ that selected behavior does not resume lookup at another slot with the same
 name.
 
 The selectors themselves are not reserved. A nearer local `future`, `parallel`,
-`ensure`, or `whileTrue` slot shadows the inherited standard slot exactly as for any
+`ensure`, `whileTrue`, or `while` slot shadows the inherited standard slot exactly as for any
 other name, including when the nearer value is not a Closure. A program-defined
 Closure-valued override has its own ordinary receiver contract and is not
 automatically restricted to Closure receivers merely because it uses one of
 these names. Subject to the ordinary open/closed/frozen and slot-creation rules,
 a Closure object may itself define a nearer local override.
 
-Reading `receiver.future`, `receiver.parallel`, `receiver.ensure`, or
-`receiver.whileTrue` is an ordinary member read. When the selected value is a
+Reading `receiver.future`, `receiver.parallel`, `receiver.ensure`,
+`receiver.whileTrue`, or `receiver.while` is an ordinary member read. When the selected value is a
 Closure, extraction follows §11 exactly: the resulting Closure retains the
 original receiver and selected slot owner as the ordinary receiver/`methodHome`
 binding metadata. No second bound-method kind or Closure-specific extraction
@@ -258,10 +261,12 @@ semantics.
 standard `ensure(cleanup)` behavior does after receiver/argument validation,
 including the protected dynamic extent, cleanup triggering, result preservation,
 unwind, suspension, cancellation shielding, and control-transfer precedence. It
-also owns what the standard `whileTrue(body)` behavior does after receiver/argument
-validation, including zero-argument Closure activation order, strict canonical
-Boolean condition results, ignored body results, canonical `null` normal result,
-and Error/control-transfer/suspension/cancellation/Future composition.
+also owns what the standard `whileTrue(body)` and `while(body)` behaviors do
+after receiver/argument validation, including zero-argument Closure activation
+order, strict canonical Boolean condition results, their normal results (the
+last normal body result or canonical `null` for `whileTrue`, the final canonical
+`false` condition result for `while`), and
+Error/control-transfer/suspension/cancellation/Future composition.
 
 An implementation may realize any of these standard behaviors using host
 primitives, intrinsics, cached dispatch, worker pools, scheduler machinery, or

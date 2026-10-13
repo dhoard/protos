@@ -6154,6 +6154,23 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     @Operation
+    public static final class StructuredWhileRetainBodyResult {
+        @Specialization
+        public static Object perform(PreparedWhileCall prepared, Object bodyResult) {
+            return ProtosBytecodeRootNode.StructuredWhileRetainBodyResult.perform(
+                    prepared, bodyResult);
+        }
+    }
+
+    @Operation
+    public static final class StructuredWhileResult {
+        @Specialization
+        public static Object perform(PreparedWhileCall prepared, Object lastBodyResult) {
+            return ProtosBytecodeRootNode.StructuredWhileResult.perform(prepared, lastBodyResult);
+        }
+    }
+
+    @Operation
     public static final class AdmitsInlineLiteralWhileCondition {
         @Specialization
         public static boolean perform(

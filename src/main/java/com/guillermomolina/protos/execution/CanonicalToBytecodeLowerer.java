@@ -5215,7 +5215,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * PLAT044 B′ (PERF026-C1) local standard whileTrue over an admitted
+     * PLAT044 B′ (PERF026-C1) local standard whileTrue/while over an admitted
      * literal pair.
      *
      * <p>Mirrors the while branch of {@code ProtosStructuredDispatchLowerer}
@@ -5224,8 +5224,10 @@ final class CanonicalToBytecodeLowerer {
      * the receiver/body are validated before the first condition activation,
      * each condition and (only after a canonical {@code true}) each body
      * activation is prepared fresh at the same point, the condition result
-     * keeps its strict canonical Boolean authority, the body result is
-     * ignored and normal completion is canonical {@code null}. The loop phase
+     * keeps its strict canonical Boolean authority, and normal completion
+     * applies the D201 result policy of {@code PreparedWhileCall#result}
+     * (whileTrue: last normal body result; while: final {@code false}),
+     * covering both standard pre-test loop selectors. The loop phase
      * lives in this root's Bytecode control state, so suspension resumes at
      * the exact loop PC through this root's continuation (PLAT014/PLAT021).
      *
@@ -5248,6 +5250,8 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredWhileChild", null);
         BytecodeLocal structuredWhileConditionResult =
                 builder.createLocal("structuredWhileConditionResult", null);
+        BytecodeLocal structuredWhileBodyResult =
+                builder.createLocal("structuredWhileBodyResult", null);
 
         builder.beginTryFinally(
                 () -> {
@@ -5261,6 +5265,19 @@ final class CanonicalToBytecodeLowerer {
         builder.beginPrepareStructuredWhileCall();
         builder.emitLoadLocal(preparedCall);
         builder.endPrepareStructuredWhileCall();
+        builder.endStoreLocal();
+
+        /*
+         * D201: the last normal body result for whileTrue. It starts as
+         * canonical null (zero iterations) and is overwritten only by a body
+         * invocation that completes normally; an abnormal condition/body exit
+         * propagates without reaching the result store below. For while each
+         * body result is replaced by null right after the body completes, so
+         * the terminal condition (even while suspended) keeps no body object
+         * reachable through this local.
+         */
+        builder.beginStoreLocal(structuredWhileBodyResult);
+        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
         builder.endStoreLocal();
 
         builder.beginWhile();
@@ -5301,7 +5318,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
         emitLocalInlineLiteralChild(
                 builder,
-                childResult,
+                structuredWhileBodyResult,
                 structuredWhileChild,
                 childResult,
                 resumeValue,
@@ -5315,12 +5332,21 @@ final class CanonicalToBytecodeLowerer {
                             inlineWhile.body());
                     builder.endAdmitsInlineLiteralWhileBody();
                 });
+        builder.beginStoreLocal(structuredWhileBodyResult);
+        builder.beginStructuredWhileRetainBodyResult();
+        builder.emitLoadLocal(structuredWhile);
+        builder.emitLoadLocal(structuredWhileBodyResult);
+        builder.endStructuredWhileRetainBodyResult();
+        builder.endStoreLocal();
         builder.endBlock();
 
         builder.endWhile();
 
         builder.beginStoreLocal(result);
-        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+        builder.beginStructuredWhileResult();
+        builder.emitLoadLocal(structuredWhile);
+        builder.emitLoadLocal(structuredWhileBodyResult);
+        builder.endStructuredWhileResult();
         builder.endStoreLocal();
 
         builder.endBlock();

@@ -23,6 +23,30 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.459] - 2026-10-13
+
+### D201 — `whileTrue` returns its last body result; standard `while`
+- `spec/semantics/EXECUTION_AND_CONTROL.md` §17: `condition.whileTrue(body)`
+  now returns the exact normal result of its last normally completed body
+  activation, or canonical `null` for zero iterations, without conversion,
+  copying, awaiting or Future adoption. This supersedes only D044's
+  constant-`null` result rule. A new distinct standard `condition.while(body)`
+  runs the identical validation and pre-test loop and returns its final
+  canonical `false` condition result. This supersedes only D180's prohibition
+  of a standard `while` selector; the two selectors are not aliases.
+- The terminal condition runs after the last body and may mutate the returned
+  object. An abnormal terminal condition yields no normal result. A returned
+  Future is adopted only by the existing rules of an enclosing asynchronous
+  computation. Validation, strict Boolean conditions, activation order,
+  control transfer, suspension, cancellation and ownership are unchanged.
+  `whileFalse` remains undefined.
+- `spec/semantics/CALLABLES.md`: `Object.while` joins the standard
+  Closure-specific `Object` slots (now five) with the same receiver domain,
+  lookup, shadowing and extraction rules.
+- `spec/PROTOS_GRAMMAR.md` (Standard Closure `whileTrue` Syntax Note) and
+  `spec/concurrency/FUTURES_AND_TASKS.md`: mention `while` as an ordinary
+  message; no grammar or ownership change.
+
 ## [0.1.458] - 2026-10-13
 
 ### D200 — Receiver-preserving Boolean `if` / `else` messages

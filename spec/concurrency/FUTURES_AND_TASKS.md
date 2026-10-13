@@ -664,7 +664,7 @@ The existing structured-concurrency semantics for Futures remain.
 Structured ownership is scoped to asynchronous task execution, not to every
 ordinary synchronous invocation frame. Each task-backed asynchronous computation
 has one structured execution scope. Ordinary Closure calls, method calls,
-`whileTrue` condition/body activations, `ensure` body/cleanup activations, and other
+`whileTrue`/`while` condition/body activations, `ensure` body/cleanup activations, and other
 synchronous nested invocations performed by that computation execute inside the
 same current structured execution scope unless they themselves start a distinct
 asynchronous computation. Core exposes no public Task or scope object merely to

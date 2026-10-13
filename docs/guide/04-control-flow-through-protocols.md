@@ -261,12 +261,12 @@ validate condition Closure and body Closure
         v
 invoke condition() with zero arguments
         |
-        +-- false --> return null
+        +-- false --> return the most recent body value (null if none)
         |
         +-- true  --> invoke body() with zero arguments
                          |
                          v
-                  ignore normal body value
+                  remember normal body value
                          |
                          +------> condition() again
 ```
@@ -276,6 +276,17 @@ activation and before every later iteration.
 
 If the first condition result is `false`, the body runs zero times and the
 whole `whileTrue` operation returns canonical `null`.
+
+The standard `while` selector runs exactly the same loop but returns its final
+condition result, which is always canonical `false` on normal completion:
+
+```protos
+finished: (() => i < 3).while() {
+    i = i + 1
+}
+
+finished === false
+```
 
 ## Why the receiver is a Closure
 
@@ -354,9 +365,10 @@ condition: () => index < limit
 
 rather than relying on a convention such as "non-null means continue".
 
-## Body results do not become loop results
+## The last body result is the `whileTrue` result
 
-The normal value returned by each reached body activation is ignored:
+`whileTrue` returns the exact normal value of its last completed body
+activation:
 
 ```protos
 i: 0
@@ -366,14 +378,17 @@ result: (() => i < 1).whileTrue() {
     99
 }
 
-result === null
+result == 99
 ```
 
-The body can still produce effects, update captured state, call other code, or
-signal control transfer. Its **normal value**, however, is not accumulated and
-is not the result of `whileTrue`.
+Earlier body values are not accumulated. The value keeps its identity: an
+object, Boolean, number, or Future is returned as is. The terminal condition
+runs after the last body and may still mutate that object. If the terminal
+condition signals an Error or otherwise leaves abnormally, there is no normal
+result at all.
 
-Normal loop completion always yields canonical `null`.
+Use `while` when the loop is run only for its effects and its result should not
+depend on the body: it always completes normally with canonical `false`.
 
 ## Ordinary lookup still matters
 
@@ -453,7 +468,7 @@ The exact task and Future ownership rules are covered by the concurrency
 specification and by the later Programming Guide chapter dedicated to Futures
 and structured concurrency.
 
-## A body-returned Future is still just an ignored body value
+## A body-returned Future is just a body value
 
 One subtle boundary is worth knowing before that later chapter.
 
@@ -464,14 +479,17 @@ normal return into an implicit `await`:
 body() normally returns Future
         |
         v
-whileTrue ignores that body value
+whileTrue remembers that Future as the latest body value
         |
         v
 next condition activation
 ```
 
 The loop itself does not adopt, await, or cancel that Future merely because it
-was the body's return value.
+was the body's return value. When it is the last body value, `whileTrue` returns
+that same Future; if the loop is the final expression of an asynchronous
+computation, the ordinary Future adoption rules then apply to that computation's
+own Future.
 
 Any structured-lifetime relationship created by the task that produced the
 Future remains governed by the ordinary task-ownership rules. Ignoring the body
@@ -557,7 +575,10 @@ Representative loop cases include:
   `null` completion, and that a Future condition result is not implicitly
   awaited;
 - [`../../protos/tests/conformance/control/while-future-ownership.protos`](../../protos/tests/conformance/control/while-future-ownership.protos)
-  demonstrates that normal body values are ignored;
+  demonstrates that the last normal body value is the `whileTrue` result;
+- [`../../protos/tests/conformance/control/while-loop-results.protos`](../../protos/tests/conformance/control/while-loop-results.protos)
+  demonstrates the `whileTrue` and `while` results for zero, one and many
+  iterations, Future results and adoption, and terminal-condition transfers;
 - [`../../protos/tests/conformance/control/while-binding-and-transfer.protos`](../../protos/tests/conformance/control/while-binding-and-transfer.protos)
   demonstrates non-local return across a reached body;
 - [`../../protos/tests/conformance/control/while-suspension-and-cancellation.protos`](../../protos/tests/conformance/control/while-suspension-and-cancellation.protos)

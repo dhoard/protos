@@ -69,7 +69,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardProcessProtocol.java", 1),
                     Map.entry("execution/ProtosStandardBytesProtocol.java", 7),
                     Map.entry("execution/ProtosStandardByteIoProtocol.java", 12),
-                    Map.entry("execution/ProtosStandardObjectProtocol.java", 13),
+                    Map.entry("execution/ProtosStandardObjectProtocol.java", 14),
                     Map.entry("execution/ProtosStandardActorProtocol.java", 9),
                     Map.entry("execution/ProtosStandardIdentityMapProtocol.java", 8),
                     Map.entry("execution/ProtosStandardStringProtocol.java", 5),
@@ -153,7 +153,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(36, actualCore.size());
-        assertEquals(137, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(138, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -196,13 +196,11 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                         "parent",
                         "ensure",
                         "whileTrue",
+                        "while",
                         "caseOf"));
         assertTrue(
                 ProtosObjectValue.rootObject().readLocalSlot("identityHash").isEmpty(),
                 "standard Object must not publish identityHash");
-        assertTrue(
-                ProtosObjectValue.rootObject().readLocalSlot("while").isEmpty(),
-                "standard Object must not publish the removed while loop selector");
         assertTrue(
                 ProtosObjectValue.rootObject().readLocalSlot("whileFalse").isEmpty(),
                 "standard Object must not publish an inverse whileFalse loop selector");

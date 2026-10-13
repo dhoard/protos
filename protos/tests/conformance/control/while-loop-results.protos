@@ -1,0 +1,369 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// D201: normal results of the standard pre-test loops. `whileTrue` returns the
+// exact result of its last normally completed body activation (canonical null
+// for zero iterations); `while` runs the same loop and returns its final
+// canonical false condition result.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+lastBodyOf: (values) => {
+    n: 0
+    (() => { n < values.size() }).whileTrue() {
+        n = n + 1
+        values[n - 1]
+    }
+}
+
+whileOf: (values) => {
+    n: 0
+    (() => { n < values.size() }).while() {
+        n = n + 1
+        values[n - 1]
+    }
+}
+
+tests: [
+    Test("zero iterations return null and false", () => {
+        bodyCalls: 0
+        bodyDefaultCalls: 0
+        bodyDefault: () => {
+            bodyDefaultCalls = bodyDefaultCalls + 1
+            0
+        }
+        trueResult: (() => false).whileTrue((ignored = bodyDefault()) => {
+            bodyCalls = bodyCalls + 1
+            42
+        })
+        whileResult: (() => false).while((ignored = bodyDefault()) => {
+            bodyCalls = bodyCalls + 1
+            42
+        })
+        Assertions.require(trueResult === null)
+        Assertions.require(whileResult === false)
+        Assertions.require(bodyCalls == 0)
+        Assertions.require(bodyDefaultCalls == 0)
+    }),
+    Test("one iteration returns the body result or false", () => {
+        Assertions.require(lastBodyOf([7]) == 7)
+        Assertions.require(whileOf([7]) === false)
+    }),
+    Test("many iterations return the last body result or false", () => {
+        Assertions.require(lastBodyOf([1, 2, 3]) == 3)
+        Assertions.require(whileOf([1, 2, 3]) === false)
+    }),
+    Test("last body result keeps its exact value and identity", () => {
+        marker: {}
+        Assertions.require(lastBodyOf([marker, null]) === null)
+        Assertions.require(lastBodyOf([null, true]) === true)
+        Assertions.require(lastBodyOf([true, false]) === false)
+        Assertions.require(lastBodyOf([null, 42]) == 42)
+        Assertions.require(lastBodyOf([null, marker]) === marker)
+        Assertions.require(whileOf([null, marker]) === false)
+        Assertions.require(whileOf([false, true]) === false)
+    }),
+    Test("structured and inline loops agree on both results", () => {
+        marker: {}
+        n: 0
+        condition: () => { n < 2 }
+        body: () => {
+            n = n + 1
+            marker
+        }
+        structuredTrue: condition.whileTrue(body)
+        n = 0
+        structuredWhile: condition.while(body)
+        n = 0
+        extractedTrue: condition.whileTrue
+        directTrue: extractedTrue(body)
+        n = 0
+        extractedWhile: condition.while
+        directWhile: extractedWhile(body)
+        n = 0
+        inlineTrue: (() => { n < 2 }).whileTrue() {
+            n = n + 1
+            marker
+        }
+        n = 0
+        inlineWhile: (() => { n < 2 }).while() {
+            n = n + 1
+            marker
+        }
+        Assertions.require(structuredTrue === marker)
+        Assertions.require(directTrue === marker)
+        Assertions.require(inlineTrue === marker)
+        Assertions.require(structuredWhile === false)
+        Assertions.require(directWhile === false)
+        Assertions.require(inlineWhile === false)
+    }),
+    Test("body Future is returned without awaiting it", () => {
+        failure: Error()
+        returned: null
+        afterLoop: 0
+        i: 0
+        result: (() => { i < 1 }).whileTrue() {
+            i = i + 1
+            returned = (() => { failure.signal() }).future()
+            returned
+        }
+        afterLoop = afterLoop + 1
+        whileResult: (() => { i < 2 }).while() {
+            i = i + 1
+            (() => { 5 }).future()
+        }
+        Assertions.require(result === returned)
+        Assertions.require(whileResult === false)
+        Assertions.require(afterLoop == 1)
+        observed: Error.handle(
+            () => { returned.value() },
+            (caught) => caught
+        )
+        Assertions.require(observed === failure)
+    }),
+    Test("outer Future adopts the Future returned by whileTrue", () => {
+        outer: (() => {
+            i: 0
+            (() => { i < 2 }).whileTrue() {
+                i = i + 1
+                (() => { i * 21 }).future()
+            }
+        }).future()
+        Assertions.require(outer.value() == 42)
+    }),
+    Test("outer Future adopts a failed Future returned by whileTrue", () => {
+        failure: Error()
+        outer: (() => {
+            i: 0
+            (() => { i < 1 }).whileTrue() {
+                i = i + 1
+                (() => { failure.signal() }).future()
+            }
+        }).future()
+        observed: Error.handle(
+            () => { outer.value() },
+            (caught) => caught
+        )
+        Assertions.require(observed === failure)
+    }),
+    Test("outer Future of while resolves to false", () => {
+        outer: (() => {
+            i: 0
+            (() => { i < 1 }).while() {
+                i = i + 1
+                (() => { 42 }).future()
+            }
+        }).future()
+        Assertions.require(outer.value() === false)
+    }),
+    Test("terminal condition may mutate the returned object", () => {
+        box: {}
+        box.state: "initial"
+        conditionCalls: 0
+        condition: () => {
+            conditionCalls = conditionCalls + 1
+            (conditionCalls > 1).ifTrue(() => {
+                box.state = "condition"
+            })
+            conditionCalls < 3
+        }
+        result: condition.whileTrue() {
+            box.state = "body"
+            box
+        }
+        Assertions.require(result === box)
+        Assertions.require(box.state == "condition")
+        Assertions.require(conditionCalls == 3)
+    }),
+    Test("terminal condition Error discards the saved body result", () => {
+        expected: Error()
+        conditionCalls: 0
+        saved: "unset"
+        condition: () => {
+            conditionCalls = conditionCalls + 1
+            (conditionCalls == 2).ifTrue(() => {
+                expected.signal()
+            })
+            true
+        }
+        trueCaught: Error.handle(
+            () => {
+                saved = condition.whileTrue() { "body" }
+                null
+            },
+            (caught) => caught
+        )
+        conditionCalls = 0
+        whileCaught: Error.handle(
+            () => {
+                saved = condition.while() { "body" }
+                null
+            },
+            (caught) => caught
+        )
+        Assertions.require(trueCaught === expected)
+        Assertions.require(whileCaught === expected)
+        Assertions.require(saved == "unset")
+    }),
+    Test("terminal condition nonlocal return discards the saved body result", () => {
+        marker: {}
+        saved: "unset"
+        afterLoop: 0
+        conditionCalls: 0
+        outer: () => {
+            condition: () => {
+                conditionCalls = conditionCalls + 1
+                (conditionCalls == 2).ifTrue(() => {
+                    ^marker
+                })
+                true
+            }
+            saved = condition.whileTrue() { "body" }
+            afterLoop = afterLoop + 1
+            null
+        }
+        Assertions.require(outer() === marker)
+        Assertions.require(saved == "unset")
+        Assertions.require(afterLoop == 0)
+        Assertions.require(conditionCalls == 2)
+    }),
+    Test("while validates receiver, arity and body before any activation", () => {
+        conditionCalls: 0
+        condition: () => {
+            conditionCalls = conditionCalls + 1
+            false
+        }
+        Assertions.signals(Error, () => {
+            true.while(() => { null })
+        })
+        plain: {}
+        Assertions.signals(Error, () => {
+            plain.while(() => { null })
+        })
+        Assertions.signals(Error, () => {
+            condition.while()
+        })
+        Assertions.signals(Error, () => {
+            condition.while(42)
+        })
+        Assertions.require(conditionCalls == 0)
+    }),
+    Test("while binds parameters and defaults only when reached", () => {
+        conditionDefaultCalls: 0
+        nextCondition: () => {
+            conditionDefaultCalls = conditionDefaultCalls + 1
+            conditionDefaultCalls == 1
+        }
+        condition: (value = nextCondition()) => value
+        bodyCalls: 0
+        result: condition.while((ignored = 1) => {
+            bodyCalls = bodyCalls + 1
+            "body"
+        })
+        Assertions.require(result === false)
+        Assertions.require(conditionDefaultCalls == 2)
+        Assertions.require(bodyCalls == 1)
+        Assertions.require((() => false).while((required) => { 1 }) === false)
+        Assertions.signals(Error, () => {
+            (() => true).while((required) => { 1 })
+        })
+    }),
+    Test("suspension in body and terminal condition keeps the result exactly once", () => {
+        work: () => {
+            conditionBefore: 0
+            conditionAfter: 0
+            bodyBefore: 0
+            bodyAfter: 0
+            marker: {}
+            condition: () => {
+                conditionBefore = conditionBefore + 1
+                (() => { null }).future().value()
+                conditionAfter = conditionAfter + 1
+                conditionBefore < 3
+            }
+            result: condition.whileTrue() {
+                bodyBefore = bodyBefore + 1
+                observed: (() => { marker }).future().value()
+                bodyAfter = bodyAfter + 1
+                observed
+            }
+            conditionBefore = 0
+            conditionAfter = 0
+            whileResult: condition.while() {
+                (() => { marker }).future().value()
+            }
+            (result === marker) &&
+                (whileResult === false) &&
+                (conditionBefore == 3) &&
+                (conditionAfter == 3) &&
+                (bodyBefore == 2) &&
+                (bodyAfter == 2)
+        }
+        Assertions.require(work.future().value() === true)
+    }),
+    Test("cancellation runs ensure once and produces no loop result", () => {
+        observation: () => {
+            bodyRuns: 0
+            cleanupRuns: 0
+            saved: "unset"
+            future: (() => {
+                dependency: Future.all().then((values) => 7)
+                (() => {
+                    saved = (() => { bodyRuns < 3 }).whileTrue() {
+                        bodyRuns = bodyRuns + 1
+                        (bodyRuns == 1).ifTrue(() => {
+                            future.cancel()
+                        })
+                        (bodyRuns > 1).ifTrue(() => {
+                            dependency.value()
+                        })
+                        "body"
+                    }
+                }).ensure(() => {
+                    cleanupRuns = cleanupRuns + 1
+                })
+            }).future()
+            observer: (() => {
+                Error.handle(
+                    () => future.value(),
+                    (ignored) => null
+                )
+                (saved == "unset") &&
+                    (bodyRuns == 2) &&
+                    (cleanupRuns == 1)
+            }).future()
+            observer
+        }
+        Assertions.require(observation().value() === true)
+    }),
+    Test("while and whileTrue follow ordinary lookup, shadowing and extraction", () => {
+        holder: {}
+        holder.while: 5
+        Assertions.require(holder.while === 5)
+        overriding: {}
+        bodyCalls: 0
+        overriding.while: (body) => "override"
+        Assertions.require(overriding.while(() => {
+            bodyCalls = bodyCalls + 1
+        }) == "override")
+        Assertions.require(bodyCalls == 0)
+        Assertions.require(Object.slotValue("while") !== Object.slotValue("whileTrue"))
+        extracted: (() => false).while
+        Assertions.require(extracted(() => { 1 }) === false)
+        Assertions.require(Object.hasSlot("while"))
+    })
+]
+tests.freeze()

@@ -630,6 +630,7 @@ public final class ProtosCoreBootstrap {
                         "parent",
                         "ensure",
                         "whileTrue",
+                        "while",
                         "caseOf",
                         "init",
                         "==",

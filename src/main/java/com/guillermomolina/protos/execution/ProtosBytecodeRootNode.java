@@ -3217,7 +3217,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
-            return new PreparedWhileCall(condition, body, activation);
+            return new PreparedWhileCall(
+                    condition,
+                    body,
+                    activation,
+                    ProtosStandardObjectProtocol.returnsLastBodyResult(nativeBody));
         }
 
         @Override
@@ -3810,18 +3814,48 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         PreparedClosureCall cleanup() { return cleanup; }
     }
 
+    /**
+     * Validated standard pre-test loop shared by {@code whileTrue} and {@code
+     * while} (D201). The loop algorithm is identical; {@link #result} applies
+     * the selector's normal-result policy once the final condition completed
+     * normally with canonical {@code false}.
+     */
     static final class PreparedWhileCall {
         private final ProtosClosureValue condition;
         private final ProtosClosureValue body;
         private final ProtosActivation activation;
+        private final boolean returnsLastBody;
 
         PreparedWhileCall(
                 ProtosClosureValue condition,
                 ProtosClosureValue body,
-                ProtosActivation activation) {
+                ProtosActivation activation,
+                boolean returnsLastBody) {
             this.condition = java.util.Objects.requireNonNull(condition, "condition");
             this.body = java.util.Objects.requireNonNull(body, "body");
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
+            this.returnsLastBody = returnsLastBody;
+        }
+
+        /**
+         * Normal loop result. {@code lastBodyResult} is the exact result of the
+         * last normally completed body activation, or canonical {@code null}
+         * when none ran; it is returned unchanged (no copy, conversion, or
+         * Future await/adoption) for {@code whileTrue}. {@code while} returns
+         * its final canonical {@code false}.
+         */
+        Object result(Object lastBodyResult) {
+            return returnsLastBody ? lastBodyResult : ProtosBooleanValue.FALSE;
+        }
+
+        /**
+         * Value kept in the loop's body-result local after a normal body
+         * activation: the exact result for {@code whileTrue}, canonical
+         * {@code null} for {@code while}, so {@code while} never keeps a body
+         * object reachable across its next (possibly suspending) condition.
+         */
+        Object retainedBodyResult(Object bodyResult) {
+            return returnsLastBody ? bodyResult : ProtosNullValue.INSTANCE;
         }
 
         PreparedClosureCall prepareCondition() {
@@ -4563,6 +4597,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         public static boolean perform(PreparedWhileCall prepared, Object result) {
             return prepared.conditionResult(result);
+        }
+    }
+
+    @Operation
+    public static final class StructuredWhileRetainBodyResult {
+        @Specialization
+        public static Object perform(PreparedWhileCall prepared, Object bodyResult) {
+            return prepared.retainedBodyResult(bodyResult);
+        }
+    }
+
+    @Operation
+    public static final class StructuredWhileResult {
+        @Specialization
+        public static Object perform(PreparedWhileCall prepared, Object lastBodyResult) {
+            return prepared.result(lastBodyResult);
         }
     }
 
@@ -9423,7 +9473,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             } else if (ProtosStandardErrorProtocol.isCanonicalStandardHandleSelection(
                     closure, home, caller)) {
                 kind = GuardedStructuredKind.ERROR_HANDLE;
-            } else if (ProtosStandardObjectProtocol.isCanonicalStandardWhileTrueSelection(
+            } else if (ProtosStandardObjectProtocol.isCanonicalStandardPreTestLoopSelection(
                     closure, home)) {
                 kind = GuardedStructuredKind.WHILE;
             } else if ((booleanKind =
@@ -10552,7 +10602,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 activation,
                 ProtosStandardObjectProtocol.isStandardEnsureImplementation(closure),
                 ProtosStandardErrorProtocol.isStandardHandleImplementation(closure),
-                ProtosStandardObjectProtocol.isStandardWhileTrueImplementation(closure),
+                ProtosStandardObjectProtocol.isStandardPreTestLoopImplementation(closure),
                 ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(closure),
                 ProtosStandardArrayProtocol.isStandardEachImplementation(closure),
                 ProtosStandardBytesProtocol.isStandardEachImplementation(closure),

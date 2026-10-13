@@ -154,7 +154,7 @@ tests: [
             result: condition.whileTrue((ignored = bodyDefault()) => {
                 bodyCalls = bodyCalls + 1
             })
-            (result === null) &&
+            (result == 1) &&
                 (conditionCalls == 2) &&
                 (bodyDefaultCalls == 1) &&
                 (bodyCalls == 1)
@@ -166,12 +166,12 @@ tests: [
             (() => false).whileTrue(42)
         })
     }),
-    Test("whileTrue is the only standard loop selector", () => {
+    Test("whileTrue and while are the standard loop selectors", () => {
         Assertions.require(Object.hasSlot("whileTrue"))
-        Assertions.require(!Object.hasSlot("while"))
+        Assertions.require(Object.hasSlot("while"))
         Assertions.require(!Object.hasSlot("whileFalse"))
     }),
-    Test("user-defined while remains an ordinary selector", () => {
+    Test("user-defined while shadows the standard loop", () => {
         tool009LegacyCase: () => {
             holder: {}
             holder.while: (body) => body() + 1

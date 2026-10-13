@@ -79,14 +79,14 @@ tests: [
         }
         Assertions.require(tool009LegacyCase() === true)
     }),
-    Test("while body result ignored", () => {
+    Test("whileTrue returns the last body result", () => {
         tool009LegacyCase: () => {
             i: 0
             result: (() => { i < 1 }).whileTrue() {
                 i = i + 1
                 99
             }
-            (result === null) && (i == 1)
+            (result == 99) && (i == 1)
         }
         Assertions.require(tool009LegacyCase() === true)
     })

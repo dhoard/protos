@@ -50,6 +50,10 @@ public final class ProtosStandardObjectProtocol {
             ProtosStandardObjectProtocol::whileTrue;
     private static final ProtosClosureValue STANDARD_WHILE_TRUE =
             ProtosClosureValue.nativeClosure(STANDARD_WHILE_TRUE_BODY);
+    private static final ProtosNativeClosureBody STANDARD_WHILE_BODY =
+            ProtosStandardObjectProtocol::whileLoop;
+    private static final ProtosClosureValue STANDARD_WHILE =
+            ProtosClosureValue.nativeClosure(STANDARD_WHILE_BODY);
     private static final class StandardCaseOfBody implements ProtosNativeClosureBody {
         @Override
         public Object execute(ProtosActivation activation, List<?> arguments) {
@@ -88,16 +92,39 @@ public final class ProtosStandardObjectProtocol {
         return closure.nativeBody().orElse(null) == STANDARD_ENSURE_BODY;
     }
 
-    static boolean isCanonicalStandardWhileTrueSelection(
+    /**
+     * D201: true for the canonical standard {@code Object.whileTrue} or
+     * {@code Object.while} selection. Both share one pre-test loop algorithm
+     * and differ only in their normal result ({@link
+     * #returnsLastBodyResult}).
+     */
+    static boolean isCanonicalStandardPreTestLoopSelection(
             Object behavior,
             ProtosObjectValue home) {
-        return behavior == STANDARD_WHILE_TRUE
+        return (behavior == STANDARD_WHILE_TRUE || behavior == STANDARD_WHILE)
                 && home.isRootObject();
     }
 
-    static boolean isStandardWhileTrueImplementation(
+    static boolean isStandardPreTestLoopImplementation(
             ProtosClosureValue closure) {
-        return closure.nativeBody().orElse(null) == STANDARD_WHILE_TRUE_BODY;
+        ProtosNativeClosureBody body = closure.nativeBody().orElse(null);
+        return body == STANDARD_WHILE_TRUE_BODY || body == STANDARD_WHILE_BODY;
+    }
+
+    /**
+     * D201 normal-result policy of a standard pre-test loop body: {@code
+     * whileTrue} returns the exact result of its last normally completed body
+     * activation (canonical {@code null} for zero iterations); {@code while}
+     * returns its final canonical {@code false} condition result.
+     */
+    static boolean returnsLastBodyResult(ProtosNativeClosureBody loopBody) {
+        if (loopBody == STANDARD_WHILE_TRUE_BODY) {
+            return true;
+        }
+        if (loopBody == STANDARD_WHILE_BODY) {
+            return false;
+        }
+        throw new IllegalArgumentException("not a standard pre-test loop body");
     }
 
     static boolean isStandardCaseOfImplementation(
@@ -200,6 +227,11 @@ public final class ProtosStandardObjectProtocol {
             object.createLocalSlot(
                     "whileTrue",
                     STANDARD_WHILE_TRUE);
+        }
+        if (!object.hasLocalSlot("while")) {
+            object.createLocalSlot(
+                    "while",
+                    STANDARD_WHILE);
         }
         if (!object.hasLocalSlot("caseOf")) {
             object.createLocalSlot(
@@ -437,6 +469,22 @@ public final class ProtosStandardObjectProtocol {
     }
 
     private static Object whileTrue(ProtosActivation activation, List<?> supplied) {
+        return preTestLoop(activation, supplied, true);
+    }
+
+    private static Object whileLoop(ProtosActivation activation, List<?> supplied) {
+        return preTestLoop(activation, supplied, false);
+    }
+
+    /**
+     * D201 shared pre-test loop. The last body result is held only by this
+     * Java local and only for {@code whileTrue}; it is returned solely when
+     * the final condition completes normally with canonical {@code false}.
+     */
+    private static Object preTestLoop(
+            ProtosActivation activation,
+            List<?> supplied,
+            boolean returnsLastBody) {
         Object receiver = activation.receiver();
         if (!(receiver instanceof ProtosClosureValue condition)) {
             throw invalid(activation);
@@ -446,16 +494,21 @@ public final class ProtosStandardObjectProtocol {
             throw invalid(activation);
         }
 
+        Object lastBodyResult = ProtosNullValue.INSTANCE;
         while (true) {
             Object conditionResult =
                     ProtosClosureInvoker.invoke(condition, List.of(), activation);
             if (conditionResult == ProtosBooleanValue.FALSE) {
-                return ProtosNullValue.INSTANCE;
+                return returnsLastBody ? lastBodyResult : ProtosBooleanValue.FALSE;
             }
             if (conditionResult != ProtosBooleanValue.TRUE) {
                 throw invalid(activation);
             }
-            ProtosClosureInvoker.invoke(body, List.of(), activation);
+            Object bodyResult =
+                    ProtosClosureInvoker.invoke(body, List.of(), activation);
+            if (returnsLastBody) {
+                lastBodyResult = bodyResult;
+            }
         }
     }
 
