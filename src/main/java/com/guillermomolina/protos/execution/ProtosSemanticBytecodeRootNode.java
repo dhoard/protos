@@ -6712,6 +6712,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     public static final class TryPrimitiveNumericSendOne {
         private static final Object MISS = new Object();
 
+        public record FoldedIntegerAddition(
+                long left, long right, long result) {}
+
         @Specialization(
                 guards = {
                     "smallInteger(receiver, receiverCarrier)",
@@ -6731,7 +6734,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 Object caller,
                 Object argument,
                 boolean receiverCarrier,
-                boolean argumentCarrier,
+                boolean argumentCarrier, Object foldedIntegerAddition,
+                Object staticFoldResult,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Bind("callerPrelude(caller)") ProtosPrelude prelude,
@@ -6744,6 +6748,22 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     ProtosPrimitiveNumericSendFastPathsBase.IntegerArithmeticNode arithmetic) {
             long left = smallValue(receiver);
             long right = smallValue(argument);
+
+            /*
+             * The existing canonical lookup, Context, Prelude and Assumption
+             * guards have already admitted this specialization. Check the
+             * actual operands as well: guest locals are mutable.
+             */
+            if (cachedInteger.operation()
+                            == ProtosStandardIntegerProtocol.CanonicalIntegerOperation.ADD
+                    && foldedIntegerAddition instanceof FoldedIntegerAddition fold
+                    && left == fold.left()
+                    && right == fold.right()
+                    && staticFoldResult instanceof Long constant
+                    && constant.longValue() == fold.result()) {
+                return constant;
+            }
+
             try {
                 return switch (cachedInteger.operation()) {
                     case ADD, SUBTRACT, MULTIPLY ->
@@ -6781,7 +6801,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 limit = "3")
         public static Object canonicalMixedInteger(
                 Object receiver, String selector, Object caller, Object argument,
-                boolean receiverCarrier, boolean argumentCarrier,
+                boolean receiverCarrier, boolean argumentCarrier, Object foldedIntegerAddition,
+                Object staticFoldResult,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Bind("callerPrelude(caller)") ProtosPrelude prelude,
@@ -6820,7 +6841,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 limit = "3")
         public static double canonicalFloatDD(
                 Object receiver, String selector, Object caller, Object argument,
-                boolean receiverCarrier, boolean argumentCarrier,
+                boolean receiverCarrier, boolean argumentCarrier, Object foldedIntegerAddition,
+                Object staticFoldResult,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Bind("callerPrelude(caller)") ProtosPrelude prelude,
@@ -6853,7 +6875,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 limit = "3")
         public static double canonicalFloatDL(
                 Object receiver, String selector, Object caller, Object argument,
-                boolean receiverCarrier, boolean argumentCarrier,
+                boolean receiverCarrier, boolean argumentCarrier, Object foldedIntegerAddition,
+                Object staticFoldResult,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Bind("callerPrelude(caller)") ProtosPrelude prelude,
@@ -6895,7 +6918,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 limit = "3")
         public static Object canonicalIntegerOrdering(
                 Object receiver, String selector, Object caller, Object argument,
-                boolean receiverCarrier, boolean argumentCarrier,
+                boolean receiverCarrier, boolean argumentCarrier, Object foldedIntegerAddition,
+                Object staticFoldResult,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Bind("callerPrelude(caller)") ProtosPrelude prelude,
@@ -6929,7 +6953,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 limit = "3")
         public static Object canonicalFloatOrdering(
                 Object receiver, String selector, Object caller, Object argument,
-                boolean receiverCarrier, boolean argumentCarrier,
+                boolean receiverCarrier, boolean argumentCarrier, Object foldedIntegerAddition,
+                Object staticFoldResult,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Bind("callerPrelude(caller)") ProtosPrelude prelude,
@@ -6953,7 +6978,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     "canonicalIntegerOrdering", "canonicalFloatOrdering"})
         public static Object generic(
                 Object receiver, String selector, Object caller, Object argument,
-                boolean receiverCarrier, boolean argumentCarrier) {
+                boolean receiverCarrier, boolean argumentCarrier, Object foldedIntegerAddition,
+                Object staticFoldResult) {
             return MISS;
         }
 

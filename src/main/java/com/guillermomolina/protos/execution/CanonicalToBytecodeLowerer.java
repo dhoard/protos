@@ -242,6 +242,10 @@ final class CanonicalToBytecodeLowerer {
     private java.util.Set<String> currentRootScalarLocals =
             java.util.Set.of();
 
+    private CanonicalSend currentRootTerminalIntegerSend;
+    private ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+            .FoldedIntegerAddition currentRootTerminalIntegerAddition;
+
     /*
      * I095-B4: lowering-time marker for a physically inline
      * zero-parameter callback whose reads were proven to belong
@@ -652,6 +656,8 @@ final class CanonicalToBytecodeLowerer {
         ProtosFrameLexicalLayout savedFrameNativeLayout = currentRootFrameNativeLayout;
         ProtosFrameLexicalLayout savedIndexedParameterLayout = currentRootIndexedParameterLayout;
         java.util.Set<String> savedScalarLocals = currentRootScalarLocals;
+        CanonicalSend savedTerminalIntegerSend = currentRootTerminalIntegerSend;
+        var savedTerminalIntegerAddition = currentRootTerminalIntegerAddition;
         try {
             currentRootAnalysis = analysisForThisRoot;
             currentRootTopScope = scopeForThisRoot;
@@ -664,6 +670,8 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameNativeLayout = null;
             currentRootIndexedParameterLayout = null;
             currentRootScalarLocals = java.util.Set.of();
+            currentRootTerminalIntegerSend = null;
+            currentRootTerminalIntegerAddition = null;
             return emitRootBody(
                     builder,
                     sequence,
@@ -683,6 +691,8 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameNativeLayout = savedFrameNativeLayout;
             currentRootIndexedParameterLayout = savedIndexedParameterLayout;
             currentRootScalarLocals = savedScalarLocals;
+            currentRootTerminalIntegerSend = savedTerminalIntegerSend;
+            currentRootTerminalIntegerAddition = savedTerminalIntegerAddition;
         }
     }
 
@@ -817,6 +827,16 @@ final class CanonicalToBytecodeLowerer {
                                 activationDefinition,
                                 currentRootAnalysis,
                                 scopeForThisRoot);
+
+        if (!sequence.expressions().isEmpty()) {
+            CanonicalExpression terminal =
+                    sequence.expressions().get(sequence.expressions().size() - 1);
+            if (terminal instanceof CanonicalSend send) {
+                currentRootTerminalIntegerSend = send;
+                currentRootTerminalIntegerAddition =
+                        terminalKnownIntegerAddition(sequence, send);
+            }
+        }
 
         BytecodeLocal defaultValue = null;
         BytecodeLocal defaultPreparedCall = null;
@@ -1197,7 +1217,9 @@ final class CanonicalToBytecodeLowerer {
         java.util.LinkedHashSet<String> established =
                 new java.util.LinkedHashSet<>();
 
-        for (CanonicalExpression expression : body.expressions()) {
+        java.util.List<CanonicalExpression> expressions = body.expressions();
+        for (int index = 0; index < expressions.size(); index++) {
+            CanonicalExpression expression = expressions.get(index);
             if (expression instanceof CanonicalCreate create) {
                 if (create.target().isPresent()
                         || !(create.value() instanceof CanonicalLiteral
@@ -1249,6 +1271,22 @@ final class CanonicalToBytecodeLowerer {
                 continue;
             }
 
+            /*
+             * PERF043-A: a terminal send cannot invalidate an earlier local
+             * read. Admit only a single, effect-free operand evaluation on
+             * each side. The selected method remains entirely dynamic.
+             */
+            if (index == expressions.size() - 1
+                    && expression instanceof CanonicalSend send
+                    && "+".equals(send.message())
+                    && send.arguments().size() == 1
+                    && scalarTerminalOperand(
+                            send.receiver(), analysis, scope, established)
+                    && scalarTerminalOperand(
+                            send.arguments().get(0), analysis, scope, established)) {
+                continue;
+            }
+
             if (!(expression instanceof CanonicalLiteral)) {
                 return java.util.Set.of();
             }
@@ -1264,6 +1302,17 @@ final class CanonicalToBytecodeLowerer {
      * Such a read is effect-free and cannot reach a capture or a dynamic
      * binding.
      */
+    private static boolean scalarTerminalOperand(
+            CanonicalExpression expression,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope,
+            java.util.Set<String> established) {
+        return expression instanceof CanonicalLiteral
+                || (expression instanceof CanonicalLookup lookup
+                        && readsEstablishedScalar(
+                                lookup, analysis, scope, established));
+    }
+
     private static boolean readsEstablishedScalar(
             CanonicalLookup lookup,
             CanonicalBindingAnalysis analysis,
@@ -1300,6 +1349,108 @@ final class CanonicalToBytecodeLowerer {
                                 && established.contains(
                                         resolved.identity().name()))
                 .orElse(false);
+    }
+
+
+    /*
+     * PERF043-A: compile-time values are only evidence for a guarded
+     * runtime selection. They never replace the CanonicalSend itself.
+     */
+    private ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+            .FoldedIntegerAddition terminalKnownIntegerAddition(
+                    CanonicalSequence body, CanonicalSend send) {
+        java.util.Map<String, Long> known = new java.util.HashMap<>();
+
+        if (!currentRootScalarLocals.isEmpty()) {
+            java.util.List<CanonicalExpression> expressions = body.expressions();
+            for (int index = 0; index < expressions.size() - 1; index++) {
+                CanonicalExpression expression = expressions.get(index);
+
+                if (expression instanceof CanonicalCreate create
+                        && create.target().isEmpty()) {
+                    Long value = knownSmallInteger(create.value(), known);
+                    if (value == null) {
+                        known.remove(create.name());
+                    } else {
+                        known.put(create.name(), value);
+                    }
+                } else if (expression instanceof CanonicalAssign assign
+                        && assign.target().isEmpty()) {
+                    Long value = knownSmallInteger(assign.value(), known);
+                    if (value == null) {
+                        known.remove(assign.name());
+                    } else {
+                        known.put(assign.name(), value);
+                    }
+                }
+            }
+        }
+
+        return foldedIntegerAddition(send, known);
+    }
+
+    private Long knownSmallInteger(
+            CanonicalExpression expression,
+            java.util.Map<String, Long> known) {
+        if (expression instanceof CanonicalLiteral literal) {
+            Object value = primitiveNumberLiteralOrNull(literal);
+            return value instanceof Long integer ? integer : null;
+        }
+        if (expression instanceof CanonicalLookup lookup) {
+            return known.get(lookup.name());
+        }
+        return null;
+    }
+
+
+    /*
+     * A nested addition yields a potential Integer result, not a proven
+     * guest constant. Every send remains executable and independently
+     * guarded by TryPrimitiveNumericSendOne.
+     */
+    private Long candidateSmallIntegerForFold(
+            CanonicalExpression expression,
+            java.util.Map<String, Long> known) {
+        if (expression instanceof CanonicalSend send
+                && "+".equals(send.message())
+                && send.arguments().size() == 1) {
+            Long left = candidateSmallIntegerForFold(
+                    send.receiver(), known);
+            Long right = candidateSmallIntegerForFold(
+                    send.arguments().get(0), known);
+            if (left == null || right == null) {
+                return null;
+            }
+            try {
+                return Math.addExact(left, right);
+            } catch (ArithmeticException overflow) {
+                return null;
+            }
+        }
+        return knownSmallInteger(expression, known);
+    }
+
+    private ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+            .FoldedIntegerAddition foldedIntegerAddition(
+                    CanonicalSend send, java.util.Map<String, Long> known) {
+        if (!"+".equals(send.message()) || send.arguments().size() != 1) {
+            return null;
+        }
+
+        Long left = candidateSmallIntegerForFold(send.receiver(), known);
+        Long right = candidateSmallIntegerForFold(send.arguments().get(0), known);
+        if (left == null || right == null) {
+            return null;
+        }
+
+        try {
+            long result = Math.addExact(left, right);
+            return new ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+                    .FoldedIntegerAddition(left, right, result);
+        } catch (ArithmeticException overflow) {
+            // BigInteger promotion remains with the existing native fallback.
+            return null;
+        }
     }
 
     private static boolean requiresPersistentFrameAuthority(
@@ -7117,6 +7268,22 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
     }
 
+
+    /**
+     * PERF043-A2: recognize literal Integer additions in any send position.
+     * This descriptor never authorizes dispatch by itself. The existing
+     * TryPrimitiveNumericSendOne canonical guard remains authoritative.
+     */
+    private Object foldedIntegerAdditionForSend(CanonicalSend send) {
+        if (currentRootTerminalIntegerSend == send
+                && currentRootTerminalIntegerAddition != null) {
+            return currentRootTerminalIntegerAddition;
+        }
+
+        var candidate = foldedIntegerAddition(send, java.util.Map.of());
+        return candidate == null ? Boolean.FALSE : candidate;
+    }
+
     private void emitComposedSend(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
@@ -7474,6 +7641,32 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
+        // PERF043: the full literal expression is a constant before Graal.
+        // Keep the call source tag, including nested folded sends, even when
+        // the arithmetic itself is replaced by one LoadConstant.
+        var literalFold = foldedIntegerAddition(send, java.util.Map.of());
+        if (literalFold != null) {
+            builder.beginTag(StandardTags.CallTag.class);
+            builder.beginBlock();
+            emitFoldedNestedAdditionTags(builder, send.receiver());
+            emitFoldedNestedAdditionTags(builder, send.arguments().get(0));
+            emitStaticIntegerFoldedResult(
+                    builder, result, primitiveCarrierResult, literalFold.result());
+            builder.endBlock();
+            builder.endTag(StandardTags.CallTag.class);
+            return;
+        }
+
+        // PERF043: terminal scalar-local values are known by lexical identity,
+        // assignment tracking and the effect-free straight-line admission.
+        // A tooling observer may, however, materialize and mutate their
+        // Context at a CallTag. Fold only while the compact frame is intact;
+        // the original send stays in the other branch.
+        var scalarFold = currentRootTerminalIntegerSend == send
+                        && !currentRootScalarLocals.isEmpty()
+                ? currentRootTerminalIntegerAddition
+                : null;
+
         CanonicalExpression receiver = send.receiver();
         boolean tryPrimitiveNumericSend = primitiveNumericSendCandidate(send);
         boolean stageReceiver = requiresComposedInvocation(receiver);
@@ -7538,6 +7731,15 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
+        if (scalarFold != null) {
+            builder.beginIfThenElse();
+            builder.emitIsCompactLocalFrame();
+            builder.beginBlock();
+            emitStaticIntegerFoldedResult(
+                    builder, result, primitiveCarrierResult, scalarFold.result());
+            builder.endBlock();
+            builder.beginBlock();
+        }
 
         if (stageInputs) {
             receiverValue =
@@ -7620,6 +7822,13 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(primitiveNumericCarrierSource(receiver));
             builder.emitLoadConstant(
                     primitiveNumericCarrierSource(send.arguments().get(0)));
+            Object fold = foldedIntegerAdditionForSend(send);
+            builder.emitLoadConstant(fold);
+            builder.emitLoadConstant(
+                    fold instanceof ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+                                    .FoldedIntegerAddition known
+                            ? known.result()
+                            : Boolean.FALSE);
             builder.endTryPrimitiveNumericSendOne();
             builder.endStoreLocal();
 
@@ -7908,8 +8117,63 @@ final class CanonicalToBytecodeLowerer {
             builder.endIfThenElse();
         }
 
+        if (scalarFold != null) {
+            builder.endBlock();
+            builder.endIfThenElse();
+        }
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /**
+     * PERF043: materialize exactly the folded semantic Integer when a guest
+     * value is required, or preserve its private long carrier otherwise.
+     */
+    private static void emitStaticIntegerFoldedResult(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            boolean primitiveCarrierResult,
+            long value) {
+        builder.beginStoreLocal(result);
+        if (!primitiveCarrierResult) {
+            builder.beginMaterializePrimitiveNumericCarrier();
+        }
+        builder.emitLoadConstant(value);
+        if (!primitiveCarrierResult) {
+            builder.emitLoadConstant(true);
+            builder.endMaterializePrimitiveNumericCarrier();
+        }
+        builder.endStoreLocal();
+    }
+
+    /**
+     * Keep each nested literal Integer '+' as a source-visible CallTag.
+     * Emission is inert and uses only its proven constant; no send is made.
+     * A local store supplies a real bytecode instruction to the tag region.
+     */
+    private void emitFoldedNestedAdditionTags(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression) {
+        if (!(expression instanceof CanonicalSend nested)) {
+            return;
+        }
+        var known = foldedIntegerAddition(nested, java.util.Map.of());
+        if (known == null) {
+            return;
+        }
+        SourceSpan span = nested.span();
+        builder.beginSourceSection(span.startOffset(), span.length());
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+        emitFoldedNestedAdditionTags(builder, nested.receiver());
+        emitFoldedNestedAdditionTags(builder, nested.arguments().get(0));
+        BytecodeLocal inertValue = builder.createLocal("foldedIntegerCallTag", null);
+        builder.beginStoreLocal(inertValue);
+        builder.emitLoadConstant(known.result());
+        builder.endStoreLocal();
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+        builder.endSourceSection();
     }
 
     /**

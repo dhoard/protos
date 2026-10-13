@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.344-SNAPSHOT
+
+- `PERF043` (#877): fold provable canonical Integer additions during
+  Bytecode lowering without changing ordinary overridable message semantics.
+  - Fold literal and nested constant Integer additions while retaining
+    source-level CallTag observability.
+  - Propagate proven straight-line scalar-local values and retain the
+    materialized-activation fallback for debugger observation and mutation.
+  - Preserve canonical numeric selection, nonconstant operands, exact
+    arithmetic, overflow behavior and generic D013 dispatch.
+  - Extend regression coverage for folded bytecode, dynamic arithmetic,
+    observable scopes and debugger mutation.
+  - Integrate with I095 canonical Boolean callback inlining.
+
 ## 0.3.343-SNAPSHOT
 
 - `I095` (#878) / `PERF041` (#863): checkpoint experimental

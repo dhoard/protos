@@ -422,6 +422,377 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         });
     }
 
+
+    @Test
+    void perf043EarlyIntegerFoldingRecognizesLiteralsAndScalarAliases()
+            throws Exception {
+        withCore(module -> {
+            ProtosClosureValue direct =
+                    closure("() => { 1 + 2 }", module);
+            ProtosClosureValue locals =
+                    closure("() => { left: 1\nright: 2\nleft + right }", module);
+            ProtosClosureValue aliases =
+                    closure(
+                            "() => { left: 1\nalias: left\nright: 2\n"
+                                    + "alias = right\nleft + alias }",
+                            module);
+
+            for (ProtosClosureValue candidate : List.of(direct, locals, aliases)) {
+                assertEquals("3", integerValue(enter(fastDirect(candidate, module))));
+                assertTrue(containsLoweredIntegerConstant(candidate, 3L),
+                        "lowerer must emit the calculated result as an operand");
+            }
+            assertNone(instructionNames(direct), "TryPrimitiveNumericSendOne");
+            assertContains(instructionNames(locals), "TryPrimitiveNumericSendOne");
+            assertContains(instructionNames(aliases), "TryPrimitiveNumericSendOne");
+
+            assertContains(instructionNames(locals), "IsCompactLocalFrame");
+            assertContains(instructionNames(aliases), "IsCompactLocalFrame");
+            assertNone(instructionNames(locals), "InstallFrameLexicalAuthority");
+        });
+    }
+
+    @Test
+    void perf043FoldKeepsObservedActivationAndSourceTags() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue sum =
+                    closure("() => { left: 1\nright: 2\nleft + right }", module);
+
+            Object[] arguments =
+                    ProtosFrameArguments.compactDirectClosureCall(
+                            sum, module, null, new Object[0]);
+            ProtosActivation activation = ProtosFrameArguments.activation(arguments);
+            ProtosObjectValue observed = activation.context();
+
+            assertEquals("3", integerValue(target(sum).call(arguments)));
+            assertEquals(
+                    "1", integerValue(observed.readLocalSlot("left").orElseThrow()));
+            assertEquals(
+                    "2", integerValue(observed.readLocalSlot("right").orElseThrow()));
+
+            ProtosSemanticBytecodeRootNode root =
+                    sum.executionPlan()
+                            .orElseThrow()
+                            .bytecodeActivationRootForTesting();
+            root.getRootNodes().ensureComplete();
+            List<TagTree> statements =
+                    collectTags(
+                            root.getBytecodeNode().getTagTree(),
+                            StandardTags.StatementTag.class);
+            assertEquals(
+                    List.of("left: 1", "right: 2", "left + right"),
+                    statements.stream()
+                            .map(tag -> tag.getSourceSection().getCharacters().toString())
+                            .toList());
+        });
+    }
+
+    @Test
+    void perf043StaticFoldRetainsCallTagsAndCompactFallback() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue direct = closure("() => { 1 + 2 }", module);
+            ProtosClosureValue locals = closure(
+                    "() => { left: 1\nright: 2\nleft + right }", module);
+            ProtosClosureValue aliases = closure(
+                    "() => { left: 1\nalias: left\nright: 2\n"
+                            + "alias = right\nleft + alias }", module);
+            ProtosClosureValue nested = closure("() => { (1 + 2) + 3 }", module);
+            ProtosClosureValue tree = closure("() => { (1 + 2) + (3 + 4) }", module);
+
+            for (var candidate : List.of(direct, locals, aliases, nested, tree)) {
+                assertTrue(containsLoweredIntegerConstant(candidate,
+                        candidate == nested ? 6L : candidate == tree ? 10L : 3L));
+                assertEquals(candidate == nested ? "6" : candidate == tree ? "10" : "3",
+                        integerValue(enter(fastDirect(candidate, module))));
+                var root = candidate.executionPlan()
+                        .orElseThrow().bytecodeActivationRootForTesting();
+                root.getRootNodes().ensureComplete();
+                var calls = collectTags(root.getBytecodeNode().getTagTree(),
+                        StandardTags.CallTag.class);
+                int count = candidate == nested ? 2 : candidate == tree ? 3 : 1;
+                assertEquals(count, calls.size(),
+                        "folded sends retain each source-visible CallTag");
+                assertTrue(calls.stream().allMatch(tag ->
+                        tag.getSourceSection() != null
+                                && tag.getSourceSection().getCharacters().toString().contains("+")));
+            }
+
+            assertNone(instructionNames(direct), "TryPrimitiveNumericSendOne");
+            assertNone(instructionNames(nested), "TryPrimitiveNumericSendOne");
+            assertNone(instructionNames(tree), "TryPrimitiveNumericSendOne");
+            // A compact fast arm contains the literal result, and the
+            // observed/materialized frame retains ordinary send semantics.
+            for (var candidate : List.of(locals, aliases)) {
+                assertContains(instructionNames(candidate), "IsCompactLocalFrame");
+                assertContains(instructionNames(candidate), "TryPrimitiveNumericSendOne");
+                assertTrue(loweredIntegerConstantCount(candidate, 3L) >= 2,
+                        "constant is emitted in the fast arm and the fallback's metadata");
+
+                Object[] observedCall = ProtosFrameArguments.compactDirectClosureCall(
+                        candidate, module, null, new Object[0]);
+                ProtosActivation observed = ProtosFrameArguments.activation(observedCall);
+                observed.context();
+                assertEquals("3", integerValue(target(candidate).call(observedCall)));
+            }
+        });
+    }
+
+    @Test
+    void perf043UnknownOperandsAndOverflowKeepGenericSemantics()
+            throws Exception {
+        withCore(module -> {
+            ProtosClosureValue dynamic =
+                    closure("(left, right) => { left + right }", module);
+            assertFalse(hasFoldedIntegerAddition(dynamic));
+            assertEquals(
+                    "3",
+                    integerValue(
+                            enter(fastDirect(dynamic, module, integer(1), integer(2)))));
+
+            ProtosClosureValue overflow =
+                    closure("() => { 9223372036854775807 + 1 }", module);
+            assertFalse(hasFoldedIntegerAddition(overflow));
+            assertEquals(
+                    "9223372036854775808",
+                    integerValue(enter(fastDirect(overflow, module))));
+
+            ProtosClosureValue incompatible =
+                    closure("() => { 1 + true }", module);
+            assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(fastDirect(incompatible, module)));
+        });
+    }
+
+
+    @Test
+    void perf043CustomPlusKeepsOrdinaryDispatchAndInvalidation()
+            throws Exception {
+        withCore(module -> {
+            ProtosClosureValue dispatch =
+                    closure("(receiver) => { receiver + 2 }", module);
+
+            assertFalse(hasFoldedIntegerAddition(dispatch));
+
+            ProtosObjectValue custom =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+            ProtosClosureValue first =
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> integer(41));
+            ProtosClosureValue replacement =
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> integer(42));
+
+            custom.createLocalSlot("+", first);
+
+            // Prime the same source call-site with standard Integer dispatch.
+            assertEquals(
+                    "3",
+                    integerValue(
+                            enter(fastDirect(dispatch, module, integer(1)))));
+
+            // A different receiver selects its own ordinary '+' method.
+            assertEquals(
+                    "41",
+                    integerValue(
+                            enter(fastDirect(dispatch, module, custom))));
+
+            var selected =
+                    com.guillermomolina.protos.runtime.ProtosValueLookup
+                            .lookupGuarded(custom, "+", null);
+            assertTrue(selected != null);
+            assertTrue(selected.stability().isValid());
+
+            // Mutation invalidates the original mutable-object selection.
+            custom.assignLocalSlot("+", replacement);
+            assertFalse(selected.stability().isValid());
+
+            assertEquals(
+                    "42",
+                    integerValue(
+                            enter(fastDirect(dispatch, module, custom))));
+
+            // Standard Integer behavior remains correct at the same site.
+            assertEquals(
+                    "3",
+                    integerValue(
+                            enter(fastDirect(dispatch, module, integer(1)))));
+        });
+    }
+
+    @Test
+    void perf043FoldedAdditionIsIsolatedBetweenContextsAndPreludes()
+            throws Exception {
+        ProtosPrelude[] preludes = new ProtosPrelude[2];
+
+        for (int index = 0; index < preludes.length; index++) {
+            final int position = index;
+
+            withCore(module -> {
+                ProtosPrelude prelude = module.prelude().orElseThrow();
+                preludes[position] = prelude;
+
+                assertTrue(
+                        prelude.integerPrototype().isFrozen(),
+                        "published canonical Integer selection is immutable");
+
+                ProtosClosureValue direct =
+                        closure("() => { 1 + 2 }", module);
+
+                ProtosClosureValue locals =
+                        closure(
+                                "() => { left: 1\nright: 2\nleft + right }",
+                                module);
+
+                assertTrue(containsLoweredIntegerConstant(direct, 3L));
+                assertTrue(containsLoweredIntegerConstant(locals, 3L));
+
+                assertEquals(
+                        "3",
+                        integerValue(enter(fastDirect(direct, module))));
+                assertEquals(
+                        "3",
+                        integerValue(enter(fastDirect(locals, module))));
+
+                assertNone(instructionNames(direct), "TryPrimitiveNumericSendOne");
+                assertContains(instructionNames(locals), "TryPrimitiveNumericSendOne");
+            });
+        }
+
+        assertNotSame(
+                preludes[0],
+                preludes[1],
+                "each entered Context owns an independent Prelude");
+    }
+
+
+    @Test
+    void perf043NonTerminalAndNestedConstantAddition()
+            throws Exception {
+        withCore(module -> {
+            ProtosClosureValue nonTerminal =
+                    closure("() => { 1 + 2\n7 }", module);
+
+            assertTrue(containsLoweredIntegerConstant(nonTerminal, 3L));
+            assertNone(instructionNames(nonTerminal), "TryPrimitiveNumericSendOne");
+            assertEquals(
+                    "7",
+                    integerValue(enter(fastDirect(nonTerminal, module))));
+
+            ProtosClosureValue nested =
+                    closure("() => { (1 + 2) + 3 }", module);
+
+            assertTrue(containsLoweredIntegerConstant(nested, 6L));
+            assertNone(instructionNames(nested), "TryPrimitiveNumericSendOne");
+            assertEquals("6", integerValue(enter(fastDirect(nested, module))));
+
+            ProtosClosureValue tree =
+                    closure("() => { (1 + 2) + (3 + 4) }", module);
+
+            assertEquals(
+                    "10",
+                    integerValue(enter(fastDirect(tree, module))));
+            assertTrue(containsLoweredIntegerConstant(tree, 10L));
+            assertNone(instructionNames(tree), "TryPrimitiveNumericSendOne");
+
+            ProtosClosureValue nestedOverflow =
+                    closure(
+                            "() => { (9223372036854775806 + 1) + 1 }",
+                            module);
+
+            assertEquals(
+                    "9223372036854775808",
+                    integerValue(enter(fastDirect(nestedOverflow, module))));
+            assertTrue(containsLoweredIntegerConstant(nestedOverflow, Long.MAX_VALUE));
+            assertContains(instructionNames(nestedOverflow), "TryPrimitiveNumericSendOne");
+
+            ProtosClosureValue dynamic =
+                    closure("(value) => { value + 2 }", module);
+
+            assertFalse(hasFoldedIntegerAddition(dynamic));
+            assertEquals(
+                    "5",
+                    integerValue(
+                            enter(fastDirect(dynamic, module, integer(3)))));
+
+            ProtosClosureValue overflow =
+                    closure(
+                            "() => { 9223372036854775807 + 1\n7 }",
+                            module);
+
+            assertFalse(hasFoldedIntegerAddition(overflow));
+            assertEquals(
+                    "7",
+                    integerValue(enter(fastDirect(overflow, module))));
+
+            ProtosSemanticBytecodeRootNode root =
+                    nonTerminal.executionPlan()
+                            .orElseThrow()
+                            .bytecodeActivationRootForTesting();
+
+            root.getRootNodes().ensureComplete();
+
+            List<TagTree> statements =
+                    collectTags(
+                            root.getBytecodeNode().getTagTree(),
+                            StandardTags.StatementTag.class);
+
+            assertTrue(
+                    statements.stream().anyMatch(tag ->
+                            tag.getSourceSection() != null
+                                    && "1 + 2".equals(
+                                            tag.getSourceSection()
+                                                    .getCharacters()
+                                                    .toString())),
+                    "folding must preserve the source statement tag");
+        });
+    }
+
+    private static boolean containsLoweredIntegerConstant(
+            ProtosClosureValue closure, long expected) {
+        return loweredIntegerConstantCount(closure, expected) > 0;
+    }
+
+    private static long loweredIntegerConstantCount(
+            ProtosClosureValue closure, long expected) {
+        return closure.executionPlan()
+                .orElseThrow()
+                .bytecodeActivationRootForTesting()
+                .getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .flatMap(instruction -> instruction.getArguments().stream())
+                .filter(argument -> argument.getKind().name().equals("CONSTANT"))
+                .map(Instruction.Argument::asConstant)
+                .filter(value -> value instanceof Long integer
+                        && integer.longValue() == expected)
+                .count();
+    }
+
+    private static boolean hasFoldedIntegerAddition(
+            ProtosClosureValue closure) {
+        return foldedIntegerAdditionCount(closure) > 0;
+    }
+
+    private static long foldedIntegerAdditionCount(
+            ProtosClosureValue closure) {
+        return closure.executionPlan()
+                .orElseThrow()
+                .bytecodeActivationRootForTesting()
+                .getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .flatMap(instruction -> instruction.getArguments().stream())
+                .filter(argument -> argument.getKind().name().equals("CONSTANT"))
+                .map(Instruction.Argument::asConstant)
+                .filter(value ->
+                        value instanceof
+                                ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+                                        .FoldedIntegerAddition)
+                .count();
+    }
+
     /** A PERF036-A scalar body with assignments, its result and final bindings. */
     private record ScalarAssignBody(
             String characters, long expected, int creates, int reads, int assigns,

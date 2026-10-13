@@ -23,6 +23,14 @@ tests: [
         }
         Assertions.require(tool009LegacyCase() == 2)
     }),
+    Test("perf043 stable local addition", () => {
+        run: () => {
+            left: 1
+            right: 2
+            left + right
+        }
+        Assertions.require(run() == 3)
+    }),
     Test("add beyond int64", () => {
         tool009LegacyCase: () => {
             9223372036854775807 + 1
