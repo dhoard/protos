@@ -7543,14 +7543,21 @@ final class CanonicalToBytecodeLowerer {
                     "Bytecode send result/scratch locals were not allocated");
         }
 
-        if (admitsNormalBooleanControl(send)) {
+        NormalBooleanControlSite booleanControl =
+                normalBooleanControlSite(send);
+        if (booleanControl != null && stagesNormalBooleanControlOperands(send)) {
+            emitNormalBooleanControl(
+                    builder, send, booleanControl, result, preparedCall,
+                    childResult, resumeValue);
+            return;
+        }
+        if (booleanControl != null) {
             builder.beginIfThenElse();
             builder.emitIsNormalExecutionMode();
 
             builder.beginBlock();
-            emitNormalBooleanControl(
-                    builder, send, result, preparedCall,
-                    childResult, resumeValue);
+            emitNormalBooleanControlLiteral(
+                    builder, send, booleanControl, result);
             builder.endBlock();
 
             builder.beginBlock();
@@ -7569,71 +7576,180 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I095-C: ifTrue, ifFalse, if and else share one NORMAL lowering.
-     * Only the selecting receiver and the result policy differ; the
-     * standard behaviors are validated at frozen root publication.
+     * I095-C/D: the eight standard Boolean selectors share one NORMAL
+     * lowering. Each row declares, for each canonical receiver, the
+     * supplied position of the selected callback (-1: none), the result
+     * when no callback is selected and the policy applied to a selected
+     * callback's normal result. The rows restate the standard behaviors of
+     * ProtosStandardBooleanProtocol (also sequenced by PreparedBooleanCall);
+     * frozen root publication validates that exactly those behaviors are
+     * selected for canonical receivers.
      */
     private enum NormalBooleanControl {
-        IF_TRUE(true, false),
-        IF_FALSE(false, false),
-        IF(true, true),
-        ELSE(false, true);
+        NOT(0, -1, -1, Unselected.NEGATION, SelectedResult.EXACT),
+        IF_TRUE(1, 0, -1, Unselected.NULL, SelectedResult.EXACT),
+        IF_FALSE(1, -1, 0, Unselected.NULL, SelectedResult.EXACT),
+        IF_TRUE_IF_FALSE(2, 0, 1, Unselected.NULL, SelectedResult.EXACT),
+        AND(1, 0, -1, Unselected.RECEIVER, SelectedResult.CANONICAL_BOOLEAN),
+        OR(1, -1, 0, Unselected.RECEIVER, SelectedResult.CANONICAL_BOOLEAN),
+        IF(1, 0, -1, Unselected.RECEIVER, SelectedResult.RECEIVER),
+        ELSE(1, -1, 0, Unselected.RECEIVER, SelectedResult.RECEIVER);
 
-        private final boolean selectsOnTrue;
-        private final boolean returnsReceiver;
+        /** Result of a canonical receiver that selects no callback. */
+        private enum Unselected { NULL, RECEIVER, NEGATION }
 
-        NormalBooleanControl(boolean selectsOnTrue, boolean returnsReceiver) {
-            this.selectsOnTrue = selectsOnTrue;
-            this.returnsReceiver = returnsReceiver;
+        /**
+         * Exact callback result (ifTrue, ifFalse, ifTrueIfFalse), the
+         * receiver after discarding it (D200 if/else), or the result
+         * required to be canonical true/false (and/or).
+         */
+        private enum SelectedResult { EXACT, RECEIVER, CANONICAL_BOOLEAN }
+
+        private final int arity;
+        private final int selectedOnTrue;
+        private final int selectedOnFalse;
+        private final Unselected unselected;
+        private final SelectedResult selectedResult;
+
+        NormalBooleanControl(
+                int arity,
+                int selectedOnTrue,
+                int selectedOnFalse,
+                Unselected unselected,
+                SelectedResult selectedResult) {
+            this.arity = arity;
+            this.selectedOnTrue = selectedOnTrue;
+            this.selectedOnFalse = selectedOnFalse;
+            this.unselected = unselected;
+            this.selectedResult = selectedResult;
         }
 
         static NormalBooleanControl of(String message) {
             return switch (message) {
+                case "not" -> NOT;
                 case "ifTrue" -> IF_TRUE;
                 case "ifFalse" -> IF_FALSE;
+                case "ifTrueIfFalse" -> IF_TRUE_IF_FALSE;
+                case "and" -> AND;
+                case "or" -> OR;
                 case "if" -> IF;
                 case "else" -> ELSE;
                 default -> null;
             };
         }
 
-        boolean selects(boolean receiver) {
-            return receiver == selectsOnTrue;
+        /** Supplied position of the selected callback, or -1. */
+        int selectedIndex(boolean receiver) {
+            return receiver ? selectedOnTrue : selectedOnFalse;
+        }
+
+        Object unselectedResult(boolean receiver) {
+            return switch (unselected) {
+                case NULL -> ProtosNullValue.INSTANCE;
+                case RECEIVER -> canonicalBoolean(receiver);
+                case NEGATION -> canonicalBoolean(!receiver);
+            };
+        }
+
+        static Object canonicalBoolean(boolean value) {
+            return value ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+    }
+
+    /**
+     * I095-D: how one canonical receiver completes an admitted site:
+     * an immediate result, the selected literal callback inline in this
+     * root, or the ordinary send with the already evaluated operands.
+     */
+    private enum NormalBooleanControlPath { IMMEDIATE, INLINE, ORDINARY }
+
+    /**
+     * I095-D: an admitted site. {@code inlineCallbacks} holds, per supplied
+     * position, whether that argument is a literal Closure that some
+     * reachable canonical receiver selects and whose whole activation is
+     * proven unobservable ({@link #admitsNormalInlineControlBody}).
+     */
+    private record NormalBooleanControlSite(
+            NormalBooleanControl control,
+            java.util.List<Boolean> inlineCallbacks) {
+
+        NormalBooleanControlPath path(boolean receiver) {
+            int selected = control.selectedIndex(receiver);
+            if (selected < 0) {
+                return NormalBooleanControlPath.IMMEDIATE;
+            }
+            return inlineCallbacks.get(selected)
+                    ? NormalBooleanControlPath.INLINE
+                    : NormalBooleanControlPath.ORDINARY;
         }
     }
 
     /*
-     * I095-C: a canonical receiver that does not select the callback
-     * needs no body proof. A receiver that may select it (a selecting
-     * literal or any dynamic receiver) requires the I095-B proof of
-     * the whole callback activation. A dynamic receiver is classified
-     * at run time; a non-canonical receiver keeps ordinary dispatch.
+     * I095-C/D: a canonical receiver that does not select a callback needs
+     * no proof about that argument, which may be any expression: it is
+     * still evaluated, but neither validated nor invoked. A selected
+     * argument runs inline only when it is a literal Closure carrying the
+     * I095-B proof of the whole callback activation; each callback of
+     * ifTrueIfFalse is proven independently. A literal receiver is admitted
+     * when its own path is not the ordinary send. A dynamic receiver,
+     * classified at run time, is admitted when some canonical path runs a
+     * callback inline or no path invokes one (not); otherwise the existing
+     * prepared/B-prime lowering is kept unchanged. Spread arguments and
+     * arities other than the standard one keep ordinary dispatch.
      */
-    private boolean admitsNormalBooleanControl(CanonicalSend send) {
+    private NormalBooleanControlSite normalBooleanControlSite(
+            CanonicalSend send) {
         NormalBooleanControl control =
                 NormalBooleanControl.of(send.message());
         if (control == null
                 || currentInlineCallbackFrameNative
                 || currentActivationLocal != null
-                || send.arguments().size() != 1
-                || !ProtosObjectValue.rootObject().isFrozen()
-                || !(send.arguments().get(0)
-                        instanceof CanonicalClosure closure)) {
-            return false;
+                || send.arguments().size() != control.arity
+                || hasSpreadArgument(send.arguments())
+                || !ProtosObjectValue.rootObject().isFrozen()) {
+            return null;
         }
 
+        Boolean literalReceiver = null;
         if (send.receiver() instanceof CanonicalLiteral receiver) {
-            if (receiver.kind() != CanonicalLiteral.Kind.TRUE
-                    && receiver.kind() != CanonicalLiteral.Kind.FALSE) {
-                return false;
-            }
-            if (!control.selects(
-                    receiver.kind() == CanonicalLiteral.Kind.TRUE)) {
-                return true;
+            if (receiver.kind() == CanonicalLiteral.Kind.TRUE) {
+                literalReceiver = Boolean.TRUE;
+            } else if (receiver.kind() == CanonicalLiteral.Kind.FALSE) {
+                literalReceiver = Boolean.FALSE;
+            } else {
+                return null;
             }
         }
 
-        return admitsNormalInlineControlBody(closure);
+        java.util.List<Boolean> inlineCallbacks =
+                new java.util.ArrayList<>(control.arity);
+        for (int position = 0; position < control.arity; position++) {
+            boolean selectable = literalReceiver != null
+                    ? control.selectedIndex(literalReceiver) == position
+                    : control.selectedIndex(true) == position
+                            || control.selectedIndex(false) == position;
+            inlineCallbacks.add(
+                    selectable
+                            && send.arguments().get(position)
+                                    instanceof CanonicalClosure closure
+                            && admitsNormalInlineControlBody(closure));
+        }
+        NormalBooleanControlSite site = new NormalBooleanControlSite(
+                control, java.util.List.copyOf(inlineCallbacks));
+
+        if (literalReceiver != null) {
+            return site.path(literalReceiver)
+                            == NormalBooleanControlPath.ORDINARY
+                    ? null
+                    : site;
+        }
+        NormalBooleanControlPath onTrue = site.path(true);
+        NormalBooleanControlPath onFalse = site.path(false);
+        boolean inlinePath = onTrue == NormalBooleanControlPath.INLINE
+                || onFalse == NormalBooleanControlPath.INLINE;
+        boolean noCallback = onTrue == NormalBooleanControlPath.IMMEDIATE
+                && onFalse == NormalBooleanControlPath.IMMEDIATE;
+        return inlinePath || noCallback ? site : null;
     }
 
     /*
@@ -7821,121 +7937,271 @@ final class CanonicalToBytecodeLowerer {
         return false;
     }
 
-    /*
-     * I095-C: a dynamic receiver is evaluated once and classified by
-     * the I092 canonical Boolean classifier. Each canonical receiver
-     * gets its own branch; MISS performs the ordinary send with the
-     * staged receiver, materializing the literal callback only there.
+    /**
+     * I095-D: whether the site evaluates a receiver or argument expression.
+     * Such operands are evaluated exactly once, before the execution-mode
+     * test, and shared by NORMAL, MISS and DEBUG: emitting them once per
+     * mode would duplicate every nested admitted site (a chain of {@code &&}
+     * sends doubles at each level). A canonical literal receiver with only
+     * literal Closure arguments evaluates nothing and keeps the I095-C shape.
      */
-    private void emitNormalBooleanControl(
+    private static boolean stagesNormalBooleanControlOperands(
+            CanonicalSend send) {
+        return !(send.receiver() instanceof CanonicalLiteral)
+                || !send.arguments().stream()
+                        .allMatch(CanonicalClosure.class::isInstance);
+    }
+
+    /** I095-C: the NORMAL branch of a literal receiver with only literal Closures. */
+    private void emitNormalBooleanControlLiteral(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
-            BytecodeLocal result,
-            BytecodeLocal preparedCall,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        NormalBooleanControl control =
-                NormalBooleanControl.of(send.message());
-        CanonicalClosure closure =
-                (CanonicalClosure) send.arguments().get(0);
-
+            NormalBooleanControlSite site,
+            BytecodeLocal result) {
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
-
-        if (send.receiver() instanceof CanonicalLiteral receiver) {
-            emitNormalBooleanControlBranch(
-                    builder, control, closure,
-                    receiver.kind() == CanonicalLiteral.Kind.TRUE, result);
-        } else {
-            BytecodeLocal receiverValue =
-                    builder.createLocal("normalBooleanControlReceiver", null);
-            BytecodeLocal classification =
-                    builder.createLocal("normalBooleanControlClass", null);
-            emitBodyExpressionToLocal(
-                    builder, send.receiver(), receiverValue,
-                    preparedCall, childResult, resumeValue);
-
-            builder.beginStoreLocal(classification);
-            builder.beginTryCompactCanonicalBooleanOne();
-            builder.emitLoadLocal(receiverValue);
-            builder.endTryCompactCanonicalBooleanOne();
-            builder.endStoreLocal();
-
-            builder.beginIfThenElse();
-            builder.beginIsCanonicalIfTrueTrue();
-            builder.emitLoadLocal(classification);
-            builder.endIsCanonicalIfTrueTrue();
-
-            builder.beginBlock();
-            emitNormalBooleanControlBranch(
-                    builder, control, closure, true, result);
-            builder.endBlock();
-
-            builder.beginBlock();
-            builder.beginIfThenElse();
-            builder.beginIsCanonicalBooleanFalseClass();
-            builder.emitLoadLocal(classification);
-            builder.endIsCanonicalBooleanFalseClass();
-
-            builder.beginBlock();
-            emitNormalBooleanControlBranch(
-                    builder, control, closure, false, result);
-            builder.endBlock();
-
-            // MISS: ordinary D013 dispatch; the receiver is not re-evaluated.
-            builder.beginBlock();
-            builder.beginStoreLocal(preparedCall);
-            beginPrepareSend(builder, 1);
-            builder.emitLoadLocal(receiverValue);
-            builder.emitLoadConstant(send.message());
-            emitSendCallerOperand(builder);
-            emitExpression(builder, closure);
-            endPrepareSend(builder, 1);
-            builder.endStoreLocal();
-            emitPreparedInvocation(
-                    builder, result, preparedCall,
-                    childResult, resumeValue);
-            builder.endBlock();
-
-            builder.endIfThenElse();
-            builder.endBlock();
-
-            builder.endIfThenElse();
-        }
-
+        emitNormalBooleanControlPath(
+                builder, send, site,
+                ((CanonicalLiteral) send.receiver()).kind()
+                        == CanonicalLiteral.Kind.TRUE,
+                result);
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
 
     /*
-     * One canonical receiver: the unselected result is null for
-     * ifTrue/ifFalse and the receiver for if/else. A selected if/else
-     * body runs normally and its normal result is discarded; abrupt
-     * exits propagate unchanged.
+     * I095-C/D: the receiver and then every non-Closure argument expression
+     * are evaluated once, in source order, before the mode test and before
+     * any selection. A literal Closure argument has no evaluation effect: it
+     * is materialized only by the ordinary send, so an inline or unselected
+     * literal never becomes a physical Closure. In NORMAL mode the receiver
+     * is classified (a literal receiver statically, any other by the I092
+     * canonical Boolean classifier); a canonical receiver whose path is
+     * IMMEDIATE or INLINE completes here. MISS, an ORDINARY canonical path
+     * and DEBUG share one ordinary send with the staged operands, which
+     * keeps PLAT043 sequencing and the B-prime literal candidates.
      */
-    private void emitNormalBooleanControlBranch(
+    private void emitNormalBooleanControl(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
-            NormalBooleanControl control,
-            CanonicalClosure closure,
-            boolean receiver,
-            BytecodeLocal result) {
-        Object receiverValue =
-                receiver ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
-        if (!control.selects(receiver)) {
-            emitStoreConstant(builder, result,
-                    control.returnsReceiver
-                            ? receiverValue
-                            : ProtosNullValue.INSTANCE);
+            CanonicalSend send,
+            NormalBooleanControlSite site,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+
+        BytecodeLocal receiverValue = null;
+        if (!(send.receiver() instanceof CanonicalLiteral)) {
+            receiverValue =
+                    builder.createLocal("normalBooleanControlReceiver", null);
+            emitBodyExpressionToLocal(
+                    builder, send.receiver(), receiverValue,
+                    preparedCall, childResult, resumeValue);
+        }
+
+        java.util.List<BytecodeLocal> argumentValues =
+                new java.util.ArrayList<>(send.arguments().size());
+        for (CanonicalExpression argument : send.arguments()) {
+            if (argument instanceof CanonicalClosure) {
+                argumentValues.add(null);
+                continue;
+            }
+            BytecodeLocal argumentValue =
+                    builder.createLocal("normalBooleanControlArgument", null);
+            emitBodyExpressionToLocal(
+                    builder, argument, argumentValue,
+                    preparedCall, childResult, resumeValue);
+            argumentValues.add(argumentValue);
+        }
+
+        BytecodeLocal classification =
+                builder.createLocal("normalBooleanControlClass", null);
+        emitStoreConstant(builder, classification,
+                ProtosCanonicalBooleanOneNode.CLASS_MISS);
+        builder.beginIfThen();
+        builder.emitIsNormalExecutionMode();
+        builder.beginStoreLocal(classification);
+        java.util.List<Boolean> selecting = new java.util.ArrayList<>(2);
+        if (send.receiver() instanceof CanonicalLiteral receiver) {
+            boolean value = receiver.kind() == CanonicalLiteral.Kind.TRUE;
+            builder.emitLoadConstant(value
+                    ? ProtosCanonicalBooleanOneNode.CLASS_TRUE
+                    : ProtosCanonicalBooleanOneNode.CLASS_FALSE);
+            selecting.add(value);
+        } else {
+            builder.beginTryCompactCanonicalBooleanOne();
+            builder.emitLoadLocal(receiverValue);
+            builder.endTryCompactCanonicalBooleanOne();
+            selecting.add(true);
+            selecting.add(false);
+        }
+        builder.endStoreLocal();
+        builder.endIfThen();
+
+        selecting.removeIf(receiver ->
+                site.path(receiver) == NormalBooleanControlPath.ORDINARY);
+        emitNormalBooleanControlSelection(
+                builder, send, site, selecting, 0, classification,
+                receiverValue, argumentValues, result,
+                preparedCall, childResult, resumeValue);
+
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /** One classification test per canonical receiver completing here; then the ordinary send. */
+    private void emitNormalBooleanControlSelection(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            NormalBooleanControlSite site,
+            java.util.List<Boolean> selecting,
+            int index,
+            BytecodeLocal classification,
+            BytecodeLocal receiverValue,
+            java.util.List<BytecodeLocal> argumentValues,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        if (index == selecting.size()) {
+            emitNormalBooleanControlOrdinarySend(
+                    builder, send, receiverValue, argumentValues,
+                    result, preparedCall, childResult, resumeValue);
             return;
         }
-        if (control.returnsReceiver) {
-            BytecodeLocal discarded =
-                    builder.createLocal("normalBooleanControlDiscarded", null);
-            emitNormalInlineControlBody(builder, closure, discarded);
-            emitStoreConstant(builder, result, receiverValue);
+        boolean receiver = selecting.get(index);
+        builder.beginIfThenElse();
+        if (receiver) {
+            builder.beginIsCanonicalIfTrueTrue();
+            builder.emitLoadLocal(classification);
+            builder.endIsCanonicalIfTrueTrue();
         } else {
-            emitNormalInlineControlBody(builder, closure, result);
+            builder.beginIsCanonicalBooleanFalseClass();
+            builder.emitLoadLocal(classification);
+            builder.endIsCanonicalBooleanFalseClass();
         }
+        builder.beginBlock();
+        emitNormalBooleanControlPath(builder, send, site, receiver, result);
+        builder.endBlock();
+        builder.beginBlock();
+        emitNormalBooleanControlSelection(
+                builder, send, site, selecting, index + 1, classification,
+                receiverValue, argumentValues, result,
+                preparedCall, childResult, resumeValue);
+        builder.endBlock();
+        builder.endIfThenElse();
+    }
+
+    /*
+     * One canonical receiver. An unselected callback value is neither
+     * validated nor invoked. A selected inline body runs normally and its
+     * normal result follows the row's policy; abrupt exits propagate
+     * unchanged and skip the policy, exactly as from the standard
+     * behavior. A selected callback without the inline proof (ORDINARY)
+     * never reaches here: it takes the shared ordinary send, which still
+     * reaches the PLAT043/B-prime sequencing.
+     */
+    private void emitNormalBooleanControlPath(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            NormalBooleanControlSite site,
+            boolean receiver,
+            BytecodeLocal result) {
+        NormalBooleanControl control = site.control();
+        int selected = control.selectedIndex(receiver);
+        switch (site.path(receiver)) {
+            case IMMEDIATE -> emitStoreConstant(
+                    builder, result, control.unselectedResult(receiver));
+            case ORDINARY -> throw new AssertionError(
+                    "an ORDINARY Boolean-control path uses the shared send");
+            case INLINE -> {
+                CanonicalClosure closure =
+                        (CanonicalClosure) send.arguments().get(selected);
+                switch (control.selectedResult) {
+                    case EXACT -> emitNormalInlineControlBody(
+                            builder, closure, result);
+                    case RECEIVER -> {
+                        BytecodeLocal discarded = builder.createLocal(
+                                "normalBooleanControlDiscarded", null);
+                        emitNormalInlineControlBody(
+                                builder, closure, discarded);
+                        emitStoreConstant(builder, result,
+                                NormalBooleanControl.canonicalBoolean(receiver));
+                    }
+                    case CANONICAL_BOOLEAN -> {
+                        emitNormalInlineControlBody(builder, closure, result);
+                        builder.beginStoreLocal(result);
+                        builder.beginRequireCanonicalBooleanControlResult();
+                        builder.emitLoadLocal(result);
+                        emitSendCallerOperand(builder);
+                        builder.endRequireCanonicalBooleanControlResult();
+                        builder.endStoreLocal();
+                    }
+                }
+            }
+        }
+    }
+
+    /*
+     * The ordinary send of an admitted site with its staged operands; a
+     * literal Closure argument is materialized here, in argument order, and
+     * remains a PLAT044 B-prime candidate exactly as in the unfolded
+     * lowering (admitted at run time only when actually selected).
+     */
+    private void emitNormalBooleanControlOrdinarySend(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal receiverValue,
+            java.util.List<BytecodeLocal> argumentValues,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        int arity = send.arguments().size();
+        java.util.List<BytecodeLocal> supplied =
+                new java.util.ArrayList<>(arity);
+        java.util.List<InlineLiteralCallback> inlineCallbacks =
+                new java.util.ArrayList<>(1);
+        for (int position = 0; position < arity; position++) {
+            BytecodeLocal value = argumentValues.get(position);
+            if (value == null) {
+                CanonicalClosure literal =
+                        (CanonicalClosure) send.arguments().get(position);
+                value = builder.createLocal(
+                        "normalBooleanControlLiteral", null);
+                builder.beginStoreLocal(value);
+                emitExpression(builder, literal);
+                builder.endStoreLocal();
+                if (isInlineLiteralCallbackCandidate(literal)) {
+                    inlineCallbacks.add(new InlineLiteralCallback(
+                            literal,
+                            position,
+                            value,
+                            bytecodeClosurePlans.get(literal)));
+                }
+            }
+            supplied.add(value);
+        }
+
+        builder.beginStoreLocal(preparedCall);
+        beginPrepareSend(builder, arity);
+        if (receiverValue == null) {
+            emitExpression(builder, send.receiver());
+        } else {
+            builder.emitLoadLocal(receiverValue);
+        }
+        builder.emitLoadConstant(send.message());
+        emitSendCallerOperand(builder);
+        for (BytecodeLocal value : supplied) {
+            builder.emitLoadLocal(value);
+        }
+        endPrepareSend(builder, arity);
+        builder.endStoreLocal();
+        emitPreparedInvocation(
+                builder, result, preparedCall, childResult, resumeValue,
+                inlineCallbacks, null, null);
     }
 
     private void emitNormalInlineControlBody(

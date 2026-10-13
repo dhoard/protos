@@ -120,6 +120,11 @@ public final class ProtosStandardBooleanProtocol {
         return null;
     }
 
+    /** I095-D: not has no callback, so it is not a StructuredCallbackKind. */
+    static boolean isStandardNotSelection(Object behavior, ProtosObjectValue home) {
+        return home.isRootObject() && behavior == STANDARD_NOT;
+    }
+
     public static void install() {
         ProtosObjectValue object = ProtosObjectValue.rootObject();
         install(object, "not", STANDARD_NOT);

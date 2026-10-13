@@ -688,17 +688,28 @@ public final class ProtosCoreBootstrap {
         validateContextLocalRootExecutionProjection(object, "match");
         /*
          * I092 lowers canonical-Boolean ifTrue natively after publication and
-         * I095 inlines ifTrue, ifFalse, if and else; both rely on these frozen
-         * selections; never publish another behavior.
+         * I095 inlines all eight standard Boolean selectors; both rely on these
+         * frozen selections; never publish another behavior.
          */
         requireStandardBooleanSelection(object, "ifTrue",
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE);
         requireStandardBooleanSelection(object, "ifFalse",
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_FALSE);
+        requireStandardBooleanSelection(object, "ifTrueIfFalse",
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE_IF_FALSE);
+        requireStandardBooleanSelection(object, "and",
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.AND);
+        requireStandardBooleanSelection(object, "or",
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.OR);
         requireStandardBooleanSelection(object, "if",
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.IF);
         requireStandardBooleanSelection(object, "else",
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.ELSE);
+        if (!ProtosStandardBooleanProtocol.isStandardNotSelection(
+                object.readLocalSlot("not").orElse(null), object)) {
+            throw new IllegalStateException(
+                    "standard Object root must publish the standard not behavior");
+        }
         if (!ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
                 object.readLocalSlot("call").orElse(null), object)) {
             throw new IllegalStateException(

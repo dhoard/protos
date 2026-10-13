@@ -7,6 +7,37 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.350-SNAPSHOT
+
+- `I095` (#878): complete the shared NORMAL-mode Boolean-control lowering for
+  all eight standard selectors (I095-D).
+  - The lowering is one declarative table (arity, selected callback per
+    canonical receiver, unselected result, and exact/receiver/strict-Boolean
+    result policy) instead of per-selector code.
+  - `ifTrueIfFalse` proves and inlines each literal callback independently:
+    both bodies, only one (the other branch takes the ordinary send), or
+    neither (unchanged topology).
+  - `and`/`or` (and therefore `&&`/`||`) run the selected literal body inline
+    and then require a canonical Boolean result through the new
+    `RequireCanonicalBooleanControlResult` operation, which signals the same
+    standard Error as the native behavior after the callback completed.
+  - `not` (and therefore `!`) returns the negated canonical Boolean with no
+    standard activation; other receivers keep the ordinary send.
+  - A canonical literal receiver that selects no callback now admits any
+    argument expression, which is still evaluated but neither validated nor
+    invoked.
+  - Receiver and non-Closure arguments are evaluated once, before the
+    execution-mode test; MISS, ORDINARY canonical paths and DEBUG share one
+    ordinary send with those operands (B-prime candidates preserved), so
+    nested admitted sites such as `&&` chains lower in linear size. Literal
+    Closures are materialized only by that send.
+  - Standard root publication now also validates the standard
+    `ifTrueIfFalse`, `and`, `or` and `not` behaviors.
+  - Adopt the proven BCI PE topology of the new operation (one
+    `PROVEN_HANDLER_RETURN` tail-call site and the renumbered
+    `SEQUENTIAL_CONSTANT_DELTA` groups of the cached dispatch) into the
+    baseline.
+
 ## 0.3.349-SNAPSHOT
 
 - `I096` (#884): broaden PLAT057-B lexical inlining of ordinary Closure

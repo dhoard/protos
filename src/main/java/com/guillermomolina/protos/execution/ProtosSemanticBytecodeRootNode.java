@@ -5585,6 +5585,26 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     /**
+     * I095-D: the and/or policy for the normal result of a selected callback
+     * that ran inline. A canonical true/false passes unchanged; any other
+     * value, including null and a Future, signals the same standard Error as
+     * {@link ProtosStandardBooleanProtocol#requireBooleanResult}. The exact
+     * caller is resolved only on that failure path.
+     */
+    @Operation
+    public static final class RequireCanonicalBooleanControlResult {
+        @Specialization
+        public static Object perform(Object result, Object caller) {
+            if (result == ProtosBooleanValue.TRUE
+                    || result == ProtosBooleanValue.FALSE) {
+                return result;
+            }
+            return ProtosStandardBooleanProtocol.requireBooleanResult(
+                    result, PrepareSendArguments.exactCaller(caller));
+        }
+    }
+
+    /**
      * Result when no native callback is selected.
      * MISS remains the Java null sentinel for ordinary dispatch.
      */
