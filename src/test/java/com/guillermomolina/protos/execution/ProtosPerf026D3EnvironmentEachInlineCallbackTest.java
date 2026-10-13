@@ -365,7 +365,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
                 """);
         for (String callback :
                 List.of(
-                        "(name, value) => {\n        probe()\n        step: () => { 1 }\n        step()\n    }",
+                        "(name, value) => {\n        probe()\n        step: () => { 1 }\n        step.call()\n    }",
                         "(name, value = 7) => { probe() }",
                         "(name, ...rest) => { probe() }",
                         "(...rest) => { probe() }")) {

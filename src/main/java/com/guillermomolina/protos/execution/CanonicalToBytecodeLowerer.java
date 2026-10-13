@@ -247,6 +247,22 @@ final class CanonicalToBytecodeLowerer {
             .FoldedIntegerAddition currentRootTerminalIntegerAddition;
 
     /*
+     * I096-B1 (PLAT057-B) per-root lowering state, recomputed from the
+     * canonical AST on every parse of the root (including Bytecode reparses)
+     * and saved/restored around nested roots. The first maps each admitted
+     * direct call site of the genuine root sequence to the candidate body of
+     * the binding its receiver resolves to; it is never a proof of the
+     * called value. The second records the Closure literals whose
+     * materialization this parse of the root has already emitted, so a
+     * candidate is used only when its creation precedes the site in this very
+     * parse and every reparse emits the same instructions.
+     */
+    private java.util.Map<CanonicalCall, CanonicalClosure> currentRootBindingCallCandidates =
+            java.util.Map.of();
+    private java.util.Set<CanonicalClosure> currentRootMaterializedClosures =
+            java.util.Set.of();
+
+    /*
      * I095-B4: lowering-time marker for a physically inline
      * zero-parameter callback whose reads were proven to belong
      * to this root. It is saved/restored around the inline body.
@@ -440,6 +456,8 @@ final class CanonicalToBytecodeLowerer {
 
         ProtosSemanticBytecodeRootNode nestedRoot =
                 lowerNestedClosureRoot(builder, definition);
+        // I096-B1: after the nested root restored this root's state.
+        currentRootMaterializedClosures.add(definition);
 
         if (existing != null) {
             return existing;
@@ -658,7 +676,24 @@ final class CanonicalToBytecodeLowerer {
         java.util.Set<String> savedScalarLocals = currentRootScalarLocals;
         CanonicalSend savedTerminalIntegerSend = currentRootTerminalIntegerSend;
         var savedTerminalIntegerAddition = currentRootTerminalIntegerAddition;
+        java.util.Map<CanonicalCall, CanonicalClosure> savedBindingCallCandidates =
+                currentRootBindingCallCandidates;
+        java.util.Set<CanonicalClosure> savedMaterializedClosures =
+                currentRootMaterializedClosures;
         try {
+            /*
+             * I096-B1: a Closure created by a module root owns a fresh
+             * ReturnHome, which the carrier never admits, so a module root
+             * would only grow by regions that always fall back.
+             */
+            currentRootBindingCallCandidates =
+                    activationDefinition == null
+                            ? java.util.Map.of()
+                            : bindingClosureCallCandidates(
+                                    sequence, analysisForThisRoot, scopeForThisRoot);
+            currentRootMaterializedClosures =
+                    java.util.Collections.newSetFromMap(
+                            new java.util.IdentityHashMap<>());
             currentRootAnalysis = analysisForThisRoot;
             currentRootTopScope = scopeForThisRoot;
             currentRootFrameLocals = java.util.Map.of();
@@ -693,7 +728,72 @@ final class CanonicalToBytecodeLowerer {
             currentRootScalarLocals = savedScalarLocals;
             currentRootTerminalIntegerSend = savedTerminalIntegerSend;
             currentRootTerminalIntegerAddition = savedTerminalIntegerAddition;
+            currentRootBindingCallCandidates = savedBindingCallCandidates;
+            currentRootMaterializedClosures = savedMaterializedClosures;
         }
+    }
+
+    /**
+     * I096-B1 (PLAT057-B) static discovery of candidate bodies for ordinary
+     * calls through a lexical binding, restricted to the direct expressions of
+     * one genuine root sequence: a target-less {@code CanonicalCreate} whose
+     * value is a Closure literal and whose binding identity is owned by
+     * {@code scope} declares a candidate, and a later direct call (a
+     * statement, or the value of a direct create or assignment) whose
+     * receiver lookup is {@link CanonicalBindingResolution.Resolved} to that
+     * exact identity is associated with it. Identities, never names, decide
+     * membership. An identity created more than once in the sequence keeps
+     * no candidate after its second creation, so each site has at most one.
+     *
+     * <p>The association states only which body the site may expect; whether
+     * the called value is an instance of it is decided at run time by the
+     * carrier admission ({@link #emitInlineClosureLiteralCall}).
+     */
+    private static java.util.Map<CanonicalCall, CanonicalClosure> bindingClosureCallCandidates(
+            CanonicalSequence sequence,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        java.util.IdentityHashMap<CanonicalBindingIdentity, CanonicalClosure> definitions =
+                new java.util.IdentityHashMap<>();
+        java.util.Set<CanonicalBindingIdentity> recreated =
+                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        java.util.IdentityHashMap<CanonicalCall, CanonicalClosure> candidates =
+                new java.util.IdentityHashMap<>();
+
+        for (CanonicalExpression expression : sequence.expressions()) {
+            CanonicalExpression direct = switch (expression) {
+                case CanonicalCreate create when create.target().isEmpty() -> create.value();
+                case CanonicalAssign assign when assign.target().isEmpty() -> assign.value();
+                default -> expression;
+            };
+            if (direct instanceof CanonicalCall call
+                    && call.receiver() instanceof CanonicalLookup lookup
+                    && analysis.resolutionOf(lookup).orElse(null)
+                            instanceof CanonicalBindingResolution.Resolved resolved) {
+                CanonicalClosure definition = definitions.get(resolved.identity());
+                if (definition != null) {
+                    candidates.put(call, definition);
+                }
+            }
+
+            if (expression instanceof CanonicalCreate create
+                    && create.target().isEmpty()) {
+                CanonicalBindingIdentity identity =
+                        analysis.identityOf(create).orElse(null);
+                if (identity == null || identity.owner() != scope) {
+                    continue;
+                }
+                if (create.value() instanceof CanonicalClosure closure
+                        && !definitions.containsKey(identity)
+                        && !recreated.contains(identity)) {
+                    definitions.put(identity, closure);
+                } else {
+                    definitions.remove(identity);
+                    recreated.add(identity);
+                }
+            }
+        }
+        return candidates;
     }
 
     /**
@@ -8394,6 +8494,10 @@ final class CanonicalToBytecodeLowerer {
                 !spreadArguments
                         && call.arguments().size() <= 1
                         && !currentInlineCallbackFrameNative;
+        CanonicalClosure inlineLiteral =
+                tryDirectCall
+                        ? inlineClosureLiteralCallCandidate(call)
+                        : null;
 
         boolean stageInputs =
                 stageReceiver
@@ -8451,6 +8555,7 @@ final class CanonicalToBytecodeLowerer {
                                     "callArgument",
                                     null);
                     if (tryDirectCall
+                            && inlineLiteral == null
                             && primitiveNumericCarrierArgument(argument)) {
                         // I091-F2: the admitted direct Closure receives a
                         // primitive carrier; the miss restores a guest value.
@@ -8474,6 +8579,36 @@ final class CanonicalToBytecodeLowerer {
                     argumentValues.add(argumentValue);
                 }
             }
+        }
+
+        /*
+         * I096-A/B1: the receiver (the literal, or the ordinary lookup of a
+         * candidate binding) was staged above exactly once; both branches
+         * consume the same receiver and argument locals, so neither repeats
+         * an evaluation or a binding read. DEBUG keeps the unchanged physical
+         * call topology.
+         */
+        ProtosClosureExecutionPlanCell inlineLiteralPlan =
+                inlineLiteral == null
+                        ? null
+                        : bytecodeClosurePlans.get(inlineLiteral);
+        if (inlineLiteralPlan != null) {
+            builder.beginIfThenElse();
+            builder.emitIsNormalExecutionMode();
+
+            builder.beginBlock();
+            emitInlineClosureLiteralCall(
+                    builder,
+                    inlineLiteral,
+                    inlineLiteralPlan,
+                    receiverValue,
+                    argumentValues,
+                    result,
+                    childResult,
+                    resumeValue);
+            builder.endBlock();
+
+            builder.beginBlock();
         }
 
         BytecodeLocal directCallResult = null;
@@ -8621,8 +8756,121 @@ final class CanonicalToBytecodeLowerer {
             builder.endIfThenElse();
         }
 
+        if (inlineLiteralPlan != null) {
+            builder.endBlock();
+            builder.endIfThenElse();
+        }
+
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /**
+     * I096-A (PLAT057-B) compile-time candidate for lexical inlining of an
+     * ordinary Closure call: the receiver is an immediate Closure literal, so
+     * its body is known while lowering this caller. I096-B1 extends this to a
+     * receiver lookup that {@link #bindingClosureCallCandidates} associates
+     * with the single Closure literal created in its binding, when this
+     * parse of the root has already materialized that literal (so its plan
+     * is registered before the site). For a binding the candidate is only an
+     * expected body: the binding may be reassigned, removed or shadowed, and
+     * its value may be another instance of the same definition.
+     *
+     * <p>Every parameter is ordinary required positional and the supplied
+     * count matches exactly, so the selected entry is the body entry, never a
+     * default, rest or arity-rejection entry. As for the PLAT044 B′ callback
+     * candidates, a body creating a nested Closure is excluded: capturing an
+     * inline-owned binding needs durable lexical authority this region does
+     * not establish. That exclusion also bounds expansion: an admitted body
+     * contains no Closure literal and its calls are never candidates of this
+     * root, so each site inlines at most one body, once.
+     *
+     * <p>The selector, the receiver's prototype, the binding resolution and
+     * the body's contents are not proofs of selection: the inline region is
+     * entered only after the run-time admission in {@link
+     * #emitInlineClosureLiteralCall}.
+     */
+    private CanonicalClosure inlineClosureLiteralCallCandidate(
+            CanonicalCall call) {
+        CanonicalClosure candidate =
+                call.receiver() instanceof CanonicalClosure literal
+                        ? literal
+                        : currentRootBindingCallCandidates.get(call);
+        if (candidate != null
+                && !(call.receiver() instanceof CanonicalClosure)
+                && !currentRootMaterializedClosures.contains(candidate)) {
+            return null;
+        }
+        if (candidate != null
+                && candidate.parameters().size() == call.arguments().size()
+                && candidate.parameters().stream()
+                        .allMatch(parameter -> !parameter.rest()
+                                && parameter.defaultValue().isEmpty())
+                && !containsClosure(candidate.body())) {
+            return candidate;
+        }
+        return null;
+    }
+
+    /**
+     * I096-A (PLAT057-B) NORMAL-mode region of an admitted candidate ({@link
+     * #inlineClosureLiteralCallCandidate}).
+     *
+     * <p>Ordinary {@code call} selection happens exactly once, on the already
+     * staged receiver and arguments, through the PLAT044 B′ carrier seam
+     * ({@link ProtosBytecodeRootNode#prepareInlineClosureLiteralCall}). The
+     * body lowered into this root is entered only when the carrier proves that the
+     * selection is the canonical standard {@code Object.call} of this
+     * literal's own plan target with an unobservable ReturnHome; a nearer or
+     * replaced {@code call}, a missing plan, or an owned ReturnHome
+     * (non-local return) takes the carrier's exact physical fallback without
+     * re-evaluating any operand or re-selecting.
+     *
+     * <p>The admitted body runs in {@link #emitInlineLiteralCallback}, which
+     * keeps the callee's own semantic activation and lexical scope: its
+     * parameters and locals use separate block-local storage of this root
+     * only when binding analysis proves no persistent frame authority is
+     * required, reads keep the D179 presence assumptions, and any Context
+     * observer materializes the callee's own fresh activation from the
+     * carrier. Captured outer bindings keep their existing by-reference
+     * access paths.
+     */
+    private void emitInlineClosureLiteralCall(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalClosure definition,
+            ProtosClosureExecutionPlanCell literalPlan,
+            BytecodeLocal receiverValue,
+            java.util.List<BytecodeLocal> argumentValues,
+            BytecodeLocal result,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal child =
+                builder.createLocal("inlineClosureLiteralCall", null);
+
+        builder.beginStoreLocal(child);
+        builder.beginPrepareInlineClosureLiteralCall();
+        builder.emitLoadLocal(receiverValue);
+        emitCurrentActivation(builder);
+        for (BytecodeLocal argumentValue : argumentValues) {
+            builder.emitLoadLocal(argumentValue);
+        }
+        builder.endPrepareInlineClosureLiteralCall();
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+        builder.beginAdmitsInlineClosureLiteralCall();
+        builder.emitLoadLocal(child);
+        builder.emitLoadConstant(literalPlan);
+        builder.endAdmitsInlineClosureLiteralCall();
+
+        emitInlineLiteralCallback(builder, definition, child, result);
+
+        builder.beginBlock();
+        emitInlineLiteralFallbackInvocation(
+                builder, result, child, childResult, resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
     }
 
     /*

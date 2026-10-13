@@ -384,7 +384,7 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
         for (String receiver : RECEIVERS) {
             for (String callback :
                     List.of(
-                            "(key, value) => {\n        probe()\n        step: () => { 1 }\n        step()\n    }",
+                            "(key, value) => {\n        probe()\n        step: () => { 1 }\n        step.call()\n    }",
                             "(key, value = 7) => { probe() }",
                             "(key, ...rest) => { probe() }",
                             "(...rest) => { probe() }")) {

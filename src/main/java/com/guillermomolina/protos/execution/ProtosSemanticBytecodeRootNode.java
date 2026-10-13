@@ -6047,6 +6047,37 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    // ---- PLAT057-B inline ordinary Closure-literal call (I096-A) ------------------
+    //
+    // An ordinary C0/C1 call whose receiver is the site's own staged Closure
+    // literal (I096-A), or a binding with a candidate literal body (I096-B1),
+    // is prepared through the PLAT044 B′ carrier seam (one ordinary
+    // call selection) and admitted only when the carrier's effective body
+    // target is that literal's own plan target with an unobservable
+    // ReturnHome (see CanonicalToBytecodeLowerer#emitInlineClosureLiteralCall).
+
+    @Operation
+    public static final class PrepareInlineClosureLiteralCall {
+        @Specialization
+        public static PreparedInlineLiteralCall perform(
+                Object receiver,
+                ProtosActivation caller,
+                @Variadic Object[] supplied) {
+            return ProtosBytecodeRootNode.prepareInlineClosureLiteralCall(
+                    receiver, caller, supplied);
+        }
+    }
+
+    @Operation
+    public static final class AdmitsInlineClosureLiteralCall {
+        @Specialization
+        public static boolean perform(
+                PreparedInlineLiteralCall child,
+                ProtosClosureExecutionPlanCell literalPlan) {
+            return child.admits(literalPlan);
+        }
+    }
+
     // ---- PLAT044 B′ inline literal whileTrue (PERF026-C1) ---------------------------
     //
     // A selected standard whileTrue whose receiver and body are exactly the

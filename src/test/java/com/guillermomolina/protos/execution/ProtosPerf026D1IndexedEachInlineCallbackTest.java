@@ -397,7 +397,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                     Array(1).each((element) => {
                         probe()
                         step: () => { 1 }
-                        step()
+                        step.call()
                     })
                 }
                 run()

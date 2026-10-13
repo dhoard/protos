@@ -8535,6 +8535,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         selected));
     }
 
+    /**
+     * I096-A (PLAT057-B): the same preparation seam for an ordinary
+     * {@code receiver(...)} call whose staged receiver is the call site's own
+     * Closure literal (I096-A) or the value read from a binding with a
+     * candidate body (I096-B1). Selection is exactly {@link
+     * #prepareInlineLiteralCall}:
+     * one ordinary D013 {@code call} lookup, and any selection other than the
+     * canonical standard {@code Object.call} of a source-backed Closure keeps
+     * the ordinary prepared fallback.
+     */
+    static PreparedInlineLiteralCall prepareInlineClosureLiteralCall(
+            Object receiver,
+            ProtosActivation caller,
+            Object[] supplied) {
+        return prepareInlineLiteralCall(
+                receiver, java.util.Arrays.asList(supplied), caller);
+    }
+
     private static ProtosSlotLookupResult selectClosureCall(
             Object receiver,
             ProtosActivation caller) {

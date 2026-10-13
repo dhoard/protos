@@ -275,11 +275,13 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             evaluate("""
                     runOne: () => {
                         identity: (value) => { value }
-                        identity(1)
+                        f: identity
+                        f(1)
                     }
                     runZero: () => {
                         constant: () => { 1 }
-                        constant()
+                        f: constant
+                        f()
                     }
                     """, "perf042-installed-define.protos", module);
             enterCachedTier("runOne", module);

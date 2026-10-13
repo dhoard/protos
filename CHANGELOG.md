@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.347-SNAPSHOT
+
+- `I096` (#884): PLAT057-B lexical inlining of ordinary C0/C1 Closure calls
+  (slices A and B1), entered only behind the run-time selection guard.
+  - I096-A: a call whose receiver is an immediate Closure literal runs the
+    literal's body inline in the caller root in NORMAL mode, after one
+    ordinary `call` selection proves the canonical standard selection of the
+    literal's own plan target with an unobservable ReturnHome; any other
+    selection takes the prepared physical fallback without re-evaluating
+    operands. DEBUG keeps the physical callee root.
+  - I096-B1: a direct call through a binding whose single Closure-literal
+    creation precedes it in the same Closure root reuses the same guarded
+    region. The binding is read once and never treated as a constant; a
+    reassigned, removed, shadowed or overridden value takes the fallback,
+    and another instance of the same definition runs with its own captures,
+    ReturnHome and fresh Context. Module roots emit no candidate regions.
+  - Default/rest parameters, spread, C2+, bodies creating Closures, and
+    non-direct sites keep the unchanged call topology.
+  - Adopt the two proven `PROVEN_HANDLER_RETURN` I096-A operations into the
+    BCI PE topology baseline; keep PERF026/PERF042 fixtures on their
+    intended non-B1 shapes.
+
 ## 0.3.346-SNAPSHOT
 
 - `I098` (#886): implement D201: `whileTrue` returns its last normal body

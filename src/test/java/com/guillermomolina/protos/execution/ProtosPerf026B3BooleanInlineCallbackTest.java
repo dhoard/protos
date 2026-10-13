@@ -222,7 +222,7 @@ final class ProtosPerf026B3BooleanInlineCallbackTest {
                     false.ifTrueIfFalse(() => { 1 }, () => {
                         probe()
                         nested: () => { 2 }
-                        nested()
+                        nested.call()
                     })
                 }
                 run()
