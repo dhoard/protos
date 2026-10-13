@@ -7,7 +7,7 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/protos,type=bind,consistency=cached",
   "workspaceFolder": "/workspaces/protos",
   "remoteUser": "vscode",
-  "updateRemoteUserUID": true,
+  "updateRemoteUserUID": false,
   "customizations": {
     "vscode": {
       "extensions": [
@@ -20,7 +20,7 @@
   // "runArgs": ["--userns=host"],
 
   // Podman rootless:
-  "runArgs": ["--userns=keep-id"],
+  "runArgs": ["--userns=keep-id:uid=1000,gid=1000"],
   "initializeCommand": "mkdir -p \"${localEnv:HOME}/.claude\"",
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
