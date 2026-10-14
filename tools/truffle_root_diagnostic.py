@@ -560,9 +560,208 @@ def finish(report, directory: Optional[Path], out, usage: bool = False) -> int:
     return 0 if ready else 1
 
 
+
+# TEST009-V: ordinary-Closure compiled graph acquisition
+# The Test Tool's one-shot --case is NOT a compilation workload; cataloging a
+# root is not evidence it was executed or compiled. Keep the existing focused
+# single-root diagnostic unchanged, and use this opt-in, known-compiling guest
+# program when a graph of an ordinary Closure call is specifically required.
+ORDINARY_CAPTURE_NAME = "ordinary-closure-sample"
+ORDINARY_CALL_SOURCE = "sum3(i, 1, 2)"
+
+
+def ordinary_program():
+    """Minimal C3 literal source-Closure call, repeated inside its real caller.
+
+    Do not embed this in the complex TEST009-D exception/ensure/nonlocal-return
+    stress test: that unrelated work bloats the generated machine code.
+    Work's root is entered 200 times and the C3 result contributes to output.
+    """
+    guest = """work: (i) => {
+    sum3: (x, y, z) => x + y + z
+    sum3(i, 1, 2)
+}
+total: 0
+n: 0
+(() => { n < 200 }).whileTrue(() => {
+    total = total + work(n)
+    n = n + 1
+})
+print(total)
+"""
+    if guest.count(ORDINARY_CALL_SOURCE) != 1:
+        raise CheckError("I096 ordinary call source must occur exactly once")
+    # sum(i + 3) for i in 0..199 = 19900 + 600 = 20500.
+    return guest, ("20500",)
+
+
+def ordinary_root(catalog_data, program):
+    """Find the physical owner of the C2 call, not the identity callee or Test wrapper."""
+    call_offset = program.index(ORDINARY_CALL_SOURCE)
+    candidates = [
+        entry for entry in catalog_data["roots"]
+        if entry["kind"] == "CLOSURE"
+        and ("%3Ceval%3E" in entry["source"] or "<eval>" in entry["source"])
+        and entry["start"] <= call_offset
+        and call_offset + len(ORDINARY_CALL_SOURCE) <= entry["start"] + entry["length"]
+    ]
+    if not candidates:
+        raise CheckError("CATALOG_NO_ENCLOSING_WORK_CLOSURE: no literal-call owner root")
+    candidates.sort(key=lambda item: (item["length"], item["start"], item["selector"]))
+    if len(candidates) > 1 and candidates[0]["length"] == candidates[1]["length"]:
+        raise CheckError("CATALOG_AMBIGUOUS_WORK_CLOSURE: same-sized owner roots")
+    return candidates[0]
+
+
+def ordinary_output_problems(output, expected):
+    """Require the precise guest output; compiler trace text is not a result."""
+    observed = [line.strip() for line in output.splitlines() if line.strip() in set(expected)]
+    return [] if observed == list(expected) else [
+        "SEMANTIC_OUTPUT expected %r, observed %r" % (list(expected), observed)
+    ]
+
+
+def ordinary_compilation_evidence(output, selector, graph_files):
+    """Attribute success, failure and BGV to the *selected* semantic root.
+
+    Unrelated JVM targets may compile or bail out. They remain reported but
+    cannot invalidate a successful selected-root capture. Names in BGV paths
+    are target labels, not proof of a particular IR shape.
+    """
+    events = [line for line in output.splitlines() if ENGINE_COMPILATION_EVENT.match(line)]
+    done = [line for line in events if line.lstrip().startswith("[engine] opt done")]
+    selected_events = [line for line in events
+                       if any(selector in name for name in TARGET_NAME.findall(line))]
+    selected_done = [line for line in selected_events if line.lstrip().startswith("[engine] opt done")]
+    records = failure_records(output, is_failure_line)
+    selected_failures = [record for record in records if selector in record.splitlines()[0]]
+    unrelated_failures = [record for record in records if selector not in record.splitlines()[0]]
+    selected_bgv = [path for path in graph_files if selector in Path(path).name]
+    valid_selected_bgv = [path for path in selected_bgv
+                          if Path(path).is_file() and Path(path).stat().st_size > 0]
+    invalid_bgv = [path for path in graph_files
+                   if not Path(path).is_file() or Path(path).stat().st_size == 0]
+    issues = []
+    if not done:
+        issues.append("NO_COMPILATION: no Graal 'opt done' event")
+    if not selected_events:
+        issues.append("SELECTED_ROOT_NOT_COMPILED: no selected target event")
+    if not selected_done:
+        issues.append("SELECTED_ROOT_NO_OPT_DONE: no successful selected target compilation")
+    if selected_failures:
+        issues.append("SELECTED_ROOT_COMPILATION_FAILURES=%d" % len(selected_failures))
+    if not selected_bgv:
+        issues.append("SELECTED_ROOT_MISSING_BGV: no graph filename contains selected selector")
+    if selected_bgv and not valid_selected_bgv:
+        issues.append("SELECTED_ROOT_INVALID_BGV: no nonempty selected graph")
+    if invalid_bgv:
+        issues.append("INVALID_BGV=%r" % invalid_bgv)
+    return {
+        "compilation_events": len(events),
+        "compilations_done": len(done),
+        "selected_compilation_events": len(selected_events),
+        "selected_compilations_done": len(selected_done),
+        "selected_compilation_failures": len(selected_failures),
+        "unrelated_compilation_failures": len(unrelated_failures),
+        "permanent_compilation_failures": len(records),
+        "selected_bgv_files": valid_selected_bgv,
+        "bgv_files": graph_files,
+        "problems": issues,
+    }
+
+
+def ordinary_closure(root, java, timeout, artifacts, out=sys.stdout):
+    """Two fresh JVMs: catalog then unfiltered real compiler graph acquisition.
+
+    Unlike `diagnose`, does not promise a named Closure target compilation on a
+    one-shot Test Tool Case. Fail closed if execution, compilation or graph proof
+    is absent. Neither silently interprets BGV nor claims tier stabilization.
+    """
+    try:
+        directory = target_directory(root, artifacts) / ORDINARY_CAPTURE_NAME
+    except CheckError as error:
+        print("I096_CAPTURE=INVALID_ARTIFACT %s" % error, file=out)
+        return 1
+    directory.mkdir(parents=True, exist_ok=True)
+    report_path = directory / "report.json"
+    report = OrderedDict([
+        ("schema", "protos.test009-v.ordinary-closure/v2"),
+        ("status", "ACQUISITION_FAILED"),
+        ("phase", "START"),
+    ])
+    try:
+        guest, expected = ordinary_program()
+        call = ["-e", guest]
+        # Catalog must not enable compilation. It records the same source text
+        # and semantic-root spans that will be used by the capture JVM.
+        catalog_command = cli_command(root, java, [STABLE_ROOT_IDENTITY], call)
+        catalog_code, catalog_text, _ = run_cli(root, catalog_command, timeout)
+        (directory / "catalog.log").write_text(catalog_text, encoding="utf-8")
+        parsed = parse_catalog(catalog_text)
+        report["catalog_roots"] = len(parsed["roots"])
+        if catalog_code or parsed["problems"]:
+            raise CheckError("ROOT_CATALOG_INVALID code=%s problems=%s" %
+                             (catalog_code, parsed["problems"][:3]))
+        if not parsed["roots"]:
+            raise CheckError("ROOT_CATALOG_EMPTY")
+        chosen = ordinary_root(parsed, guest)
+        selector = chosen["selector"]
+        report["selected_root"] = chosen
+        report["phase"] = "COMPILE"
+        print("I096_SELECTED_ROOT=%s" % selector, file=out)
+
+        dumps = directory / "graal_dumps"
+        if dumps.exists():
+            shutil.rmtree(dumps)
+        dumps.mkdir(parents=True)
+        options = diagnostic_options(selector, "none", "1", relative_to_root(root, dumps))
+        # Do not force a named CompileOnly target when the actual guest program
+        # might inline it before Graal would separately compile it.
+        options = [opt for opt in options if not opt.startswith(ENGINE + "CompileOnly=")]
+        report["options"] = options
+        code, output, elapsed = run_cli(root, cli_command(root, java, options, call), timeout)
+        log = directory / "diagnostic.log"
+        log.write_text(output, encoding="utf-8")
+        report["log"] = str(log)
+        report["elapsed_seconds"] = round(elapsed, 1)
+        graph_files = bgv_files(dumps)
+        evidence = ordinary_compilation_evidence(output, selector, graph_files)
+        problems = (["GUEST_EXIT_CODE=%d" % code] if code else [])
+        problems.extend(ordinary_output_problems(output, expected))
+        problems.extend(evidence["problems"])
+        report.update({
+            "phase": "FINISHED",
+            "exit_code": code,
+            "expected_output": list(expected),
+            "graph_attribution": "BGV_FILENAME_MATCHES_SELECTED_TARGET",
+            **{key: value for key, value in evidence.items() if key != "problems"},
+            "problems": problems,
+            "status": "CAPTURE_READY" if not problems else "EVIDENCE_INCOMPLETE",
+        })
+
+
+    except (CheckError, OSError, subprocess.TimeoutExpired, ValueError, KeyError) as error:
+        report["status"] = "ACQUISITION_FAILED"
+        report.setdefault("problems", []).append("%s: %s" % (type(error).__name__, error))
+    finally:
+        report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        print("I096_REPORT=%s" % report_path, file=out)
+        print("I096_STATUS=%s" % report["status"], file=out)
+        print("I096_COMPILATIONS_DONE=%s" % report.get("compilations_done", 0), file=out)
+        print("I096_SELECTED_COMPILATION_EVENTS=%s" % report.get("selected_compilation_events", 0), file=out)
+        print("I096_SELECTED_COMPILATIONS_DONE=%s" % report.get("selected_compilations_done", 0), file=out)
+        print("I096_SELECTED_COMPILATION_FAILURES=%s" % report.get("selected_compilation_failures", 0), file=out)
+        print("I096_UNRELATED_COMPILATION_FAILURES=%s" % report.get("unrelated_compilation_failures", 0), file=out)
+        for bgv in report.get("selected_bgv_files", []):
+            print("I096_SELECTED_BGV=%s" % bgv, file=out)
+        for problem in report.get("problems", []):
+            print("  %s" % problem, file=out)
+    return 0 if report["status"] == "CAPTURE_READY" else 1
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=("catalog", "diagnose", "probe"))
+    parser.add_argument("command", choices=("catalog", "diagnose", "probe", "ordinary-closure"))
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--java", default=None)
     parser.add_argument("--timeout", type=int, default=3600, help="JVM timeout in seconds")
@@ -581,6 +780,10 @@ def main(argv=None) -> int:
     root = args.root.resolve()
     java = select_java(args.java)
     artifacts = args.artifacts if args.artifacts.is_absolute() else root / args.artifacts
+    if args.command == "ordinary-closure":
+        if test_arguments:
+            parser.error("ordinary-closure accepts no Test Tool --case arguments")
+        return ordinary_closure(root, java, args.timeout, artifacts)
     if args.command == "catalog":
         return catalog(root, java, test_arguments, args.timeout, artifacts)
     if args.command == "probe":

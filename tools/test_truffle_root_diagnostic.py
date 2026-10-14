@@ -460,5 +460,71 @@ class MainTest(unittest.TestCase):
         self.assertEqual(fake.call_args[0][2], CASE_ARGS)
 
 
+
+class OrdinaryClosureCaptureTest(unittest.TestCase):
+
+    def test_probe_uses_a_real_literal_ordinary_c2_call(self):
+        source, expected = diag.ordinary_program()
+        self.assertIn("sum3: (x, y, z) => x + y + z", source)
+        self.assertEqual(source.count(diag.ORDINARY_CALL_SOURCE), 1)
+        self.assertEqual(expected, ("20500",))
+
+    def test_selects_enclosing_work_not_inner_identity(self):
+        source, _ = diag.ordinary_program()
+        offset = source.index(diag.ORDINARY_CALL_SOURCE)
+        start = source.index("    sum3: (x, y, z)")
+        end = source.index("\n}", start)
+        entry = dict(selector=SELECTOR, kind="CLOSURE", source="truffle:abcdef/%3Ceval%3E",
+                     start=start, length=end - start + 1)
+        self.assertEqual(diag.ordinary_root({"roots": [entry]}, source), entry)
+        with self.assertRaises(diag.CheckError):
+            diag.ordinary_root({"roots": [{**entry, "start": offset + 2, "length": 1}]}, source)
+
+    def test_expected_output_fails_closed(self):
+        self.assertEqual(diag.ordinary_output_problems("20500\n", ("20500",)), [])
+        self.assertTrue(diag.ordinary_output_problems("0\n", ("20500",)))
+        self.assertTrue(diag.ordinary_output_problems("20500\n20500\n", ("20500",)))
+
+    def test_existing_one_case_compilation_tool_keeps_original_contract(self):
+        options = diag.diagnostic_options(SELECTOR, "node", "1", "target/igv")
+        self.assertIn("-Dpolyglot.engine.CompileOnly=" + SELECTOR, options)
+        self.assertIn("-Dpolyglot.compiler.TraceNodeExpansion=truffleTier", options)
+
+    def test_selected_graph_and_compilation_are_required(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ("TruffleHotSpotCompilation-1[" + SELECTOR + "].bgv")
+            path.write_bytes(b"BIGV")
+            other = Path(directory) / ("TruffleHotSpotCompilation-2[" + OTHER + "].bgv")
+            other.write_bytes(b"BIGV")
+            output = "\n".join([start(NAME), done(NAME), start(OTHER + "[CLOSURE|file:///w/y.protos|1+1]"),
+                                  done(OTHER + "[CLOSURE|file:///w/y.protos|1+1]")])
+            result = diag.ordinary_compilation_evidence(output, SELECTOR, [str(path), str(other)])
+            self.assertEqual(result["problems"], [])
+            self.assertEqual(result["selected_compilations_done"], 1)
+            self.assertEqual(result["selected_bgv_files"], [str(path)])
+            result = diag.ordinary_compilation_evidence(output, SELECTOR, [str(other)])
+            self.assertIn("SELECTED_ROOT_MISSING_BGV", str(result["problems"]))
+
+    def test_other_root_failure_does_not_hide_selected_root_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ("TruffleHotSpotCompilation-1[" + SELECTOR + "].bgv")
+            path.write_bytes(b"BIGV")
+            other_name = OTHER + "[CLOSURE|file:///w/y.protos|1+1]"
+            output = "\n".join([start(NAME), done(NAME), start(other_name),
+                                  failed(other_name, CODE_TOO_LARGE)])
+            result = diag.ordinary_compilation_evidence(output, SELECTOR, [str(path)])
+            self.assertEqual(result["selected_compilation_failures"], 0)
+            self.assertEqual(result["problems"], [])
+
+    def test_selected_root_failure_remains_failure_even_with_bgv(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ("TruffleHotSpotCompilation-1[" + SELECTOR + "].bgv")
+            path.write_bytes(b"BIGV")
+            output = "\n".join([start(NAME), done(NAME), start(NAME, 2),
+                                  failed(NAME, CODE_TOO_LARGE)])
+            result = diag.ordinary_compilation_evidence(output, SELECTOR, [str(path)])
+            self.assertTrue(any("SELECTED_ROOT_COMPILATION_FAILURES" in issue for issue in result["problems"]))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
