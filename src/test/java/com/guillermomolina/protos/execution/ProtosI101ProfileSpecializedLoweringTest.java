@@ -501,9 +501,9 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
     /**
      * Handwritten expectation of the NORMAL activation root: a parameterless Closure root whose
-     * PERF032-G6 arity-rejection root is nested first, followed by its single terminal statement
-     * (StatementTag and ExpressionTag over a block) returning the Long carrier of {@code 1}
-     * through the I091 return materialization.
+     * PERF032-G6 arity-rejection root is nested first, followed by a direct return
+     * of the Long carrier of {@code 1}. Source metadata and the arity root remain;
+     * ordinary guest-value materialization is handled by the call boundary.
      */
     private static ProtosSemanticBytecodeRootNode handwrittenLiteralOneActivationRoot() {
         String characters = DIRECT;
@@ -511,7 +511,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 .build();
         int bodyStart = characters.indexOf('{');
         int bodyLength = characters.lastIndexOf('}') + 1 - bodyStart;
-        int literalStart = characters.indexOf('1');
         BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
                 ProtosSemanticBytecodeRootNodeGen.create(
                         LANGUAGE_REF.get(null),
@@ -532,21 +531,9 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             builder.endRoot();
                             builder.endSourceSection();
 
-                            builder.beginSourceSection(literalStart, 1);
-                            builder.beginTag(
-                                    StandardTags.StatementTag.class,
-                                    StandardTags.ExpressionTag.class);
-                            builder.beginBlock();
                             builder.beginReturn();
-                            builder.beginMaterializeReturnCarrier();
                             builder.emitLoadConstant(1L);
-                            builder.endMaterializeReturnCarrier();
                             builder.endReturn();
-                            builder.endBlock();
-                            builder.endTag(
-                                    StandardTags.StatementTag.class,
-                                    StandardTags.ExpressionTag.class);
-                            builder.endSourceSection();
 
                             builder.endRoot();
                             builder.endSourceSection();

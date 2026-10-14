@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.357-SNAPSHOT
+
+- `I101` (#892), slice B: emit minimal NORMAL bytecode for proven
+  constant Integer arithmetic and scalar-local Closure bodies.
+  - Fold statically proven signed-64 arithmetic during lowering,
+    retaining ordinary semantics for unproven or overflowing cases.
+  - Emit direct Bytecode DSL `StoreLocal` and `LoadLocal` operations
+    for proven scalar bindings, leaving local propagation and dead
+    store elimination to Graal.
+  - Remove the runtime compact-frame branches and generic dispatch
+    machinery from admitted minimal NORMAL roots.
+  - Enforce exact physical bytecode equality with independently
+    authored Builder oracles for literal and local arithmetic.
+  - Preserve NORMAL context observation and DEBUG scope, breakpoint
+    and lexical-authority behavior with profile-specific tests.
+  - Add I101 Graal compilation and graph-diagnostic tooling.
+
 ## 0.3.356-SNAPSHOT
 
 - `I093` (#873), slice C1: preserve untransferred TCP acquisition

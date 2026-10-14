@@ -83,15 +83,16 @@ final class ProtosPerf025FrameMaterializationSliceTest {
     @Test
     void perf034ScalarBodyWithObservedActivationPreservesFrameAuthority()
             throws Exception {
-        withFixture(fixture -> {
+        withFixture(ProtosExecutionMode.DEBUG, fixture -> {
             ClosureUnderTest plan =
                     closurePlan(
                             fixture,
                             "() => { first: 7\nsecond: 9\nfirst }");
 
-            List<String> names =
-                    instructionNames(activationNode(plan));
-            assertContains(names, "IsCompactLocalFrame");
+            assertEquals(
+                    ProtosExecutionMode.DEBUG,
+                    plan.plan.bytecodeProfileForTesting(),
+                    "Observed activation must use the DEBUG lowering profile");
 
             // An unobserved rich carrier still owes no lexical authority.
             ProtosActivation unobserved =
@@ -106,7 +107,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
             assertNull(
                     unobserved.currentLexicalBindingAuthorityForRuntime());
 
-            // Observation before entry requires the authoritative fallback.
+            // DEBUG observation before entry requires lexical authority.
             ProtosActivation invocation =
                     deferredInvocation(
                             fixture, plan.closure, List.of());
@@ -445,7 +446,18 @@ final class ProtosPerf025FrameMaterializationSliceTest {
     }
 
     private static void withFixture(FixtureTest test) throws Exception {
-        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+        withFixture(ProtosExecutionMode.NORMAL, test);
+    }
+
+    private static void withFixture(
+            ProtosExecutionMode mode, FixtureTest test) throws Exception {
+        Context.Builder builder = Context.newBuilder(ProtosLanguage.ID);
+        if (mode == ProtosExecutionMode.DEBUG) {
+            builder.allowExperimentalOptions(true)
+                    .option("protos.Debug", "true");
+        }
+
+        try (Context context = builder.build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
@@ -482,7 +494,10 @@ final class ProtosPerf025FrameMaterializationSliceTest {
         Source source = Source.newBuilder(ProtosLanguage.ID, characters, "perf025-frame.protos").build();
         CanonicalSequence canonical =
                 (CanonicalSequence) new Canonicalizer().canonicalize(new ProtosParser(characters).parseProgram());
-        return new CanonicalToBytecodeLowerer(fixture.language, source, ProtosExecutionMode.NORMAL)
+        return new CanonicalToBytecodeLowerer(
+                        fixture.language,
+                        source,
+                        ProtosLanguageContext.current().executionMode())
                 .lowerRoot(canonical)
                 .getCallTarget()
                 .call(fixture.module);

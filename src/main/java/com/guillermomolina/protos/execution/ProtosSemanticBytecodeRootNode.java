@@ -222,6 +222,22 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     /*
+     * I101-B: a NORMAL scalar-local root returns its private primitive Long
+     * carrier without bytecode materialization. Only the caller completion
+     * of this root may project that carrier into the observable guest domain.
+     * It remains a private carrier for explicitly accepting fused call sites.
+     */
+    @CompilationFinal private boolean directScalarLocalCarrierBody;
+
+    final void recordDirectScalarLocalCarrierBody(boolean proven) {
+        directScalarLocalCarrierBody = proven;
+    }
+
+    final boolean directScalarLocalCarrierBody() {
+        return directScalarLocalCarrierBody;
+    }
+
+    /*
      * PERF032: the body never consults its activation, so a NORMAL-mode host entry may omit the
      * frame header. Not a general source-call ABI contract; the execution mode decides its use.
      */
@@ -6606,16 +6622,18 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                         RootCallTarget cachedTarget,
                 @Cached("create(cachedTarget)")
                         DirectCallNode node) {
-            return ProtosBytecodeRootNode.EnterClosureCall.ordinaryDirect(
-                    prepared, cachedTarget, node);
+            return ProtosNumericValueSupport.guestValue(
+                    ProtosBytecodeRootNode.EnterClosureCall.ordinaryDirect(
+                            prepared, cachedTarget, node));
         }
 
         @Specialization(replaces = "ordinaryDirect")
         public static Object ordinaryIndirect(
                 OrdinarySourceCall prepared,
                 @Cached IndirectCallNode node) {
-            return ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                    prepared, node);
+            return ProtosNumericValueSupport.guestValue(
+                    ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
+                            prepared, node));
         }
     }
 
@@ -6683,7 +6701,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                                     exactCaller);
 
             try {
-                return node.call(frameArguments);
+                return ProtosNumericValueSupport.guestValue(
+                        node.call(frameArguments));
             } catch (ProtosBytecodeControlTransferException bridged) {
                 /*
                  * The admission excludes ownership of a materialized
@@ -6775,7 +6794,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     public static final class TryPrimitiveNumericSendOne {
         private static final Object MISS = new Object();
 
-        public record FoldedIntegerAddition(
+        public record FoldedIntegerArithmetic(
+                ProtosStandardIntegerProtocol.CanonicalIntegerOperation operation,
                 long left, long right, long result) {}
 
         @Specialization(
@@ -6817,9 +6837,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
              * guards have already admitted this specialization. Check the
              * actual operands as well: guest locals are mutable.
              */
-            if (cachedInteger.operation()
-                            == ProtosStandardIntegerProtocol.CanonicalIntegerOperation.ADD
-                    && foldedIntegerAddition instanceof FoldedIntegerAddition fold
+            if (foldedIntegerAddition instanceof FoldedIntegerArithmetic fold
+                    && cachedInteger.operation() == fold.operation()
                     && left == fold.left()
                     && right == fold.right()
                     && staticFoldResult instanceof Long constant
@@ -7360,7 +7379,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                                     exactCaller);
 
             try {
-                return node.call(frameArguments);
+                return ProtosNumericValueSupport.guestValue(
+                        node.call(frameArguments));
             } catch (ProtosBytecodeControlTransferException bridged) {
                 throw bridged.transfer();
             }
@@ -7434,7 +7454,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                                     exactCaller);
 
             try {
-                return node.call(frameArguments);
+                return ProtosNumericValueSupport.guestValue(
+                        node.call(frameArguments));
             } catch (ProtosBytecodeControlTransferException bridged) {
                 throw bridged.transfer();
             }
@@ -7635,7 +7656,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                                     supplied0);
 
             try {
-                return node.call(frameArguments);
+                return ProtosNumericValueSupport.guestValue(
+                        node.call(frameArguments));
             } catch (ProtosBytecodeControlTransferException bridged) {
                 throw bridged.transfer();
             }
@@ -7698,7 +7720,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                                     supplied0);
 
             try {
-                return node.call(frameArguments);
+                return ProtosNumericValueSupport.guestValue(
+                        node.call(frameArguments));
             } catch (ProtosBytecodeControlTransferException bridged) {
                 throw bridged.transfer();
             }

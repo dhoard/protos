@@ -2831,6 +2831,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * source entry. Arity rejection and unknown targets
          * retain the general continuation protocol.
          */
+
+
+        /** PERF038-H: capability of the selected source entry. */
         boolean provablyNonSuspending() {
             return bodyTarget.getRootNode()
                     instanceof ProtosSemanticBytecodeRootNode root
@@ -2851,6 +2854,25 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Override
         public Object[] targetArguments() { return targetArguments; }
+
+        /*
+         * I101-B: a minimal source root may return a primitive carrier.
+         * Do not expose it through an ordinary guest call. Fused callers
+         * that explicitly accept primitive results retain that fast path.
+         */
+        @Override
+        public Object finish(Object result) {
+            // I101-B: project only this NORMAL local-root carrier at a guest boundary.
+            if (bodyTarget.getRootNode() instanceof ProtosSemanticBytecodeRootNode root
+                    && root.directScalarLocalCarrierBody()
+                    && !ProtosFrameArguments.acceptsPrimitiveResult(targetArguments)) {
+                result = ProtosNumericValueSupport.guestValue(result);
+            }
+            return super.finish(
+                    ProtosFrameArguments.acceptsPrimitiveResult(targetArguments)
+                            ? result
+                            : ProtosNumericValueSupport.guestValue(result));
+        }
 
         @Override
         public ProtosTask taskForRuntime() {

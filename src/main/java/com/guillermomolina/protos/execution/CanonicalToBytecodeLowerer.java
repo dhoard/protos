@@ -270,9 +270,14 @@ final class CanonicalToBytecodeLowerer {
     private java.util.Set<String> currentRootScalarLocals =
             java.util.Set.of();
 
+    private java.util.Map<CanonicalSend,
+            ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+                    .FoldedIntegerArithmetic> currentRootArithmeticHints =
+            java.util.Map.of();
+
     private CanonicalSend currentRootTerminalIntegerSend;
     private ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
-            .FoldedIntegerAddition currentRootTerminalIntegerAddition;
+            .FoldedIntegerArithmetic currentRootTerminalIntegerAddition;
 
     /*
      * I096-B1 (PLAT057-B) per-root lowering state, recomputed from the
@@ -765,6 +770,7 @@ final class CanonicalToBytecodeLowerer {
         ProtosFrameLexicalLayout savedFrameNativeLayout = currentRootFrameNativeLayout;
         ProtosFrameLexicalLayout savedIndexedParameterLayout = currentRootIndexedParameterLayout;
         java.util.Set<String> savedScalarLocals = currentRootScalarLocals;
+        var savedArithmeticHints = currentRootArithmeticHints;
         CanonicalSend savedTerminalIntegerSend = currentRootTerminalIntegerSend;
         var savedTerminalIntegerAddition = currentRootTerminalIntegerAddition;
         java.util.Map<CanonicalCall, CanonicalClosure> savedBindingCallCandidates =
@@ -799,6 +805,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameNativeLayout = null;
             currentRootIndexedParameterLayout = null;
             currentRootScalarLocals = java.util.Set.of();
+            currentRootArithmeticHints = java.util.Map.of();
             currentRootTerminalIntegerSend = null;
             currentRootTerminalIntegerAddition = null;
             return emitRootBody(
@@ -820,6 +827,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameNativeLayout = savedFrameNativeLayout;
             currentRootIndexedParameterLayout = savedIndexedParameterLayout;
             currentRootScalarLocals = savedScalarLocals;
+            currentRootArithmeticHints = savedArithmeticHints;
             currentRootTerminalIntegerSend = savedTerminalIntegerSend;
             currentRootTerminalIntegerAddition = savedTerminalIntegerAddition;
             currentRootBindingCallCandidates = savedBindingCallCandidates;
@@ -1073,6 +1081,21 @@ final class CanonicalToBytecodeLowerer {
                                 currentRootAnalysis,
                                 scopeForThisRoot);
 
+        /*
+         * I101-B: the NORMAL profile can encode a closed, proven sequence of
+         * primitive-valued creations and established local reads directly in
+         * Bytecode DSL locals. Neither the source body nor any admitted
+         * operation can observe/capture the activation or affect the local
+         * namespace. Caller-side completion owns the primitive carrier's
+         * transition to a guest value, rather than this bytecode root.
+         */
+        boolean directScalarLocalBody =
+                admitsNormalDirectScalarLocalBody(
+                        sequence, activationDefinition, scopeForThisRoot);
+
+        currentRootArithmeticHints =
+                arithmeticHintsForRoot(sequence, scopeForThisRoot);
+
         if (!sequence.expressions().isEmpty()) {
             CanonicalExpression terminal =
                     sequence.expressions().get(sequence.expressions().size() - 1);
@@ -1120,154 +1143,199 @@ final class CanonicalToBytecodeLowerer {
                                 sequence.expressions().get(
                                         sequence.expressions().size() - 1));
 
-        if (sequence.expressions().isEmpty()) {
-            builder.beginReturn();
-            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
-            builder.endReturn();
+        boolean emittedMinimalIntegerBody = false;
+        if (directScalarLocalBody) {
+            emitNormalDirectScalarLocalBody(builder, sequence);
         } else {
-            java.util.List<CanonicalExpression> expressions =
-                    sequence.expressions();
-            CanonicalExpression lastStatement =
-                    expressions.get(expressions.size() - 1);
-            CanonicalExpression last =
-                    foldedTerminal == null ? lastStatement : foldedTerminal;
 
-            boolean scalarTerminal =
-                    last instanceof CanonicalLookup lookup
-                            && isScalarLocalRead(lookup);
-            boolean directTerminal =
-                    !requiresComposedInvocation(last)
-                            && isDirectTerminalValue(last);
-
-            boolean closureTerminal =
-                    last instanceof CanonicalClosure;
-
-            if (scalarTerminal || directTerminal || closureTerminal) {
-                /*
-                 * PERF037-E: previous statements retain their established
-                 * lowering. Only the terminal value bypasses sequenceResult.
-                 * A single direct expression requires no result local.
-                 */
-                if (expressions.size() > 1) {
-                    java.util.List<CanonicalExpression> prefix =
-                            expressions.subList(0, expressions.size() - 1);
-
-                    emitDiscardedPrefix(builder, prefix);
+            /*
+             * I101-B: a parameterless Closure with a single proven Integer
+             * result needs only a constant load and a return in NORMAL.
+             *
+             * The effective literal may be the original statement or the
+             * already-proven I101-A Boolean-control fold. Source metadata,
+             * arity rejection, group topology and capability proofs stay
+             * owned by the surrounding root lowering.
+             *
+             * Guest numeric materialization belongs to the call boundary.
+             */
+            CanonicalExpression minimalTerminal =
+                    sequence.expressions().size() == 1
+                            ? (foldedTerminal != null
+                                    ? foldedTerminal
+                                    : sequence.expressions().get(0))
+                            : null;
+            Object minimalIntegerCarrier = null;
+            if (profile == ProtosExecutionMode.NORMAL
+                    && activationDefinition != null
+                    && activationDefinition.parameters().isEmpty()
+                    && scopeForThisRoot.declaredNames().isEmpty()) {
+                if (minimalTerminal instanceof CanonicalLiteral literal) {
+                    minimalIntegerCarrier = primitiveNumberLiteralOrNull(literal);
+                } else if (minimalTerminal instanceof CanonicalSend send) {
+                    // Exact signed-64 constant arithmetic has the same
+                    // physical Builder representation as its literal result.
+                    // There is no guest dispatch or fallback for this case.
+                    minimalIntegerCarrier =
+                            candidateSmallIntegerForFold(
+                                    send, java.util.Map.of());
                 }
-
-                /*
-                 * A nested Closure root must be registered in the shared
-                 * BytecodeRootNodes group before the Return operation opens.
-                 * The Closure value itself is still created at runtime.
-                 */
-                beginStatement(builder, lastStatement);
-                ProtosClosureExecutionPlanCell terminalClosurePlan =
-                        closureTerminal
-                                ? bytecodeClosurePlan(
-                                        builder, (CanonicalClosure) last)
-                                : null;
-                if (scalarTerminal) {
-                    // Preserve the PERF034-E compact/D179-aware selection.
-                    emitScalarLocalRead(
-                            builder, (CanonicalLookup) last, null);
-                } else if (closureTerminal) {
-                    builder.beginReturn();
-                    beginClosureCapture(builder);
-                    builder.emitLoadConstant((CanonicalClosure) last);
-                    builder.emitLoadConstant(terminalClosurePlan);
-                    endClosureCapture(builder);
-                    builder.endReturn();
-                } else if (last instanceof CanonicalLiteral literal
-                        && primitiveNumberLiteralOrNull(literal) != null) {
-                    // I091: retain Long and Double literal carriers until the
-                    // caller requires an observable guest numeric value.
-                    builder.beginReturn();
-                    builder.beginMaterializeReturnCarrier();
-                    builder.emitLoadConstant(primitiveNumberLiteralOrNull(literal));
-                    builder.endMaterializeReturnCarrier();
-                    builder.endReturn();
-                } else if (last instanceof CanonicalLookup terminalRead) {
-                    // I091: a retained carrier may return to an accepting caller.
-                    builder.beginReturn();
-                    builder.beginMaterializeReturnCarrier();
-                    emitLookup(builder, terminalRead, true);
-                    builder.endMaterializeReturnCarrier();
-                    builder.endReturn();
-                } else {
-                    builder.beginReturn();
-                    emitExpression(builder, last);
-                    builder.endReturn();
-                }
-                endStatement(builder);
-            } else {
-                /*
-                 * PERF037-E: even when the final expression requires
-                 * composed lowering, earlier Sequence values are not
-                 * observable. Evaluate them in order and discard their
-                 * results; only the final value needs result storage.
-                 */
-                ComposedSequenceScratch sharedScratch =
-                        createComposedSequenceScratch(builder, expressions);
-
-                emitDiscardedPrefix(
-                        builder,
-                        expressions.subList(0, expressions.size() - 1),
-                        sharedScratch);
-
-                BytecodeLocal result =
-                        builder.createLocal("sequenceResult", null);
-
-                beginStatement(builder, last);
-
-                boolean carrierTerminal =
-                        sharedScratch != null
-                                && ((last instanceof CanonicalSend terminalSend
-                                                && primitiveResultSend(terminalSend))
-                                        || (last instanceof CanonicalCall terminalCall
-                                                && primitiveResultCall(terminalCall)));
-                if (carrierTerminal) {
-                    // I091: the final numeric result may return as a carrier.
-                    emitPrimitiveNumericOperandToLocal(
-                            builder,
-                            last,
-                            result,
-                            sharedScratch.preparedCall(),
-                            sharedScratch.childResult(),
-                            sharedScratch.resumeValue());
-                } else if (requiresComposedInvocation(last)) {
-                    emitBodyExpressionToLocal(
-                            builder,
-                            last,
-                            result,
-                            sharedScratch == null
-                                    ? null : sharedScratch.preparedCall(),
-                            sharedScratch == null
-                                    ? null : sharedScratch.childResult(),
-                            sharedScratch == null
-                                    ? null : sharedScratch.resumeValue());
-                } else if (last instanceof CanonicalLookup lookup
-                        && isScalarLocalRead(lookup)) {
-                    emitScalarLocalReadToResult(builder, lookup, result);
-                } else {
-                    builder.beginStoreLocal(result);
-                    emitExpression(builder, last);
-                    builder.endStoreLocal();
-                }
-
-                endStatement(builder);
-
-                builder.beginReturn();
-                if (carrierTerminal) {
-                    builder.beginMaterializeReturnCarrier();
-                    builder.emitLoadLocal(result);
-                    builder.endMaterializeReturnCarrier();
-                } else {
-                    builder.emitLoadLocal(result);
-                }
-                builder.endReturn();
             }
-        }
 
+            if (minimalIntegerCarrier instanceof Long integer) {
+                emittedMinimalIntegerBody = true;
+                builder.beginReturn();
+                builder.emitLoadConstant(integer);
+                builder.endReturn();
+            } else if (sequence.expressions().isEmpty()) {
+                builder.beginReturn();
+                builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                builder.endReturn();
+            } else {
+                java.util.List<CanonicalExpression> expressions =
+                        sequence.expressions();
+                CanonicalExpression lastStatement =
+                        expressions.get(expressions.size() - 1);
+                CanonicalExpression last =
+                        foldedTerminal == null ? lastStatement : foldedTerminal;
+
+                boolean scalarTerminal =
+                        last instanceof CanonicalLookup lookup
+                                && isScalarLocalRead(lookup);
+                boolean directTerminal =
+                        !requiresComposedInvocation(last)
+                                && isDirectTerminalValue(last);
+
+                boolean closureTerminal =
+                        last instanceof CanonicalClosure;
+
+                if (scalarTerminal || directTerminal || closureTerminal) {
+                    /*
+                     * PERF037-E: previous statements retain their established
+                     * lowering. Only the terminal value bypasses sequenceResult.
+                     * A single direct expression requires no result local.
+                     */
+                    if (expressions.size() > 1) {
+                        java.util.List<CanonicalExpression> prefix =
+                                expressions.subList(0, expressions.size() - 1);
+
+                        emitDiscardedPrefix(builder, prefix);
+                    }
+
+                    /*
+                     * A nested Closure root must be registered in the shared
+                     * BytecodeRootNodes group before the Return operation opens.
+                     * The Closure value itself is still created at runtime.
+                     */
+                    beginStatement(builder, lastStatement);
+                    ProtosClosureExecutionPlanCell terminalClosurePlan =
+                            closureTerminal
+                                    ? bytecodeClosurePlan(
+                                            builder, (CanonicalClosure) last)
+                                    : null;
+                    if (scalarTerminal) {
+                        // Preserve the PERF034-E compact/D179-aware selection.
+                        emitScalarLocalRead(
+                                builder, (CanonicalLookup) last, null);
+                    } else if (closureTerminal) {
+                        builder.beginReturn();
+                        beginClosureCapture(builder);
+                        builder.emitLoadConstant((CanonicalClosure) last);
+                        builder.emitLoadConstant(terminalClosurePlan);
+                        endClosureCapture(builder);
+                        builder.endReturn();
+                    } else if (last instanceof CanonicalLiteral literal
+                            && primitiveNumberLiteralOrNull(literal) != null) {
+                        // I091: retain Long and Double literal carriers until the
+                        // caller requires an observable guest numeric value.
+                        builder.beginReturn();
+                        builder.beginMaterializeReturnCarrier();
+                        builder.emitLoadConstant(primitiveNumberLiteralOrNull(literal));
+                        builder.endMaterializeReturnCarrier();
+                        builder.endReturn();
+                    } else if (last instanceof CanonicalLookup terminalRead) {
+                        // I091: a retained carrier may return to an accepting caller.
+                        builder.beginReturn();
+                        builder.beginMaterializeReturnCarrier();
+                        emitLookup(builder, terminalRead, true);
+                        builder.endMaterializeReturnCarrier();
+                        builder.endReturn();
+                    } else {
+                        builder.beginReturn();
+                        emitExpression(builder, last);
+                        builder.endReturn();
+                    }
+                    endStatement(builder);
+                } else {
+                    /*
+                     * PERF037-E: even when the final expression requires
+                     * composed lowering, earlier Sequence values are not
+                     * observable. Evaluate them in order and discard their
+                     * results; only the final value needs result storage.
+                     */
+                    ComposedSequenceScratch sharedScratch =
+                            createComposedSequenceScratch(builder, expressions);
+
+                    emitDiscardedPrefix(
+                            builder,
+                            expressions.subList(0, expressions.size() - 1),
+                            sharedScratch);
+
+                    BytecodeLocal result =
+                            builder.createLocal("sequenceResult", null);
+
+                    beginStatement(builder, last);
+
+                    boolean carrierTerminal =
+                            sharedScratch != null
+                                    && ((last instanceof CanonicalSend terminalSend
+                                                    && primitiveResultSend(terminalSend))
+                                            || (last instanceof CanonicalCall terminalCall
+                                                    && primitiveResultCall(terminalCall)));
+                    if (carrierTerminal) {
+                        // I091: the final numeric result may return as a carrier.
+                        emitPrimitiveNumericOperandToLocal(
+                                builder,
+                                last,
+                                result,
+                                sharedScratch.preparedCall(),
+                                sharedScratch.childResult(),
+                                sharedScratch.resumeValue());
+                    } else if (requiresComposedInvocation(last)) {
+                        emitBodyExpressionToLocal(
+                                builder,
+                                last,
+                                result,
+                                sharedScratch == null
+                                        ? null : sharedScratch.preparedCall(),
+                                sharedScratch == null
+                                        ? null : sharedScratch.childResult(),
+                                sharedScratch == null
+                                        ? null : sharedScratch.resumeValue());
+                    } else if (last instanceof CanonicalLookup lookup
+                            && isScalarLocalRead(lookup)) {
+                        emitScalarLocalReadToResult(builder, lookup, result);
+                    } else {
+                        builder.beginStoreLocal(result);
+                        emitExpression(builder, last);
+                        builder.endStoreLocal();
+                    }
+
+                    endStatement(builder);
+
+                    builder.beginReturn();
+                    if (carrierTerminal) {
+                        builder.beginMaterializeReturnCarrier();
+                        builder.emitLoadLocal(result);
+                        builder.endMaterializeReturnCarrier();
+                    } else {
+                        builder.emitLoadLocal(result);
+                    }
+                    builder.endReturn();
+                }
+            }
+
+        }
         ProtosSemanticBytecodeRootNode result = builder.endRoot();
         builder.endSourceSection();
         /*
@@ -1281,20 +1349,25 @@ final class CanonicalToBytecodeLowerer {
          */
         java.util.List<CanonicalExpression> effectiveBody =
                 effectiveBody(sequence, foldedTerminal);
+        // I101-B: capability follows the emitted root, not a folded-away send.
         result.recordProvablyNonSuspendingBody(
-                provesNonSuspendingBody(
-                        activationDefinition, currentRootAnalysis, effectiveBody));
+                directScalarLocalBody
+                        || emittedMinimalIntegerBody
+                        || provesNonSuspendingBody(
+                                activationDefinition, currentRootAnalysis, effectiveBody));
+        result.recordDirectScalarLocalCarrierBody(directScalarLocalBody);
         // PERF032: prove the exact parameterless literal-one body eligible for
         // the NORMAL-mode headerless entry. Never infer this capability merely
         // from non-suspension.
         result.recordHeaderlessEntryBody(
-                activationDefinition != null
+                directScalarLocalBody
+                        || (activationDefinition != null
                         && activationDefinition.parameters().isEmpty()
                         && effectiveBody.size() == 1
                         && effectiveBody.get(0)
                                 instanceof CanonicalLiteral literal
                         && literal.kind() == CanonicalLiteral.Kind.NUMBER
-                        && "1".equals(literal.value()));
+                        && "1".equals(literal.value())));
         /*
          * A reparse replays the group onto the same root identities, whose
          * rejection targets are attached by the create() that first built
@@ -1323,6 +1396,130 @@ final class CanonicalToBytecodeLowerer {
                     currentRootFrameNativeLayout);
         }
         return result;
+    }
+
+    /**
+     * I101-B: a parameterless NORMAL Closure whose bindings are created in
+     * one straight-line sequence from signed-64 constants and known additions.
+     * All local reads are identity-resolved to prior creations of this root.
+     * An unrecognized expression, overflow, or exposed activation fails closed.
+     * The addition rule is the existing PERF043 exact literal-addition fold,
+     * propagated through proven local bindings; it introduces no new selector.
+     */
+    private boolean admitsNormalDirectScalarLocalBody(
+            CanonicalSequence sequence,
+            CanonicalClosure definition,
+            CanonicalLexicalScope scope) {
+        if (profile != ProtosExecutionMode.NORMAL
+                || definition == null
+                || !definition.parameters().isEmpty()
+                || currentRootAnalysis == null
+                || scope == null
+                || currentRootFrameNativeLayout == null
+                || sequence.expressions().isEmpty()) {
+            return false;
+        }
+        java.util.Map<String, Long> known = new java.util.HashMap<>();
+        for (CanonicalExpression expression : sequence.expressions()) {
+            if (expression instanceof CanonicalCreate creation) {
+                if (creation.target().isPresent()
+                        || !currentRootFrameLocals.containsKey(creation.name())
+                        || known.containsKey(creation.name())
+                        || currentRootAnalysis.identityOf(creation)
+                                .map(identity -> identity.owner() != scope
+                                        || !identity.name().equals(creation.name()))
+                                .orElse(true)) {
+                    return false;
+                }
+                Long value = knownDirectScalarInteger(creation.value(), known, scope);
+                if (value == null) {
+                    return false;
+                }
+                known.put(creation.name(), value);
+            } else if (expression instanceof CanonicalLookup lookup) {
+                if (knownDirectScalarInteger(lookup, known, scope) == null) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        return known.keySet().equals(scope.declaredNames());
+    }
+
+    /** Return a statically known Integer only for proven, effect-free operands. */
+    private Long knownDirectScalarInteger(
+            CanonicalExpression expression,
+            java.util.Map<String, Long> known,
+            CanonicalLexicalScope scope) {
+        if (expression instanceof CanonicalLiteral literal) {
+            if (literal.kind() != CanonicalLiteral.Kind.NUMBER) {
+                return null;
+            }
+            Object number = numberLiteralDescriptor(literal);
+            return number instanceof Long integer ? integer : null;
+        }
+        if (expression instanceof CanonicalLookup lookup) {
+            if (!known.containsKey(lookup.name())
+                    || currentRootAnalysis.resolutionOf(lookup)
+                            .map(resolution -> !(resolution instanceof
+                                    CanonicalBindingResolution.Resolved resolved)
+                                    || resolved.identity().owner() != scope
+                                    || !resolved.identity().name().equals(lookup.name()))
+                            .orElse(true)) {
+                return null;
+            }
+            return known.get(lookup.name());
+        }
+        if (expression instanceof CanonicalSend send) {
+            // Evaluate only a proven signed-64 arithmetic candidate.
+            // Never emit this send: the Builder receives its constant.
+            return candidateSmallIntegerForFold(send, known);
+        }
+        return null;
+    }
+
+    /**
+     * Direct Bytecode DSL for proven scalar creations and terminal lookup.
+     * Sources remain attached to the original statement spans. No message
+     * dispatch, materialization or temporary result locals are introduced.
+     */
+    private void emitNormalDirectScalarLocalBody(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalSequence sequence) {
+        java.util.Map<String, Long> known = new java.util.HashMap<>();
+        java.util.List<CanonicalExpression> expressions = sequence.expressions();
+        for (int index = 0; index < expressions.size(); index++) {
+            CanonicalExpression expression = expressions.get(index);
+            SourceSpan span = expression.span();
+            builder.beginSourceSection(span.startOffset(), span.length());
+            if (expression instanceof CanonicalCreate creation) {
+                Long value = knownDirectScalarInteger(
+                        creation.value(), known, currentRootTopScope);
+                if (value == null) {
+                    throw new AssertionError("I101-B missing scalar initializer proof");
+                }
+                builder.beginStoreLocal(currentRootFrameLocals.get(creation.name()));
+                if (creation.value() instanceof CanonicalLookup lookup) {
+                    // Preserve the lexical load; Graal performs propagation.
+                    builder.emitLoadLocal(
+                            currentRootFrameLocals.get(lookup.name()));
+                } else {
+                    // Only literals and arithmetic sends are folded here.
+                    builder.emitLoadConstant(value);
+                }
+                builder.endStoreLocal();
+                known.put(creation.name(), value);
+            }
+            if (index == expressions.size() - 1) {
+                String name = expression instanceof CanonicalCreate creation
+                        ? creation.name() : ((CanonicalLookup) expression).name();
+                builder.beginReturn();
+                builder.emitLoadLocal(currentRootFrameLocals.get(name));
+                builder.endReturn();
+            }
+            builder.endSourceSection();
+        }
     }
 
     /**
@@ -1567,7 +1764,8 @@ final class CanonicalToBytecodeLowerer {
              */
             if (index == expressions.size() - 1
                     && expression instanceof CanonicalSend send
-                    && "+".equals(send.message())
+                    && java.util.Set.of("+", "-", "*", "/")
+                            .contains(send.message())
                     && send.arguments().size() == 1
                     && scalarTerminalOperand(
                             send.receiver(), analysis, scope, established)
@@ -1646,7 +1844,7 @@ final class CanonicalToBytecodeLowerer {
      * runtime selection. They never replace the CanonicalSend itself.
      */
     private ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
-            .FoldedIntegerAddition terminalKnownIntegerAddition(
+            .FoldedIntegerArithmetic terminalKnownIntegerAddition(
                     CanonicalSequence body, CanonicalSend send) {
         java.util.Map<String, Long> known = new java.util.HashMap<>();
 
@@ -1657,7 +1855,7 @@ final class CanonicalToBytecodeLowerer {
 
                 if (expression instanceof CanonicalCreate create
                         && create.target().isEmpty()) {
-                    Long value = knownSmallInteger(create.value(), known);
+                    Long value = candidateSmallIntegerForFold(create.value(), known);
                     if (value == null) {
                         known.remove(create.name());
                     } else {
@@ -1665,7 +1863,7 @@ final class CanonicalToBytecodeLowerer {
                     }
                 } else if (expression instanceof CanonicalAssign assign
                         && assign.target().isEmpty()) {
-                    Long value = knownSmallInteger(assign.value(), known);
+                    Long value = candidateSmallIntegerForFold(assign.value(), known);
                     if (value == null) {
                         known.remove(assign.name());
                     } else {
@@ -1685,60 +1883,177 @@ final class CanonicalToBytecodeLowerer {
             Object value = primitiveNumberLiteralOrNull(literal);
             return value instanceof Long integer ? integer : null;
         }
-        if (expression instanceof CanonicalLookup lookup) {
+        if (expression instanceof CanonicalLookup lookup
+                && currentRootAnalysis != null
+                && currentRootTopScope != null
+                && currentRootAnalysis.resolutionOf(lookup)
+                        .map(resolution ->
+                                resolution instanceof CanonicalBindingResolution.Resolved resolved
+                                        && resolved.identity().owner() == currentRootTopScope
+                                        && resolved.identity().name().equals(lookup.name()))
+                        .orElse(false)) {
             return known.get(lookup.name());
         }
         return null;
     }
 
 
-    /*
-     * A nested addition yields a potential Integer result, not a proven
-     * guest constant. Every send remains executable and independently
-     * guarded by TryPrimitiveNumericSendOne.
+    /**
+     * A recursive candidate is not an executable constant.
+     * Every CanonicalSend remains an ordinary guarded message send.
      */
     private Long candidateSmallIntegerForFold(
             CanonicalExpression expression,
             java.util.Map<String, Long> known) {
-        if (expression instanceof CanonicalSend send
-                && "+".equals(send.message())
-                && send.arguments().size() == 1) {
-            Long left = candidateSmallIntegerForFold(
-                    send.receiver(), known);
-            Long right = candidateSmallIntegerForFold(
-                    send.arguments().get(0), known);
-            if (left == null || right == null) {
-                return null;
-            }
-            try {
-                return Math.addExact(left, right);
-            } catch (ArithmeticException overflow) {
-                return null;
-            }
+        if (expression instanceof CanonicalSend send) {
+            var folded = foldedIntegerAddition(send, known);
+            return folded == null ? null : folded.result();
         }
         return knownSmallInteger(expression, known);
     }
 
     private ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
-            .FoldedIntegerAddition foldedIntegerAddition(
+            .FoldedIntegerArithmetic foldedIntegerAddition(
                     CanonicalSend send, java.util.Map<String, Long> known) {
-        if (!"+".equals(send.message()) || send.arguments().size() != 1) {
+        if (send.arguments().size() != 1) {
+            return null;
+        }
+
+        var operation = switch (send.message()) {
+            case "+" -> ProtosStandardIntegerProtocol
+                    .CanonicalIntegerOperation.ADD;
+            case "-" -> ProtosStandardIntegerProtocol
+                    .CanonicalIntegerOperation.SUBTRACT;
+            case "*" -> ProtosStandardIntegerProtocol
+                    .CanonicalIntegerOperation.MULTIPLY;
+            case "/" -> ProtosStandardIntegerProtocol
+                    .CanonicalIntegerOperation.EXACT_DIVIDE;
+            default -> null;
+        };
+
+        if (operation == null) {
             return null;
         }
 
         Long left = candidateSmallIntegerForFold(send.receiver(), known);
         Long right = candidateSmallIntegerForFold(send.arguments().get(0), known);
+
         if (left == null || right == null) {
             return null;
         }
 
         try {
-            long result = Math.addExact(left, right);
+            long result;
+            switch (operation) {
+                case ADD -> result = Math.addExact(left, right);
+                case SUBTRACT -> result = Math.subtractExact(left, right);
+                case MULTIPLY -> result = Math.multiplyExact(left, right);
+                case EXACT_DIVIDE -> {
+                    if (right == 0L
+                            || (left == Long.MIN_VALUE && right == -1L)
+                            || left % right != 0L) {
+                        return null;
+                    }
+                    result = left / right;
+                }
+                default -> {
+                    return null;
+                }
+            }
+
             return new ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
-                    .FoldedIntegerAddition(left, right, result);
+                    .FoldedIntegerArithmetic(operation, left, right, result);
         } catch (ArithmeticException overflow) {
-            // BigInteger promotion remains with the existing native fallback.
             return null;
+        }
+    }
+
+    /**
+     * GraalJS-style bounded constant candidates, not a guest evaluator.
+     * Every operation still executes via its guarded canonical send.
+     */
+    private java.util.Map<CanonicalSend,
+            ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+                    .FoldedIntegerArithmetic> arithmeticHintsForRoot(
+                    CanonicalSequence body, CanonicalLexicalScope scope) {
+        java.util.Map<CanonicalSend,
+                ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+                        .FoldedIntegerArithmetic> hints =
+                new java.util.IdentityHashMap<>();
+        if (currentRootAnalysis == null || scope == null) {
+            return hints;
+        }
+
+        java.util.Map<String, Long> known = new java.util.HashMap<>();
+        java.util.Set<String> established = new java.util.HashSet<>();
+
+        for (CanonicalExpression expression : body.expressions()) {
+            if (expression instanceof CanonicalCreate create
+                    && create.target().isEmpty()
+                    && currentRootAnalysis.identityOf(create)
+                            .map(identity ->
+                                    identity.owner() == scope
+                                            && identity.name().equals(create.name()))
+                            .orElse(false)
+                    && established.add(create.name())) {
+                collectArithmeticHints(create.value(), known, hints);
+                Long value = candidateSmallIntegerForFold(create.value(), known);
+                if (value == null) {
+                    known.remove(create.name());
+                } else {
+                    known.put(create.name(), value);
+                }
+                continue;
+            }
+
+            if (expression instanceof CanonicalAssign assign
+                    && assign.target().isEmpty()
+                    && established.contains(assign.name())
+                    && currentRootAnalysis.resolutionOf(assign)
+                            .map(resolution ->
+                                    resolution instanceof CanonicalBindingResolution.Resolved resolved
+                                            && resolved.identity().owner() == scope
+                                            && resolved.identity().name().equals(assign.name()))
+                            .orElse(false)) {
+                collectArithmeticHints(assign.value(), known, hints);
+                Long value = candidateSmallIntegerForFold(assign.value(), known);
+                if (value == null) {
+                    known.remove(assign.name());
+                } else {
+                    known.put(assign.name(), value);
+                }
+                continue;
+            }
+
+            if (expression instanceof CanonicalSend send) {
+                collectArithmeticHints(send, known, hints);
+            }
+
+            if (!(expression instanceof CanonicalLookup)) {
+                known.clear();
+            }
+        }
+        return hints;
+    }
+
+    private void collectArithmeticHints(
+            CanonicalExpression expression,
+            java.util.Map<String, Long> known,
+            java.util.Map<CanonicalSend,
+                    ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+                            .FoldedIntegerArithmetic> hints) {
+        if (!(expression instanceof CanonicalSend send)) {
+            return;
+        }
+
+        collectArithmeticHints(send.receiver(), known, hints);
+        for (CanonicalExpression argument : send.arguments()) {
+            collectArithmeticHints(argument, known, hints);
+        }
+
+        var candidate = foldedIntegerAddition(send, known);
+        if (candidate != null) {
+            hints.put(send, candidate);
         }
     }
 
@@ -7609,7 +7924,10 @@ final class CanonicalToBytecodeLowerer {
             return currentRootTerminalIntegerAddition;
         }
 
-        var candidate = foldedIntegerAddition(send, java.util.Map.of());
+        var candidate = currentRootArithmeticHints.get(send);
+        if (candidate == null) {
+            candidate = foldedIntegerAddition(send, java.util.Map.of());
+        }
         return candidate == null ? Boolean.FALSE : candidate;
     }
 
@@ -8412,32 +8730,6 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
-        // PERF043: the full literal expression is a constant before Graal.
-        // Keep the call source tag, including nested folded sends, even when
-        // the arithmetic itself is replaced by one LoadConstant.
-        var literalFold = foldedIntegerAddition(send, java.util.Map.of());
-        if (literalFold != null) {
-            builder.beginTag(StandardTags.CallTag.class);
-            builder.beginBlock();
-            emitFoldedNestedAdditionTags(builder, send.receiver());
-            emitFoldedNestedAdditionTags(builder, send.arguments().get(0));
-            emitStaticIntegerFoldedResult(
-                    builder, result, primitiveCarrierResult, literalFold.result());
-            builder.endBlock();
-            builder.endTag(StandardTags.CallTag.class);
-            return;
-        }
-
-        // PERF043: terminal scalar-local values are known by lexical identity,
-        // assignment tracking and the effect-free straight-line admission.
-        // A tooling observer may, however, materialize and mutate their
-        // Context at a CallTag. Fold only while the compact frame is intact;
-        // the original send stays in the other branch.
-        var scalarFold = currentRootTerminalIntegerSend == send
-                        && !currentRootScalarLocals.isEmpty()
-                ? currentRootTerminalIntegerAddition
-                : null;
-
         CanonicalExpression receiver = send.receiver();
         boolean tryPrimitiveNumericSend = primitiveNumericSendCandidate(send);
         boolean stageReceiver = requiresComposedInvocation(receiver);
@@ -8502,16 +8794,6 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
-        if (scalarFold != null) {
-            builder.beginIfThenElse();
-            builder.emitIsCompactLocalFrame();
-            builder.beginBlock();
-            emitStaticIntegerFoldedResult(
-                    builder, result, primitiveCarrierResult, scalarFold.result());
-            builder.endBlock();
-            builder.beginBlock();
-        }
-
         if (stageInputs) {
             receiverValue =
                     builder.createLocal(
@@ -8597,7 +8879,7 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(fold);
             builder.emitLoadConstant(
                     fold instanceof ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
-                                    .FoldedIntegerAddition known
+                                    .FoldedIntegerArithmetic known
                             ? known.result()
                             : Boolean.FALSE);
             builder.endTryPrimitiveNumericSendOne();
@@ -8888,63 +9170,8 @@ final class CanonicalToBytecodeLowerer {
             builder.endIfThenElse();
         }
 
-        if (scalarFold != null) {
-            builder.endBlock();
-            builder.endIfThenElse();
-        }
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
-    }
-
-    /**
-     * PERF043: materialize exactly the folded semantic Integer when a guest
-     * value is required, or preserve its private long carrier otherwise.
-     */
-    private static void emitStaticIntegerFoldedResult(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal result,
-            boolean primitiveCarrierResult,
-            long value) {
-        builder.beginStoreLocal(result);
-        if (!primitiveCarrierResult) {
-            builder.beginMaterializePrimitiveNumericCarrier();
-        }
-        builder.emitLoadConstant(value);
-        if (!primitiveCarrierResult) {
-            builder.emitLoadConstant(true);
-            builder.endMaterializePrimitiveNumericCarrier();
-        }
-        builder.endStoreLocal();
-    }
-
-    /**
-     * Keep each nested literal Integer '+' as a source-visible CallTag.
-     * Emission is inert and uses only its proven constant; no send is made.
-     * A local store supplies a real bytecode instruction to the tag region.
-     */
-    private void emitFoldedNestedAdditionTags(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
-            CanonicalExpression expression) {
-        if (!(expression instanceof CanonicalSend nested)) {
-            return;
-        }
-        var known = foldedIntegerAddition(nested, java.util.Map.of());
-        if (known == null) {
-            return;
-        }
-        SourceSpan span = nested.span();
-        builder.beginSourceSection(span.startOffset(), span.length());
-        builder.beginTag(StandardTags.CallTag.class);
-        builder.beginBlock();
-        emitFoldedNestedAdditionTags(builder, nested.receiver());
-        emitFoldedNestedAdditionTags(builder, nested.arguments().get(0));
-        BytecodeLocal inertValue = builder.createLocal("foldedIntegerCallTag", null);
-        builder.beginStoreLocal(inertValue);
-        builder.emitLoadConstant(known.result());
-        builder.endStoreLocal();
-        builder.endBlock();
-        builder.endTag(StandardTags.CallTag.class);
-        builder.endSourceSection();
     }
 
     /**

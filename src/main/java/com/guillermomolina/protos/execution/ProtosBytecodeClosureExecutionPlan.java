@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
@@ -335,10 +336,11 @@ final class ProtosBytecodeClosureExecutionPlan {
     Object executeActivation(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");
         try {
-            return ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
-                            activationTarget,
-                            activation.suppliedArgumentCountForRuntime())
-                    .call(activation);
+            return ProtosNumericValueSupport.guestValue(
+                    ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
+                                    activationTarget,
+                                    activation.suppliedArgumentCountForRuntime())
+                            .call(activation));
         } catch (ProtosBytecodeControlTransferException bridged) {
             throw bridged.transfer();
         }

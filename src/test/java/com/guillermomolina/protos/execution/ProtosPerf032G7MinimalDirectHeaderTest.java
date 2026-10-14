@@ -461,17 +461,31 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
         withCore(module -> {
             ProtosClosureValue withSend =
                     parsedClosure(
-                            "() => { 1 + 2 }",
+                            "(x) => { x + 2 }",
                             "perf038h-dynamic-body.protos",
                             module);
 
             ProtosBytecodeRootNode.OrdinarySourceCall dynamic =
                     assertInstanceOf(
                             ProtosBytecodeRootNode.OrdinarySourceCall.class,
-                            fastDirect(withSend, module));
+                            fastDirect(withSend, module, integer(1)));
 
             assertFalse(dynamic.provablyNonSuspending());
             assertEquals("3", integerValue(enter(dynamic)));
+
+            ProtosClosureValue folded =
+                    parsedClosure(
+                            "() => { 1 + 2 }",
+                            "perf038h-folded-body.protos",
+                            module);
+            ProtosBytecodeRootNode.OrdinarySourceCall foldedCall =
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                            fastDirect(folded, module));
+            assertTrue(
+                    foldedCall.provablyNonSuspending(),
+                    "Constant-folded arithmetic admits the static proof");
+            assertEquals("3", integerValue(enter(foldedCall)));
 
             ProtosClosureValue withParameter =
                     parsedClosure(
@@ -585,7 +599,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
         withCore(module -> {
             ProtosClosureValue dynamic =
                     parsedClosure(
-                            "() => { 1 + 2 }",
+                            "(x) => { x + 2 }",
                             "perf038h-straight-line-dynamic.protos",
                             module);
 
@@ -594,7 +608,20 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             .AdmitsStraightLineSourceCall.perform(
                                     assertInstanceOf(
         ProtosBytecodeRootNode.OrdinarySourceCall.class,
-        fastDirect(dynamic, module))));
+        fastDirect(dynamic, module, integer(1)))));
+
+            ProtosClosureValue folded =
+                    parsedClosure(
+                            "() => { 1 + 2 }",
+                            "perf038h-straight-line-folded.protos",
+                            module);
+            assertTrue(
+                    ProtosSemanticBytecodeRootNode
+                            .AdmitsStraightLineSourceCall.perform(
+                                    assertInstanceOf(
+                                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                                            fastDirect(folded, module))),
+                    "Constant-folded arithmetic admits straight-line execution");
 
             ProtosClosureValue returning =
                     parsedClosure(

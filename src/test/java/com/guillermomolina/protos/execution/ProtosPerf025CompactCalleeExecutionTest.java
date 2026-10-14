@@ -143,8 +143,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     closure("() => { value: 1\nvalue }", module);
 
             List<String> instructions = instructionNames(run);
-            assertContains(instructions, "CreateCurrentFrameLocal");
-            assertContains(instructions, "ReadRootFrameLocal");
+            assertEquals(
+                    List.of("load.constant", "store.local", "load.local", "return"),
+                    instructions,
+                    "NORMAL must emit only the proven local Builder");
             assertNone(instructions, "CurrentActivation");
             assertNone(instructions, "InstallFrameLexicalAuthority");
 
@@ -163,7 +165,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     ProtosFrameArguments.compactImmediateMethodCall(
                             run, newObject(), newObject(), module,
                             new Object[0]);
-            assertEquals("1", integerValue(target(run).call(method)));
+            // A raw CallTarget exposes the private carrier. Guest calls
+            // project it through PreparedClosureCall.finish().
+            assertEquals(Long.valueOf(1L), target(run).call(method));
             assertSame(
                     run,
                     method[0],
@@ -192,7 +196,13 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     closure("() => { first: 7\nsecond: 9\nfirst }", module);
 
             List<String> instructions = instructionNames(scalar);
-            assertContains(instructions, "IsCompactLocalFrame");
+            assertEquals(
+                    List.of(
+                            "load.constant", "store.local",
+                            "load.constant", "store.local",
+                            "load.local", "return"),
+                    instructions,
+                    "NORMAL emits the minimal two-binding Builder");
             assertNone(instructions, "CurrentActivation");
             assertNone(instructions, "InstallFrameLexicalAuthority");
 
@@ -218,7 +228,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
     @Test
     void perf034ScalarLaneFollowsPublishedActivation() throws Exception {
-        withCore(module -> {
+        withCoreDebug(module -> {
             ProtosClosureValue scalar =
                     closure("() => { value: 1\nvalue }", module);
             assertContains(instructionNames(scalar), "IsCompactLocalFrame");
@@ -260,6 +270,35 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         });
     }
 
+    @Test
+    void i101ExplicitContextObservationRetainsRealBindingsInNormal()
+            throws Exception {
+        withCore(module -> {
+            ProtosClosureValue observedClosure = closure(
+                    "() => { value: 1\ncontext\nvalue }", module);
+            assertContains(
+                    instructionNames(observedClosure),
+                    "InstallFrameLexicalAuthority");
+
+            Object[] arguments =
+                    ProtosFrameArguments.compactDirectClosureCall(
+                            observedClosure, module, null, new Object[0]);
+            ProtosActivation activation =
+                    ProtosFrameArguments.activation(arguments);
+            ProtosObjectValue observed = activation.context();
+
+            assertEquals(
+                    "1",
+                    integerValue(target(observedClosure).call(arguments)));
+            assertSame(activation, arguments[0]);
+            assertSame(observed, activation.context());
+            assertEquals(
+                    "1",
+                    integerValue(
+                            observed.readLocalSlot("value").orElseThrow()));
+        });
+    }
+
     /** A PERF034-E scalar body, its result, and its creation/read counts. */
     private record ScalarBody(
             String characters, long expected, List<String> created, int reads,
@@ -287,20 +326,25 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 List<String> instructions = instructionNames(scalar);
                 assertNone(instructions, "CurrentActivation");
                 assertNone(instructions, "InstallFrameLexicalAuthority");
-                // Every creation and every read (including the RHS of an
-                // alias and the final returned read) owns its own compact
-                // check and its own D179-aware authoritative fallback.
-                assertEquals(
-                        body.created().size() + body.reads(),
-                        countOf(instructions, "IsCompactLocalFrame"),
-                        () -> body.characters() + ": " + instructions);
+                // NORMAL has no materialization or dispatch branches.
+                // Alias RHS loads remain explicit for Graal to optimize.
+                assertNone(instructions, "IsCompactLocalFrame");
+                assertNone(instructions, "CreateCurrentFrameLocal");
+                assertNone(instructions, "ReadRootFrameLocal");
+                assertNone(instructions, "MaterializeReturnCarrier");
                 assertEquals(
                         body.created().size(),
-                        countOf(instructions, "CreateCurrentFrameLocal"),
-                        () -> body.characters() + ": " + instructions);
+                        countOf(instructions, "store.local"));
                 assertEquals(
-                        body.reads(),
-                        countOf(instructions, "ReadRootFrameLocal"),
+                        body.literalOnly() ? body.created().size() : 1,
+                        countOf(instructions, "load.constant"));
+                assertEquals(
+                        body.literalOnly() ? 1 : body.created().size(),
+                        countOf(instructions, "load.local"));
+                assertEquals(1, countOf(instructions, "return"));
+                assertEquals(
+                        body.created().size() * 2 + 2,
+                        instructions.size(),
                         () -> body.characters() + ": " + instructions);
                 List<Object> locals = localNames(scalar);
                 if (body.literalOnly()) {
@@ -322,7 +366,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         ProtosFrameArguments.compactImmediateMethodCall(
                                 scalar, newObject(), newObject(), module,
                                 new Object[0]);
-                assertEquals(Long.toString(body.expected()), integerValue(target(scalar).call(method)), body.characters());
+                assertEquals(
+                        Long.valueOf(body.expected()),
+                        target(scalar).call(method),
+                        "raw internal entry returns the private Long carrier");
                 assertSame(
                         scalar, method[0],
                         "compact method execution must remain compact");
@@ -332,7 +379,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
     @Test
     void perf034eMaterializedEntryTakesAuthoritativeLanes() throws Exception {
-        withCore(module -> {
+        withCoreDebug(module -> {
             for (ScalarBody body : PERF034E_SCALAR_BODIES) {
                 ProtosClosureValue scalar = closure(body.characters(), module);
                 Object[] direct =
@@ -362,7 +409,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
     @Test
     void perf034eFinalReadKeepsStatementAndExpressionTags() throws Exception {
-        withCore(module -> {
+        withCoreDebug(module -> {
             ProtosClosureValue scalar =
                     closure("() => { first: 7\nsecond: first\nsecond }", module);
             ProtosSemanticBytecodeRootNode root =
@@ -448,6 +495,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
             assertContains(instructionNames(locals), "IsCompactLocalFrame");
             assertContains(instructionNames(aliases), "IsCompactLocalFrame");
+
             assertNone(instructionNames(locals), "InstallFrameLexicalAuthority");
         });
     }
@@ -509,7 +557,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 root.getRootNodes().ensureComplete();
                 var calls = collectTags(root.getBytecodeNode().getTagTree(),
                         StandardTags.CallTag.class);
-                int count = candidate == nested ? 2 : candidate == tree ? 3 : 1;
+                int count = candidate == locals || candidate == aliases ? 1 : 0;
                 assertEquals(count, calls.size(),
                         "folded sends retain each source-visible CallTag");
                 assertTrue(calls.stream().allMatch(tag ->
@@ -523,10 +571,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             // A compact fast arm contains the literal result, and the
             // observed/materialized frame retains ordinary send semantics.
             for (var candidate : List.of(locals, aliases)) {
-                assertContains(instructionNames(candidate), "IsCompactLocalFrame");
                 assertContains(instructionNames(candidate), "TryPrimitiveNumericSendOne");
-                assertTrue(loweredIntegerConstantCount(candidate, 3L) >= 2,
-                        "constant is emitted in the fast arm and the fallback's metadata");
+                assertTrue(loweredIntegerConstantCount(candidate, 3L) >= 1,
+                        "a guarded arithmetic candidate must retain its folded operand");
 
                 Object[] observedCall = ProtosFrameArguments.compactDirectClosureCall(
                         candidate, module, null, new Object[0]);
@@ -538,12 +585,57 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     }
 
     @Test
+    void i101GuardedLongArithmeticFoldsRecursivelyAndFailsClosed()
+            throws Exception {
+        withCore(module -> {
+            String[][] accepted = {
+                    {"() => { 1 + 1 + 1 }", "3"},
+                    {"() => { (1 + 1) + 1 }", "3"},
+                    {"() => { 1 + (1 + 1) }", "3"},
+                    {"() => { (1 + 2) * 3 }", "9"},
+                    {"() => { 10 - 3 - 2 }", "5"},
+                    {"() => { 6 / 3 }", "2"},
+                    {"() => { 1 + 2 * 3 }", "7"},
+                    {"() => { x: 1; y: x + 2; z: y * 3; z }", "9"}
+            };
+
+            for (String[] example : accepted) {
+                ProtosClosureValue candidate = closure(example[0], module);
+                assertFalse(
+                        hasFoldedIntegerArithmetic(candidate),
+                        "Proven arithmetic must not retain a runtime descriptor");
+                assertNone(
+                        instructionNames(candidate),
+                        "TryPrimitiveNumericSendOne");
+                assertEquals(
+                        example[1],
+                        integerValue(enter(fastDirect(candidate, module))),
+                        example[0]);
+            }
+
+            for (String example : List.of(
+                    "() => { 1 + 2.0 }",
+                    "() => { 1 / 2 }",
+                    "() => { 9223372036854775807 + 1 }",
+                    "() => { 9223372036854775807 * 2 }",
+                    "() => { 1 / 0 }")) {
+                ProtosClosureValue candidate = closure(example, module);
+                assertFalse(hasFoldedIntegerArithmetic(candidate),
+                        "Non-exact or non-long arithmetic must fail closed: "
+                                + example);
+                assertContains(
+                        instructionNames(candidate), "TryPrimitiveNumericSendOne");
+            }
+        });
+    }
+
+    @Test
     void perf043UnknownOperandsAndOverflowKeepGenericSemantics()
             throws Exception {
         withCore(module -> {
             ProtosClosureValue dynamic =
                     closure("(left, right) => { left + right }", module);
-            assertFalse(hasFoldedIntegerAddition(dynamic));
+            assertFalse(hasFoldedIntegerArithmetic(dynamic));
             assertEquals(
                     "3",
                     integerValue(
@@ -551,7 +643,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
             ProtosClosureValue overflow =
                     closure("() => { 9223372036854775807 + 1 }", module);
-            assertFalse(hasFoldedIntegerAddition(overflow));
+            assertFalse(hasFoldedIntegerArithmetic(overflow));
             assertEquals(
                     "9223372036854775808",
                     integerValue(enter(fastDirect(overflow, module))));
@@ -572,7 +664,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue dispatch =
                     closure("(receiver) => { receiver + 2 }", module);
 
-            assertFalse(hasFoldedIntegerAddition(dispatch));
+            assertFalse(hasFoldedIntegerArithmetic(dispatch));
 
             ProtosObjectValue custom =
                     new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -675,7 +767,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     closure("() => { 1 + 2\n7 }", module);
 
             assertTrue(containsLoweredIntegerConstant(nonTerminal, 3L));
-            assertNone(instructionNames(nonTerminal), "TryPrimitiveNumericSendOne");
+            assertContains(instructionNames(nonTerminal), "TryPrimitiveNumericSendOne");
             assertEquals(
                     "7",
                     integerValue(enter(fastDirect(nonTerminal, module))));
@@ -710,7 +802,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue dynamic =
                     closure("(value) => { value + 2 }", module);
 
-            assertFalse(hasFoldedIntegerAddition(dynamic));
+            assertFalse(hasFoldedIntegerArithmetic(dynamic));
             assertEquals(
                     "5",
                     integerValue(
@@ -721,7 +813,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                             "() => { 9223372036854775807 + 1\n7 }",
                             module);
 
-            assertFalse(hasFoldedIntegerAddition(overflow));
+            assertFalse(hasFoldedIntegerArithmetic(overflow));
             assertEquals(
                     "7",
                     integerValue(enter(fastDirect(overflow, module))));
@@ -770,12 +862,12 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 .count();
     }
 
-    private static boolean hasFoldedIntegerAddition(
+    private static boolean hasFoldedIntegerArithmetic(
             ProtosClosureValue closure) {
-        return foldedIntegerAdditionCount(closure) > 0;
+        return foldedIntegerArithmeticCount(closure) > 0;
     }
 
-    private static long foldedIntegerAdditionCount(
+    private static long foldedIntegerArithmeticCount(
             ProtosClosureValue closure) {
         return closure.executionPlan()
                 .orElseThrow()
@@ -789,7 +881,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 .filter(value ->
                         value instanceof
                                 ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
-                                        .FoldedIntegerAddition)
+                                        .FoldedIntegerArithmetic)
                 .count();
     }
 
@@ -1323,6 +1415,26 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             context.enter();
             try {
                 ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                test.run(prelude.newModuleActivation());
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    private static void withCoreDebug(CoreTest test) throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID)
+                .allowExperimentalOptions(true)
+                .option("protos.Debug", "true")
+                .build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                assertEquals(
+                        ProtosExecutionMode.DEBUG,
+                        ProtosLanguageContext.current().executionMode());
+                ProtosPrelude prelude =
+                        new ProtosCoreBootstrap().bootstrap(CORE);
                 test.run(prelude.newModuleActivation());
             } finally {
                 context.leave();
