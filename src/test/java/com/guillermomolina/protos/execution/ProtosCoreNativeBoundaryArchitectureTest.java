@@ -96,6 +96,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     // I082-D2 adds the projected pull each to call/at/atPut.
                     Map.entry("execution/ProtosForeignProjectedOperations.java", 4),
                     Map.entry("execution/ProtosLoggingFacility.java", 3),
+                    // I090-C std:math/Math private sqrt facility.
+                    Map.entry("execution/ProtosMathFacility.java", 1),
                     Map.entry("execution/ProtosRegexUnicodeFacility.java", 3),
                     Map.entry("execution/ProtosRegexSemanticTransferFamily.java", 3),
                     Map.entry("execution/ProtosSealedFamilyFacility.java", 3),
@@ -137,6 +139,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                                     "execution/ProtosRegexSemanticTransferFamily.java")
                             || relative.equals(
                                     "execution/ProtosLoggingFacility.java")
+                            || relative.equals(
+                                    "execution/ProtosMathFacility.java")
                             || relative.equals(
                                     "execution/ProtosSealedFamilyFacility.java")) {
                         actualNonCore.put(relative, count);

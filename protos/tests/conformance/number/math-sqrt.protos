@@ -1,0 +1,120 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// D198 (I090-C): the public std:math/Math surface and sqrt results. A helper
+// compares Float coordinates by identity, so signed zeros and NaN are exact.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Math: import("std:math/Math")
+IntegerMath: import("std:math/Integer")
+
+nan: 0.0 / 0.0
+inf: 1.0 / 0.0
+negativeZero: -0.0
+
+same: (value, re, im) => {
+    Complex.recognizes(value) && (value.real() === re) && (value.imaginary() === im)
+}
+
+tests: [
+    Test("module surface", () => {
+        Assertions.require(Math.hasSlot("sqrt"))
+        Assertions.require(!Math.hasSlot("_mathSqrtFacility"))
+        Assertions.require(Math === import("std:math/Math"))
+        Assertions.require(!Number.hasSlot("sqrt"))
+        Assertions.require(!Complex.hasSlot("sqrt"))
+    }),
+    Test("argument validation", () => {
+        Assertions.signals(Error, () => { Math.sqrt() })
+        Assertions.signals(Error, () => { Math.sqrt(4, 4) })
+        Assertions.signals(Error, () => { Math.sqrt("4") })
+        Assertions.signals(Error, () => { Math.sqrt(true) })
+        Assertions.signals(Error, () => { Math.sqrt(Integer) })
+        Assertions.signals(Error, () => { Math.sqrt(Integer {}) })
+        Assertions.signals(Error, () => { Math.sqrt(Complex {}) })
+    }),
+    Test("no message to the argument", () => {
+        touched: false
+        touch: () => {
+            touched = true
+            4
+        }
+        probe: Number {
+            real: touch
+            imaginary: touch
+            sqrt: touch
+        }
+        Assertions.signals(Error, () => { Math.sqrt(probe) })
+        Assertions.require(!touched)
+    }),
+    Test("exact reals", () => {
+        Assertions.require(Math.sqrt(4) === 2)
+        Assertions.require(SmallInteger.recognizes(Math.sqrt(4)))
+        Assertions.require(Math.sqrt(0) === 0)
+        Assertions.require(Math.sqrt(1 / 4) === (1 / 2))
+        Assertions.require(Fraction.recognizes(Math.sqrt(1 / 4)))
+        root: 100000000000000000000000000000001
+        Assertions.require(Math.sqrt(root * root) === root)
+        Assertions.require(Math.sqrt(2) === 1.4142135623730951)
+        Assertions.require(Float.recognizes(Math.sqrt(4 / 3)))
+        huge: Math.sqrt(IntegerMath.pow(2, 1200) + 1)
+        Assertions.require(Float.recognizes(huge))
+        Assertions.require(huge == IntegerMath.pow(2, 600))
+    }),
+    Test("negative exact reals", () => {
+        Assertions.require(same(Math.sqrt(0 - 4), 0, 2))
+        Assertions.require(same(Math.sqrt(0 - (1 / 4)), 0, 1 / 2))
+        Assertions.require(same(Math.sqrt(0 - 2), 0, 1.4142135623730951))
+    }),
+    Test("exact Complex", () => {
+        Assertions.require(Math.sqrt(Complex(3, 4)) === Complex(2, 1))
+        Assertions.require(Math.sqrt(Complex(3, 0 - 4)) === Complex(2, 0 - 1))
+        Assertions.require(Math.sqrt(Complex(0 - 3, 4)) === Complex(1, 2))
+        Assertions.require(Math.sqrt(Complex(3 / 4, 1)) === Complex(1, 1 / 2))
+        irrational: Math.sqrt(Complex(4, 3))
+        Assertions.require(Float.recognizes(irrational.real()))
+        Assertions.require(Float.recognizes(irrational.imaginary()))
+    }),
+    Test("Float reals", () => {
+        Assertions.require(Math.sqrt(nan) === nan)
+        Assertions.require(Math.sqrt(inf) === inf)
+        Assertions.require(Math.sqrt(0.0) === 0.0)
+        Assertions.require(Math.sqrt(negativeZero) === negativeZero)
+        Assertions.require(Math.sqrt(4.0) === 2.0)
+        Assertions.require(same(Math.sqrt(-4.0), 0.0, 2.0))
+        Assertions.require(same(Math.sqrt(0.0 - inf), 0.0, inf))
+    }),
+    Test("Float-bearing Complex special values", () => {
+        Assertions.require(same(Math.sqrt(Complex(nan, inf)), inf, inf))
+        Assertions.require(same(Math.sqrt(Complex(nan, 0.0 - inf)), inf, 0.0 - inf))
+        Assertions.require(same(Math.sqrt(Complex(nan, 1.0)), nan, nan))
+        Assertions.require(same(Math.sqrt(Complex(inf, 0 - 1)), inf, negativeZero))
+        Assertions.require(same(Math.sqrt(Complex(inf, nan)), inf, nan))
+        Assertions.require(same(Math.sqrt(Complex(0.0 - inf, 1.0)), 0.0, inf))
+        Assertions.require(same(Math.sqrt(Complex(0.0 - inf, -1.0)), 0.0, 0.0 - inf))
+        Assertions.require(same(Math.sqrt(Complex(0.0 - inf, nan)), nan, inf))
+        Assertions.require(same(Math.sqrt(Complex(1.0, nan)), nan, nan))
+    }),
+    Test("Float-bearing Complex finite roots", () => {
+        Assertions.require(same(Math.sqrt(Complex(-4.0, 0.0)), 0.0, 2.0))
+        Assertions.require(same(Math.sqrt(Complex(-4.0, negativeZero)), 0.0, -2.0))
+        Assertions.require(same(Math.sqrt(Complex(4.0, negativeZero)), 2.0, negativeZero))
+        Assertions.require(same(Math.sqrt(Complex(3, 4.0)), 2.0, 1.0))
+        huge: Math.sqrt(Complex(IntegerMath.pow(2, 1200), 1.0))
+        Assertions.require(Float.recognizes(huge.real()) && Float.recognizes(huge.imaginary()))
+        Assertions.require(huge.real() == IntegerMath.pow(2, 600))
+    })
+]

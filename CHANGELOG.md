@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.352-SNAPSHOT
+
+- `I090` (#868): Standard Library `std:math/Math` with its only member
+  `sqrt(value)` (D198).
+  - `sqrt` is an ordinary module Closure over a private runtime facility; it
+    admits exactly one genuine Number, sends no message to it, and is no
+    Prelude binding or `Number` selector.
+  - Rational roots of exact reals and exact Complex values stay exact (F3);
+    negative reals give a Complex with the principal root.
+  - Float reals and Float-bearing Complex values follow the D198 special-value
+    rules (N4), including signed zeros, infinities and NaN.
+  - Every inexact coordinate is correctly rounded from the exact argument
+    value (stricter than G2-B), without converting exact components to
+    binary64 first.
+
 ## 0.3.351-SNAPSHOT
 
 - `I090` (#868): public Complex construction, components and standard
