@@ -27,6 +27,8 @@ import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosComplexArithmetic;
+import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.util.List;
 import java.util.Objects;
@@ -266,6 +268,9 @@ public final class ProtosStandardIntegerProtocol {
         if (ProtosNumericValueSupport.isFraction(supplied.get(0))) {
             return executeWithFraction(operation, receiver, supplied.get(0), activation);
         }
+        if (ProtosComplexNumericSupport.isComplex(supplied.get(0))) {
+            return executeWithComplex(operation, receiver, supplied.get(0), activation, prelude);
+        }
         Object result = tryExecuteCanonicalOperationOne(
                 operation, receiver, supplied.get(0), prelude);
         if (result == null) {
@@ -303,6 +308,27 @@ public final class ProtosStandardIntegerProtocol {
             case QUOTIENT, REMAINDER ->
                     throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         };
+    }
+
+    /*
+     * D198: Integer op Complex is standard Complex arithmetic, computed by the private Complex
+     * kernel for the same reason as executeWithFraction. div and mod stay Integer-only.
+     */
+    private static Object executeWithComplex(
+            CanonicalIntegerOperation operation,
+            Object integer,
+            Object complex,
+            ProtosActivation activation,
+            ProtosPrelude prelude) {
+        ProtosComplexArithmetic.Operation complexOperation = switch (operation) {
+            case ADD -> ProtosComplexArithmetic.Operation.ADD;
+            case SUBTRACT -> ProtosComplexArithmetic.Operation.SUBTRACT;
+            case MULTIPLY -> ProtosComplexArithmetic.Operation.MULTIPLY;
+            case EXACT_DIVIDE -> ProtosComplexArithmetic.Operation.DIVIDE;
+            case QUOTIENT, REMAINDER ->
+                    throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        };
+        return ProtosComplexArithmetic.binary(complexOperation, integer, complex, prelude);
     }
 
     private static Object executeValidCanonicalOperation(

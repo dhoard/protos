@@ -39,11 +39,15 @@ Fraction: Number {
         Float.recognizes(other).ifTrueIfFalse(
             () => { _coreFractionKernel.toFloat(this) + other },
             () => {
-                a: _coreFractionKernel.numerator(this)
-                b: _coreFractionKernel.denominator(this)
-                c: _coreFractionKernel.numerator(other)
-                d: _coreFractionKernel.denominator(other)
-                _coreFractionKernel.normalize((a * d) + (c * b), b * d)
+                Complex.recognizes(other).ifTrueIfFalse(
+                    () => { _coreComplexKernel.plus(this, other) },
+                    () => {
+                        a: _coreFractionKernel.numerator(this)
+                        b: _coreFractionKernel.denominator(this)
+                        c: _coreFractionKernel.numerator(other)
+                        d: _coreFractionKernel.denominator(other)
+                        _coreFractionKernel.normalize((a * d) + (c * b), b * d)
+                    })
             })
     }
 
@@ -55,11 +59,15 @@ Fraction: Number {
         Float.recognizes(other).ifTrueIfFalse(
             () => { _coreFractionKernel.toFloat(this) - other },
             () => {
-                a: _coreFractionKernel.numerator(this)
-                b: _coreFractionKernel.denominator(this)
-                c: _coreFractionKernel.numerator(other)
-                d: _coreFractionKernel.denominator(other)
-                _coreFractionKernel.normalize((a * d) - (c * b), b * d)
+                Complex.recognizes(other).ifTrueIfFalse(
+                    () => { _coreComplexKernel.minus(this, other) },
+                    () => {
+                        a: _coreFractionKernel.numerator(this)
+                        b: _coreFractionKernel.denominator(this)
+                        c: _coreFractionKernel.numerator(other)
+                        d: _coreFractionKernel.denominator(other)
+                        _coreFractionKernel.normalize((a * d) - (c * b), b * d)
+                    })
             })
     }
 
@@ -71,11 +79,15 @@ Fraction: Number {
         Float.recognizes(other).ifTrueIfFalse(
             () => { _coreFractionKernel.toFloat(this) * other },
             () => {
-                a: _coreFractionKernel.numerator(this)
-                b: _coreFractionKernel.denominator(this)
-                c: _coreFractionKernel.numerator(other)
-                d: _coreFractionKernel.denominator(other)
-                _coreFractionKernel.normalize(a * c, b * d)
+                Complex.recognizes(other).ifTrueIfFalse(
+                    () => { _coreComplexKernel.times(this, other) },
+                    () => {
+                        a: _coreFractionKernel.numerator(this)
+                        b: _coreFractionKernel.denominator(this)
+                        c: _coreFractionKernel.numerator(other)
+                        d: _coreFractionKernel.denominator(other)
+                        _coreFractionKernel.normalize(a * c, b * d)
+                    })
             })
     }
 
@@ -88,11 +100,15 @@ Fraction: Number {
         Float.recognizes(other).ifTrueIfFalse(
             () => { _coreFractionKernel.toFloat(this) / other },
             () => {
-                a: _coreFractionKernel.numerator(this)
-                b: _coreFractionKernel.denominator(this)
-                c: _coreFractionKernel.numerator(other)
-                d: _coreFractionKernel.denominator(other)
-                _coreFractionKernel.normalize(a * d, b * c)
+                Complex.recognizes(other).ifTrueIfFalse(
+                    () => { _coreComplexKernel.divide(this, other) },
+                    () => {
+                        a: _coreFractionKernel.numerator(this)
+                        b: _coreFractionKernel.denominator(this)
+                        c: _coreFractionKernel.numerator(other)
+                        d: _coreFractionKernel.denominator(other)
+                        _coreFractionKernel.normalize(a * d, b * c)
+                    })
             })
     }
 }

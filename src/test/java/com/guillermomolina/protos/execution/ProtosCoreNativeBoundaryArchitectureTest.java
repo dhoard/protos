@@ -214,6 +214,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "Number",
                 prelude.numberPrototype(),
                 Set.of("==", "<", "<=", ">", ">=", "hash"));
+        // D198: the component selectors are source-backed.
+        assertSourceBacked(prelude.numberPrototype(), "real");
+        assertSourceBacked(prelude.numberPrototype(), "imaginary");
 
         assertNativeSelectors(
                 "Integer",
@@ -246,9 +249,13 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 Set.of("call", "+", "-", "*", "/", "recognizes"));
         assertSourceBacked(prelude.floatPrototype(), "negated");
 
-        // D197-C (I090-C1): Complex owns only its trusted recognizer.
+        // D198 (I090): Complex negation and arithmetic are source-backed; only the exact
+        // recognizer and the non-dispatching factory are native.
         assertNativeSelectors(
-                "Complex", prelude.complexPrototype(), Set.of("recognizes"));
+                "Complex", prelude.complexPrototype(), Set.of("recognizes", "call"));
+        for (String selector : Set.of("negated", "+", "-", "*", "/")) {
+            assertSourceBacked(prelude.complexPrototype(), selector);
+        }
 
         for (String removed :
                 Set.of(

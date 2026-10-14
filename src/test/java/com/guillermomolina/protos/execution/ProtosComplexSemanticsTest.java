@@ -51,9 +51,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * D197-C (I090-C1): canonical Complex representation, authentication, identity, mathematical
- * equality, hashes and staged Actor/P transfer. No public Complex constructor exists yet, so
- * positive values are minted through the internal canonicalization service only.
+ * D197-C / D198 (I090): canonical Complex representation, authentication, identity, mathematical
+ * equality, hashes and staged Actor/P transfer, using the internal canonicalization service.
+ * Public construction and arithmetic are covered by {@code ProtosComplexArithmeticTest}.
  */
 final class ProtosComplexSemanticsTest {
     private static final BigInteger TWO_POW_100 = BigInteger.ONE.shiftLeft(100);
@@ -101,8 +101,10 @@ final class ProtosComplexSemanticsTest {
         assertSame(prelude.numberPrototype(), complex.parent().orElseThrow());
         assertTrue(complex.isFrozen());
         assertNotSame(complex, other.complexPrototype());
-        // Only the trusted recognizer: no constructor, selector, arithmetic or ordering.
-        assertEquals(java.util.Set.of("recognizes"), complex.localSlotsSnapshot().keySet());
+        // The trusted recognizer and factory, source-backed negation and arithmetic; no ordering.
+        assertEquals(
+                java.util.Set.of("recognizes", "call", "negated", "+", "-", "*", "/"),
+                complex.localSlotsSnapshot().keySet());
         ProtosClosureValue recognizes = assertInstanceOf(
                 ProtosClosureValue.class, complex.readLocalSlot("recognizes").orElseThrow());
         assertTrue(recognizes.nativeBody().isPresent());
@@ -280,15 +282,19 @@ final class ProtosComplexSemanticsTest {
                 new ProtosStringValue("1"),
                 1L,
                 1.0,
-                BigInteger.ONE,
-                // I090-C1 internal precondition only; no public non-finite Complex rule.
-                new ProtosFloatValue(Double.NaN),
-                new ProtosFloatValue(Double.POSITIVE_INFINITY))) {
+                BigInteger.ONE)) {
             assertThrows(IllegalArgumentException.class, () -> complex(invalid, one, prelude));
             assertThrows(IllegalArgumentException.class, () -> complex(one, invalid, prelude));
         }
         assertThrows(IllegalArgumentException.class,
                 () -> ProtosComplexNumericSupport.real(prelude.complexPrototype()));
+
+        // D198: every semantic Float, including NaN and the infinities, is a valid component.
+        for (double special : new double[] {
+                Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+            assertComplex(complex(new ProtosFloatValue(special), one, prelude), prelude);
+            assertComplex(complex(one, new ProtosFloatValue(special), prelude), prelude);
+        }
     }
 
     @Test
@@ -424,7 +430,7 @@ final class ProtosComplexSemanticsTest {
     }
 
     @Test
-    void realConversionsAndArithmeticDoNotAdmitComplex() throws IOException {
+    void realConversionsDoNotAdmitComplexButArithmeticDoes() throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation caller = prelude.newModuleActivation();
         Object one = new ProtosIntegerValue(1L);
@@ -434,10 +440,21 @@ final class ProtosComplexSemanticsTest {
                 ProtosStandardNumericConversionProtocol.FactoryKind.values()) {
             assertEquals(null, ProtosStandardNumericConversionProtocol.convert(kind, value, prelude));
         }
+        // D198: real + Complex is standard Complex arithmetic in both native receiver families.
+        Object exactSum = ProtosInvocation.invokeMessage(one, "+", List.of(value), caller);
+        assertTrue(ProtosIdentity.identical(
+                complex(new ProtosIntegerValue(2L), new ProtosIntegerValue(2L), prelude),
+                exactSum));
+        Object floatSum = ProtosInvocation.invokeMessage(
+                new ProtosFloatValue(1.0), "+", List.of(value), caller);
+        assertTrue(ProtosIdentity.identical(
+                complex(new ProtosFloatValue(2.0), new ProtosIntegerValue(2L), prelude),
+                floatSum));
+        // div and mod stay Integer-only.
         assertThrows(ProtosSignalException.class,
-                () -> ProtosInvocation.invokeMessage(one, "+", List.of(value), caller));
-        assertThrows(ProtosSignalException.class, () -> ProtosInvocation.invokeMessage(
-                new ProtosFloatValue(1.0), "+", List.of(value), caller));
+                () -> ProtosInvocation.invokeMessage(one, "div", List.of(value), caller));
+        assertThrows(ProtosSignalException.class,
+                () -> ProtosInvocation.invokeMessage(one, "mod", List.of(value), caller));
     }
 
     @Test

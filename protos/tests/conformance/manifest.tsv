@@ -132,6 +132,7 @@ number/ordering.protos	suite-native	-
 number/prototype-and-hash.protos	suite-native	-
 number/fraction-arithmetic.protos	suite-native	-
 number/fraction-relations.protos	suite-native	-
+number/complex-arithmetic.protos	suite-native	-
 string/indexing-and-scalar-size.protos	suite-native	-
 string/concat.protos	suite-native	-
 string/aggregate-concat.protos	suite-native	-

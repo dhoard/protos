@@ -13,10 +13,54 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-// The canonical Complex family prototype (D197-C, I090-C1). A Complex value is a frozen,
+// The canonical Complex family prototype (D197-C, D198, I090). A Complex value is a frozen,
 // runtime-minted value whose real and imaginary components are semantic real numbers
-// (Integer, Fraction or Float). An exact Integer zero imaginary part is never retained; a
-// Float zero imaginary part, of either sign, is. Only the exact recognizer is installed, by
-// the runtime, because it must not dispatch on the candidate. Construction, component
-// selectors, arithmetic and ordering are not yet defined.
-Complex: Number {}
+// (Integer, Fraction or Float, including NaN, infinities and signed zeros). An exact Integer
+// zero imaginary part is never retained; a Float zero imaginary part, of either sign, is.
+// The runtime installs the exact recognizer and the Complex(real, imaginary) factory, because
+// neither may dispatch on its operands. The arithmetic below is ordinary overridable behavior;
+// its results come from the private kernel, which also serves the real-receiver directions
+// whose native Integer and Float bodies cannot call guest code. No ordering is defined.
+Complex: Number {
+    negated: () => {
+        Complex.recognizes(this).ifFalse(() => {
+            Error().signal()
+        })
+        _coreComplexKernel.negated(this)
+    }
+
+    // Installed by the runtime as `+`; a slot target cannot spell an operator.
+    _coreComplexPlus: (other) => {
+        Complex.recognizes(this).ifFalse(() => {
+            Error().signal()
+        })
+        _coreComplexKernel.plus(this, other)
+    }
+
+    // Installed by the runtime as `-`.
+    _coreComplexMinus: (other) => {
+        Complex.recognizes(this).ifFalse(() => {
+            Error().signal()
+        })
+        _coreComplexKernel.minus(this, other)
+    }
+
+    // Installed by the runtime as `*`.
+    _coreComplexTimes: (other) => {
+        Complex.recognizes(this).ifFalse(() => {
+            Error().signal()
+        })
+        _coreComplexKernel.times(this, other)
+    }
+
+    // Installed by the runtime as `/`. An all-exact Complex divided by the exact Integer zero
+    // signals the standard Error from the kernel.
+    _coreComplexDivide: (other) => {
+        Complex.recognizes(this).ifFalse(() => {
+            Error().signal()
+        })
+        _coreComplexKernel.divide(this, other)
+    }
+}
+
+_coreComplexKernel: {}

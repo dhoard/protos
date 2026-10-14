@@ -32,7 +32,7 @@ import java.util.Objects;
  * its real part; a Float zero imaginary part of either sign is retained, because its sign is
  * observable through identity. This class owns only representation, authentication, identity and
  * staged transfer; mathematical equality and normal hashing stay with the Number relations, and
- * no Complex arithmetic is defined here. Nothing here sends a message to a guest value.
+ * arithmetic with {@link ProtosComplexArithmetic}. Nothing here sends a message to a guest value.
  */
 public final class ProtosComplexNumericSupport {
     /*
@@ -74,10 +74,8 @@ public final class ProtosComplexNumericSupport {
      * The canonical value with components {@code real} and {@code imaginary}: {@code real} itself
      * when {@code imaginary} is an exact Integer zero, otherwise one fresh Complex owned by
      * {@code prelude}. Both components must be semantic real numbers already owned by
-     * {@code prelude}.
-     *
-     * <p>I090-C1 internal precondition, not a public Complex rule: a Float component must be
-     * finite. NaN and infinite components are not yet defined for Complex (D197).
+     * {@code prelude}. Any semantic Float is a valid component, including NaN, either
+     * infinity and either signed zero (D198).
      */
     public static Object normalize(Object real, Object imaginary, ProtosPrelude prelude) {
         requireComponent(real);
@@ -93,11 +91,8 @@ public final class ProtosComplexNumericSupport {
     }
 
     private static void requireComponent(Object component) {
-        if (!ProtosNumericValueSupport.isCurrentRealNumber(component)
-                || (component instanceof ProtosFloatValue floating
-                        && !Double.isFinite(floating.value()))) {
-            throw new IllegalArgumentException(
-                    "a Complex component must be a finite semantic real number");
+        if (!ProtosNumericValueSupport.isCurrentRealNumber(component)) {
+            throw new IllegalArgumentException("a Complex component must be a semantic real number");
         }
     }
 

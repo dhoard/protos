@@ -20,6 +20,8 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosComplexArithmetic;
+import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
@@ -57,10 +59,14 @@ public final class ProtosStandardFloatProtocol {
                                             supplied.get(0)));
                         }));
 
-        installBinary(floatPrototype, "+", (left, right) -> left + right);
-        installBinary(floatPrototype, "-", (left, right) -> left - right);
-        installBinary(floatPrototype, "*", (left, right) -> left * right);
-        installBinary(floatPrototype, "/", (left, right) -> left / right);
+        installBinary(floatPrototype, "+", ProtosComplexArithmetic.Operation.ADD,
+                (left, right) -> left + right);
+        installBinary(floatPrototype, "-", ProtosComplexArithmetic.Operation.SUBTRACT,
+                (left, right) -> left - right);
+        installBinary(floatPrototype, "*", ProtosComplexArithmetic.Operation.MULTIPLY,
+                (left, right) -> left * right);
+        installBinary(floatPrototype, "/", ProtosComplexArithmetic.Operation.DIVIDE,
+                (left, right) -> left / right);
     }
 
     enum CanonicalFloatOperation {
@@ -146,6 +152,7 @@ public final class ProtosStandardFloatProtocol {
     private static void installBinary(
             ProtosObjectValue floatPrototype,
             String selector,
+            ProtosComplexArithmetic.Operation complexOperation,
             DoubleBinaryOperator operation) {
         if (floatPrototype.hasLocalSlot(selector)) {
             throw new IllegalStateException(
@@ -166,6 +173,15 @@ public final class ProtosStandardFloatProtocol {
             } else if (ProtosNumericValueSupport.isFraction(argument)) {
                 // D197: the whole exact quotient is rounded once, before the binary64 operation.
                 right = ProtosNumericValueSupport.roundFractionToBinary64(argument);
+            } else if (ProtosComplexNumericSupport.isComplex(argument)) {
+                // D198: Float op Complex is standard Complex arithmetic. A native body cannot
+                // call guest code, so the private Complex kernel computes it.
+                return ProtosComplexArithmetic.binary(
+                        complexOperation,
+                        receiver,
+                        argument,
+                        activation.prelude().orElseThrow(() -> new IllegalStateException(
+                                "Float arithmetic requires Core prelude")));
             } else {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));

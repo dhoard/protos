@@ -256,6 +256,11 @@ public final class ProtosCoreBootstrap {
                 requirePrototype(bootstrapContext, "Float", numberPrototype);
         ProtosObjectValue complexPrototype =
                 requirePrototype(bootstrapContext, "Complex", numberPrototype);
+        // Like the Fraction kernel, it stays private to the bootstrap context, where the Number,
+        // Fraction and Complex source closures resolve it.
+        ProtosObjectValue complexKernel =
+                requirePrototype(
+                        bootstrapContext, "_coreComplexKernel", ProtosObjectValue.rootObject());
         ProtosStandardNumberEqualityProtocol.install(numberPrototype);
         ProtosStandardNumberOrderingProtocol.install(numberPrototype);
         ProtosStandardHashSupport.installNumberHash(numberPrototype);
@@ -264,7 +269,7 @@ public final class ProtosCoreBootstrap {
                 smallIntegerPrototype, bigIntegerPrototype);
         ProtosStandardFractionProtocol.install(fractionPrototype, numberPrototype, fractionKernel);
         ProtosStandardFloatProtocol.install(floatPrototype);
-        ProtosStandardComplexProtocol.install(complexPrototype, numberPrototype);
+        ProtosStandardComplexProtocol.install(complexPrototype, numberPrototype, complexKernel);
         ProtosStandardNumericConversionProtocol.install(integerPrototype, floatPrototype);
 
         Object errorBinding =

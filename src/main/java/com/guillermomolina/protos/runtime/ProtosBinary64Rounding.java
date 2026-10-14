@@ -75,6 +75,15 @@ public final class ProtosBinary64Rounding {
     }
 
     /**
+     * The binary64 value nearest to the exact quotient of two host integers, ties to even, for
+     * the exact Complex kernel. A nonzero quotient that rounds to zero keeps its sign; a zero
+     * numerator answers +0.0, so callers own the sign of an exact zero.
+     */
+    static double divideExactBigIntegers(BigInteger numerator, BigInteger denominator) {
+        return divideLarge(numerator, denominator);
+    }
+
+    /**
      * The correctly rounded quotient of two signed-64 Integers, using only primitive
      * arithmetic. Requires a nonzero denominator; an exact zero quotient is +0.0.
      *

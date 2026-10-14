@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.351-SNAPSHOT
+
+- `I090` (#868): public Complex construction, components and standard
+  arithmetic (D198).
+  - `Complex(real, imaginary)` admits exactly two genuine real components,
+    including NaN, infinities and signed zeros, and collapses only an exact
+    Integer zero imaginary part.
+  - `Number` gains the source-backed `real()` and `imaginary()` selectors.
+  - Complex `negated`, `+`, `-`, `*` and `/` are source-backed; Integer, Float
+    and Fraction receivers accept Complex arguments. One private kernel,
+    `ProtosComplexArithmetic`, owns the separable, exact coupled,
+    exact-zero-divisor (E2/A), once-rounded finite (R), signed-zero (F1) and
+    exceptional (G1) results.
+  - Real-only operations, ordering and the `Integer(...)`/`Float(...)`
+    conversions still reject Complex.
+
 ## 0.3.350-SNAPSHOT
 
 - `I095` (#878): complete the shared NORMAL-mode Boolean-control lowering for

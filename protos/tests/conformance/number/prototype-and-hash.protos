@@ -27,8 +27,8 @@ tests: [
         }
         Assertions.require(tool009LegacyCase() === true)
     }),
-    // I090-C1: no public Complex constructor exists yet, so only rejection is observable here.
     Test("complex recognizes only genuine values", () => {
+        Assertions.require(Complex.recognizes(Complex(1, 2)) === true)
         Assertions.require(Complex.recognizes(Complex) === false)
         Assertions.require(Complex.recognizes(1) === false)
         Assertions.require(Complex.recognizes(1 / 2) === false)
