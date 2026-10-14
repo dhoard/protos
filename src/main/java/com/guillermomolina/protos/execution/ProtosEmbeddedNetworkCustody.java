@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosHostIpEndpoint;
 import com.guillermomolina.protos.runtime.ProtosNetworkConnectFlow;
 import com.guillermomolina.protos.runtime.ProtosNetworkListenFlow;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -71,7 +72,6 @@ final class ProtosEmbeddedNetworkCustody
         Objects.requireNonNull(prelude, "prelude");
         // Fails bootstrap explicitly when the Prelude does not retain the canonical families.
         this.addressPrototype = prelude.ipAddressPrototypeForRuntime();
-        // D197-C: mints only IP bits beyond the signed-64 range, which are BigIntegers.
         this.integerPrototype = prelude.bigIntegerPrototype();
         this.endpointPrototype = prelude.ipEndpointPrototypeForRuntime();
         this.hostFactory = Objects.requireNonNull(hostFactory, "hostFactory");
@@ -79,7 +79,7 @@ final class ProtosEmbeddedNetworkCustody
 
     @Override
     public ProtosNetworkConnectFlow.Cancellation connect(
-            ProtosObjectValue endpoint, ProtosNetworkConnectFlow.ConnectCompletion completion) {
+            ProtosHostIpEndpoint endpoint, ProtosNetworkConnectFlow.ConnectCompletion completion) {
         Objects.requireNonNull(endpoint, "endpoint");
         Objects.requireNonNull(completion, "completion");
         ProtosNioNetworkBackend active = activeBackendOrNull();
@@ -122,7 +122,8 @@ final class ProtosEmbeddedNetworkCustody
             }
             host = opened;
             activations++;
-            backend = opened.backend(addressPrototype, endpointPrototype, integerPrototype);
+            backend = opened.backend(
+                    addressPrototype, endpointPrototype, integerPrototype);
         }
         return backend;
     }

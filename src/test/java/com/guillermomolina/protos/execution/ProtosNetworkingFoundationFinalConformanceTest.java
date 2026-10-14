@@ -233,7 +233,9 @@ final class ProtosNetworkingFoundationFinalConformanceTest {
     private static void awaitTerminal(ProtosFutureValue future) throws Exception {
         long deadline = System.nanoTime() + TIMEOUT.toNanos();
         while (future.state() == ProtosFutureValue.State.PENDING && System.nanoTime() < deadline) {
-            Thread.sleep(2L);
+            if (!future.domain().dispatchOne()) {
+                Thread.sleep(2L);
+            }
         }
         if (future.state() == ProtosFutureValue.State.PENDING) {
             throw new AssertionError("Future remained pending after " + TIMEOUT);

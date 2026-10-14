@@ -53,6 +53,7 @@ public final class ProtosActorExecutionDomain {
     }
 
     private final ArrayDeque<Object> runnable = new ArrayDeque<>();
+    private boolean actorTerminationBegun;
     private final ArrayDeque<TargetedRuntimeCompletion> targetedRuntimeCompletions =
             new ArrayDeque<>();
     /*
@@ -220,10 +221,11 @@ public final class ProtosActorExecutionDomain {
 
         Runnable wakeup;
         synchronized (this) {
-            if (ownerActor != null
+            if (actorTerminationBegun
+                    || (ownerActor != null
                     && (ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATING
                             || ownerActor.lifecycleState()
-                                    == ProtosActor.LifecycleState.TERMINATED)) {
+                                    == ProtosActor.LifecycleState.TERMINATED))) {
                 throw new IllegalStateException(
                         "terminating Actor cannot accept targeted runtime completion");
             }
@@ -474,12 +476,18 @@ public final class ProtosActorExecutionDomain {
         synchronized (this) { actorIoOperations.remove(operation); }
     }
 
+    /** Includes Actor domains without a separately bound Actor. */
+    public synchronized boolean actorTerminationBegunForRuntime() {
+        return actorTerminationBegun;
+    }
+
     /** TERMINATING cutover hook: request cooperative cancellation without undoing commitments. */
     public void actorTerminationBegun() {
         Set<ProtosTask> tasks;
         Set<ProtosIoOperation> io;
         Set<ProtosFutureValue> nonTask;
         synchronized (this) {
+            actorTerminationBegun = true;
             targetedRuntimeCompletions.clear();
             notifyAll();
             tasks = Set.copyOf(liveTasks);

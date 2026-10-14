@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
+import com.guillermomolina.protos.runtime.ProtosHostIpEndpoint;
 import com.guillermomolina.protos.runtime.ProtosNetworkConnectFlow;
 import com.guillermomolina.protos.runtime.ProtosNetworkListenFlow;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -34,7 +35,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /** I028-E2 production NIO implementation of the existing host-neutral connect contract. */
@@ -50,8 +50,6 @@ final class ProtosNioNetworkBackend
         List<Inet6Address> authorizedAddresses() throws IOException;
     }
 
-    private static final Set<String> ENDPOINT_SLOTS = Set.of("address", "port");
-    private static final Set<String> ADDRESS_SLOTS = Set.of("version", "bits");
     private static final ProtosNetworkConnectFlow.Cancellation NO_CANCELLATION = () -> {};
     private static final ProtosNetworkListenFlow.Cancellation NO_LISTEN_CANCELLATION = () -> {};
 
@@ -60,11 +58,8 @@ final class ProtosNioNetworkBackend
     private final ProtosObjectValue listenAddressPrototype;
     private final ProtosObjectValue listenEndpointPrototype;
     private final Ipv6ListenAddressProvider ipv6ListenAddressProvider;
-    /*
-     * I091: owner of materialized address bits beyond the signed-64 range (IPv6), the owning
-     * Prelude's BigInteger prototype (D197-C); null only for backends built without an owning
-     * Prelude, which then cannot materialize such bits.
-     */
+
+    /** Listener/accept materialization only; never used by TCP connect. */
     private final ProtosObjectValue integerPrototype;
 
     ProtosNioNetworkBackend(
@@ -78,8 +73,8 @@ final class ProtosNioNetworkBackend
             ProtosObjectValue listenAddressPrototype,
             ProtosObjectValue listenEndpointPrototype,
             Ipv6ListenAddressProvider ipv6ListenAddressProvider) {
-        this(poller, ipv6ScopeResolver, listenAddressPrototype, listenEndpointPrototype,
-                ipv6ListenAddressProvider, null);
+        this(poller, ipv6ScopeResolver, listenAddressPrototype,
+                listenEndpointPrototype, ipv6ListenAddressProvider, null);
     }
 
     ProtosNioNetworkBackend(
@@ -105,14 +100,14 @@ final class ProtosNioNetworkBackend
 
     @Override
     public ProtosNetworkConnectFlow.Cancellation connect(
-            ProtosObjectValue endpoint,
+            ProtosHostIpEndpoint endpoint,
             ProtosNetworkConnectFlow.ConnectCompletion completion) {
         Objects.requireNonNull(endpoint, "endpoint");
         Objects.requireNonNull(completion, "completion");
 
         HostEndpoint target;
         try {
-            target = HostEndpoint.decode(endpoint, ipv6ScopeResolver, integerPrototype);
+            target = HostEndpoint.decode(endpoint, ipv6ScopeResolver);
         } catch (IOException | RuntimeException invalidHostInterpretation) {
             reportFailure(completion);
             return NO_CANCELLATION;
@@ -472,13 +467,13 @@ final class ProtosNioNetworkBackend
                 return;
             }
 
-            ProtosObjectValue localEndpoint;
+            ProtosHostIpEndpoint localEndpoint;
             try {
                 Object local = current.getLocalAddress();
                 if (!(local instanceof InetSocketAddress localSocket)) {
                     throw new IOException("connected TCP socket has no IP local endpoint");
                 }
-                localEndpoint = target.materializeLocalEndpoint(localSocket);
+                localEndpoint = target.captureLocalEndpoint(localSocket);
             } catch (IOException | RuntimeException failure) {
                 fail(failure);
                 return;
@@ -536,96 +531,44 @@ final class ProtosNioNetworkBackend
         }
     }
 
+    /** Host-only representation of a TCP connect target. */
     private static final class HostEndpoint {
         private final int version;
         private final InetSocketAddress socketAddress;
-        private final ProtosObjectValue endpointPrototype;
-        private final ProtosObjectValue addressPrototype;
-        private final ProtosObjectValue integerPrototype;
 
-        private HostEndpoint(
-                int version,
-                InetSocketAddress socketAddress,
-                ProtosObjectValue endpointPrototype,
-                ProtosObjectValue addressPrototype,
-                ProtosObjectValue integerPrototype) {
+        private HostEndpoint(int version, InetSocketAddress socketAddress) {
             this.version = version;
             this.socketAddress = socketAddress;
-            this.endpointPrototype = endpointPrototype;
-            this.addressPrototype = addressPrototype;
-            this.integerPrototype = integerPrototype;
         }
 
         private static HostEndpoint decode(
-                ProtosObjectValue endpoint,
-                Ipv6ScopeResolver ipv6ScopeResolver,
-                ProtosObjectValue integerPrototype)
-                throws IOException {
-            Object endpointParent = endpoint.parent().orElse(null);
-            if (!(endpointParent instanceof ProtosObjectValue endpointPrototype)) {
-                throw new IOException("endpoint has no canonical ordinary parent");
-            }
+                ProtosHostIpEndpoint endpoint,
+                Ipv6ScopeResolver resolver) throws IOException {
+            int version = endpoint.version();
+            byte[] bytes = endpoint.octets();
+            InetAddress address;
 
-            Map<String, Object> endpointSlots = endpoint.localSlotsSnapshot();
-            if (!endpoint.isFrozen()
-                    || !endpointSlots.keySet().equals(ENDPOINT_SLOTS)
-                    || !(endpointSlots.get("address") instanceof ProtosObjectValue address)
-                    || !ProtosNumericValueSupport.isIntegerInIntRange(
-                            endpointSlots.get("port"))) {
-                throw new IOException("endpoint is not canonical");
-            }
-
-            Object addressParent = address.parent().orElse(null);
-            if (!(addressParent instanceof ProtosObjectValue addressPrototype)
-                    || !ProtosStandardIpEndpointProtocol.recognizesValue(
-                            endpoint, endpointPrototype, addressPrototype)) {
-                throw new IOException("endpoint is not recognized");
-            }
-
-            Map<String, Object> addressSlots = address.localSlotsSnapshot();
-            if (!addressSlots.keySet().equals(ADDRESS_SLOTS)
-                    || !ProtosNumericValueSupport.isIntegerInIntRange(addressSlots.get("version"))
-                    || !ProtosNumericValueSupport.isCurrentInteger(addressSlots.get("bits"))) {
-                throw new IOException("address is not canonical");
-            }
-
-            Object bitsValue = addressSlots.get("bits");
-            int version = ProtosNumericValueSupport.exactInt(addressSlots.get("version"));
-            int portNumber = ProtosNumericValueSupport.exactInt(endpointSlots.get("port"));
-            InetAddress hostAddress;
             if (version == 4) {
-                byte[] bytes = unsignedBytes(bitsValue, 4);
-                hostAddress = InetAddress.getByAddress(bytes);
-                if (!(hostAddress instanceof Inet4Address)) {
-                    throw new IOException("IPv4 data did not materialize as IPv4");
-                }
+                address = InetAddress.getByAddress(bytes);
+                if (!(address instanceof Inet4Address))
+                    throw new IOException("host changed IPv4 family");
             } else if (version == 6) {
-                byte[] bytes = unsignedBytes(bitsValue, 16);
-                Inet6Address resolved =
-                        Objects.requireNonNull(
-                                ipv6ScopeResolver.resolve(bytes.clone()),
-                                "IPv6 scope resolver result");
-                if (!Arrays.equals(bytes, resolved.getAddress())) {
-                    throw new IOException(
-                            "Network scope interpretation changed IPv6 address bits");
-                }
+                Inet6Address resolved = Objects.requireNonNull(
+                        resolver.resolve(bytes.clone()),
+                        "IPv6 scope resolver result");
+                if (!Arrays.equals(bytes, resolved.getAddress()))
+                    throw new IOException("IPv6 scope rewrote address bits");
                 if (resolved.isLinkLocalAddress()
                         && resolved.getScopeId() == 0
-                        && resolved.getScopedInterface() == null) {
-                    throw new IOException(
-                            "link-local IPv6 requires explicit Network scope");
-                }
-                hostAddress = resolved;
+                        && resolved.getScopedInterface() == null)
+                    throw new IOException("link-local IPv6 requires scope");
+                address = resolved;
             } else {
                 throw new IOException("unsupported IP version");
             }
 
             return new HostEndpoint(
-                    version,
-                    new InetSocketAddress(hostAddress, portNumber),
-                    endpointPrototype,
-                    addressPrototype,
-                    integerPrototype);
+                    version, new InetSocketAddress(address, endpoint.port()));
         }
 
         private StandardProtocolFamily protocolFamily() {
@@ -638,42 +581,31 @@ final class ProtosNioNetworkBackend
             return socketAddress;
         }
 
-        private ProtosObjectValue materializeLocalEndpoint(InetSocketAddress local)
+        private ProtosHostIpEndpoint captureLocalEndpoint(InetSocketAddress local)
                 throws IOException {
-            InetAddress localAddress = local.getAddress();
-            byte[] bytes = localAddress == null ? null : localAddress.getAddress();
-            if (localAddress == null || bytes == null || local.getPort() <= 0) {
-                throw new IOException("connected TCP socket has invalid local endpoint");
-            }
+            InetAddress address = local.getAddress();
+            byte[] bytes = address == null ? null : address.getAddress();
+            if (bytes == null || local.getPort() <= 0)
+                throw new IOException("invalid local TCP endpoint");
+
             if ((version == 4
-                            && (!(localAddress instanceof Inet4Address) || bytes.length != 4))
+                            && (!(address instanceof Inet4Address)
+                                    || bytes.length != 4))
                     || (version == 6
-                            && (!(localAddress instanceof Inet6Address) || bytes.length != 16))) {
-                throw new IOException("local endpoint changed the requested IP version");
-            }
+                            && (!(address instanceof Inet6Address)
+                                    || bytes.length != 16)))
+                throw new IOException("local IP version changed");
 
-            ProtosObjectValue address = new ProtosObjectValue(addressPrototype);
-            address.createLocalSlot(
-                    "version", ProtosNumericValueSupport.integer(version));
-            address.createLocalSlot(
-                    "bits",
-                    ProtosNumericValueSupport.integerFromUnsignedBigEndian(
-                            bytes, integerPrototype));
-            address.freeze();
-
-            ProtosObjectValue endpoint = new ProtosObjectValue(endpointPrototype);
-            endpoint.createLocalSlot("address", address);
-            endpoint.createLocalSlot(
-                    "port", ProtosNumericValueSupport.integer(local.getPort()));
-            return endpoint.freeze();
+            return new ProtosHostIpEndpoint(version, bytes, local.getPort());
         }
 
+        // Listener-only dependency retained until I093-B2.
         private static byte[] unsignedBytes(Object value, int width)
                 throws IOException {
-            byte[] bytes = ProtosNumericValueSupport.unsignedBigEndianOrNull(value, width);
-            if (bytes == null) {
-                throw new IOException("IP address bits exceed canonical width");
-            }
+            byte[] bytes =
+                    ProtosNumericValueSupport.unsignedBigEndianOrNull(value, width);
+            if (bytes == null)
+                throw new IOException("IP bits exceed canonical width");
             return bytes;
         }
     }

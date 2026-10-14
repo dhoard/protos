@@ -56,7 +56,6 @@ final class ProtosNioNetworkHost implements AutoCloseable {
                 backend(
                         addressPrototype,
                         endpointPrototype,
-                        // D197-C: mints only IP bits beyond the signed-64 range.
                         owningPrelude.bigIntegerPrototype()));
     }
 

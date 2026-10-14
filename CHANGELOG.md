@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.354-SNAPSHOT
+
+- `I093` (#873), slice B1: decouple TCP connect from Protos guest values
+  across the host/NIO boundary.
+  - Introduce an immutable, defensively copied IP endpoint descriptor with
+    exact address-family, network-order octet and concrete-port validation.
+  - Convert canonical source-backed endpoints before host acquisition;
+    NIO consumes host descriptors without inspecting guest IP objects.
+  - Capture connected local addresses as inert host data and materialize
+    canonical IpAddress/IpEndpoint objects in the owning Actor domain.
+  - Route asynchronous completion through targeted Actor handoff, preserving
+    cancellation, termination and untransferred resource custody.
+  - Preserve listener/accept dependencies outside the B1 connect scope and
+    extend acquisition, NIO, embedded-host and lifecycle regression coverage.
+
 ## 0.3.353-SNAPSHOT
 
 - `I101` (#892), slice A: Context-owned NORMAL/DEBUG compilation profile

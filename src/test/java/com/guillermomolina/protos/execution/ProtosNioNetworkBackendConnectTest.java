@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosHostIpEndpoint;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
@@ -56,6 +57,34 @@ import org.junit.jupiter.api.Test;
 final class ProtosNioNetworkBackendConnectTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Duration WAIT = Duration.ofSeconds(5);
+
+    @Test
+    void descriptorDefensiveCopiesPreserveVersionWidthAndUnsignedOctets() {
+        byte[] supplied = {(byte) 0xff, 0, 1, 2};
+        ProtosHostIpEndpoint descriptor =
+                new ProtosHostIpEndpoint(4, supplied, 65535);
+        supplied[0] = 0;
+
+        assertArrayEquals(
+                new byte[] {(byte) 0xff, 0, 1, 2}, descriptor.octets());
+
+        byte[] accessed = descriptor.octets();
+        accessed[1] = 44;
+
+        assertArrayEquals(
+                new byte[] {(byte) 0xff, 0, 1, 2}, descriptor.octets());
+        assertEquals(65535, descriptor.port());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ProtosHostIpEndpoint(6, new byte[4], 80));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ProtosHostIpEndpoint(4, new byte[4], 0));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ProtosHostIpEndpoint(4, new byte[4], 65536));
+    }
 
     @Test
     void ipv4ConnectUsesC4ContractAndMaterializesLogicalEndpoints() throws Exception {
@@ -443,7 +472,7 @@ final class ProtosNioNetworkBackendConnectTest {
         long deadline = System.nanoTime() + WAIT.toNanos();
         while (future.state() == ProtosFutureValue.State.PENDING
                 && System.nanoTime() < deadline) {
-            Thread.sleep(5);
+            if (!future.domain().dispatchOne()) Thread.sleep(5);
         }
         if (future.state() == ProtosFutureValue.State.PENDING) {
             throw new AssertionError("timed out waiting for Future");

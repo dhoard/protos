@@ -152,7 +152,8 @@ final class ProtosNioTcpConnectionWriteTest {
     }
     private static void awaitTerminal(ProtosFutureValue f)throws Exception {
         long d=System.nanoTime()+WAIT.toNanos();
-        while(f.state()==ProtosFutureValue.State.PENDING&&System.nanoTime()<d)Thread.sleep(5);
+        while(f.state()==ProtosFutureValue.State.PENDING&&System.nanoTime()<d)
+            if (!f.domain().dispatchOne()) Thread.sleep(5);
         if(f.state()==ProtosFutureValue.State.PENDING)throw new AssertionError("timed out waiting for Future");
     }
 

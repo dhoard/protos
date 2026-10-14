@@ -17,7 +17,11 @@
 
 package com.guillermomolina.protos.runtime;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 
 /** D047/PLAT003 host-neutral asynchronous Network.connectTcp acquisition flow. */
 public final class ProtosNetworkConnectFlow {
@@ -30,7 +34,7 @@ public final class ProtosNetworkConnectFlow {
     public interface ConnectCompletion {
         void succeeded(
                 Object resourceState,
-                ProtosObjectValue localEndpoint,
+                ProtosHostIpEndpoint localEndpoint,
                 ProtosTcpConnectionFlow.Backend connectionBackend,
                 Runnable releaseIfUntransferred);
 
@@ -43,7 +47,7 @@ public final class ProtosNetworkConnectFlow {
      */
     @FunctionalInterface
     public interface Backend {
-        Cancellation connect(ProtosObjectValue endpoint, ConnectCompletion completion);
+        Cancellation connect(ProtosHostIpEndpoint endpoint, ConnectCompletion completion);
     }
 
     /** Materializes one acquired backend descriptor into the standard live capability. */
@@ -53,7 +57,7 @@ public final class ProtosNetworkConnectFlow {
                 ProtosActivation activation,
                 ProtosObjectValue requestedEndpoint,
                 Object resourceState,
-                ProtosObjectValue localEndpoint,
+                ProtosHostIpEndpoint localEndpoint,
                 ProtosTcpConnectionFlow.Backend connectionBackend);
     }
 
@@ -82,9 +86,12 @@ public final class ProtosNetworkConnectFlow {
 
     /** Starts one independent acquisition after all caller-visible endpoint validation has completed. */
     public ProtosFutureValue connect(
-            ProtosActivation activation, ProtosObjectValue requestedEndpoint) {
+            ProtosActivation activation,
+            ProtosObjectValue requestedEndpoint,
+            ProtosHostIpEndpoint hostEndpoint) {
         Objects.requireNonNull(activation, "activation");
         Objects.requireNonNull(requestedEndpoint, "requestedEndpoint");
+        Objects.requireNonNull(hostEndpoint, "hostEndpoint");
         requireDomain(activation);
 
         ProtosIoOperation operation = operationLifecycle.beginOperation(activation);
@@ -92,63 +99,82 @@ public final class ProtosNetworkConnectFlow {
             return operation.future();
         }
 
-        CancellationBridge cancellationBridge = new CancellationBridge();
-        operation.onCancellation(cancellationBridge::requestCancellation);
+        Invocation invocation = new Invocation(operation);
+        operation.onCancellation(invocation::requestCancellation);
 
         ConnectCompletion completion =
                 new ConnectCompletion() {
                     @Override
                     public void succeeded(
                             Object resourceState,
-                            ProtosObjectValue localEndpoint,
+                            ProtosHostIpEndpoint localEndpoint,
                             ProtosTcpConnectionFlow.Backend connectionBackend,
                             Runnable releaseIfUntransferred) {
                         Objects.requireNonNull(
                                 releaseIfUntransferred, "releaseIfUntransferred");
-
-                        if (!operation.commit()) {
+                        if (!operation.committed() && !operation.commit()) {
                             releaseSafely(releaseIfUntransferred);
                             return;
                         }
-
-                        ProtosTcpConnectionValue connection;
-                        try {
-                            connection =
-                                    Objects.requireNonNull(
-                                            materializer.materialize(
-                                                    activation,
-                                                    requestedEndpoint,
-                                                    Objects.requireNonNull(
-                                                            resourceState, "resourceState"),
-                                                    Objects.requireNonNull(
-                                                            localEndpoint, "localEndpoint"),
-                                                    Objects.requireNonNull(
-                                                            connectionBackend,
-                                                            "connectionBackend")),
-                                            "materialized connection");
-                        } catch (RuntimeException invalidBackendDescriptor) {
-                            releaseSafely(releaseIfUntransferred);
-                            operation.fail(ioError(activation));
-                            return;
-                        }
-
-                        if (!operation.resolve(connection)) {
-                            releaseSafely(releaseIfUntransferred);
-                        }
+                        invocation.deliver(
+                                () -> publish(
+                                        activation, requestedEndpoint, operation,
+                                        resourceState, localEndpoint,
+                                        connectionBackend, releaseIfUntransferred),
+                                releaseIfUntransferred);
                     }
 
                     @Override
                     public void failed() {
-                        operation.fail(ioError(activation));
+                        invocation.deliver(
+                                () -> operation.fail(ioError(activation)), () -> {});
                     }
                 };
 
+        invocation.enterBackendCall();
         try {
-            cancellationBridge.install(backend.connect(requestedEndpoint, completion));
+            invocation.install(backend.connect(hostEndpoint, completion));
         } catch (RuntimeException backendFailure) {
             operation.fail(ioError(activation));
+        } finally {
+            invocation.exitBackendCall();
         }
         return operation.future();
+    }
+
+    /** Actor-owned guest construction and Future result publication. */
+    private boolean publish(
+            ProtosActivation activation,
+            ProtosObjectValue requestedEndpoint,
+            ProtosIoOperation operation,
+            Object resourceState,
+            ProtosHostIpEndpoint localEndpoint,
+            ProtosTcpConnectionFlow.Backend connectionBackend,
+            Runnable releaseIfUntransferred) {
+        if (operation.terminal()) {
+            releaseSafely(releaseIfUntransferred);
+            return false;
+        }
+
+        ProtosTcpConnectionValue connection;
+        try {
+            connection = Objects.requireNonNull(
+                    materializer.materialize(
+                            activation, requestedEndpoint,
+                            Objects.requireNonNull(resourceState, "resourceState"),
+                            Objects.requireNonNull(localEndpoint, "localEndpoint"),
+                            Objects.requireNonNull(connectionBackend, "connectionBackend")),
+                    "materialized connection");
+        } catch (RuntimeException invalidHostResult) {
+            releaseSafely(releaseIfUntransferred);
+            return operation.fail(ioError(activation));
+        }
+
+        if (!operation.resolve(connection)) {
+            releaseSafely(releaseIfUntransferred);
+            return false;
+        }
+        return true;
     }
 
     private void requireDomain(ProtosActivation activation) {
@@ -171,19 +197,72 @@ public final class ProtosNetworkConnectFlow {
         }
     }
 
-    /** Handles Future cancellation racing backend cancellation-handle registration. */
-    private static final class CancellationBridge {
+    /** Owns cancellation, targeted handoff and pending host custody. */
+    private final class Invocation {
+        private final ProtosIoOperation operation;
+        private final List<AtomicReference<Runnable>> pending = new ArrayList<>();
+        private volatile Thread synchronousCaller;
         private Cancellation cancellation;
         private boolean cancellationRequested;
 
+        Invocation(ProtosIoOperation operation) {
+            this.operation = operation;
+        }
+
+        void enterBackendCall() {
+            synchronousCaller = Thread.currentThread();
+        }
+
+        void exitBackendCall() {
+            synchronousCaller = null;
+        }
+
+        void deliver(BooleanSupplier action, Runnable releaseOnDrop) {
+            if (synchronousCaller == Thread.currentThread()) {
+                action.getAsBoolean();
+                return;
+            }
+
+            AtomicReference<Runnable> delivery =
+                    new AtomicReference<>(releaseOnDrop);
+            synchronized (this) {
+                pending.add(delivery);
+            }
+            try {
+                domain.enqueueTargetedFutureCompletionForRuntime(
+                        operation.future(),
+                        () -> claim(delivery) && action.getAsBoolean());
+            } catch (IllegalStateException terminatingActor) {
+                if (claim(delivery)) releaseSafely(releaseOnDrop);
+            }
+        }
+
+        private boolean claim(AtomicReference<Runnable> delivery) {
+            boolean claimed = delivery.getAndSet(null) != null;
+            synchronized (this) {
+                pending.remove(delivery);
+            }
+            return claimed;
+        }
+
         void requestCancellation() {
+            boolean terminating = domain.actorTerminationBegunForRuntime();
             Cancellation toCancel;
+            List<AtomicReference<Runnable>> dropped = List.of();
+
             synchronized (this) {
                 cancellationRequested = true;
                 toCancel = cancellation;
+                if (terminating) {
+                    dropped = List.copyOf(pending);
+                    pending.clear();
+                }
             }
-            if (toCancel != null) {
-                toCancel.cancel();
+
+            if (toCancel != null) toCancel.cancel();
+            for (AtomicReference<Runnable> delivery : dropped) {
+                Runnable release = delivery.getAndSet(null);
+                if (release != null) releaseSafely(release);
             }
         }
 
@@ -193,9 +272,8 @@ public final class ProtosNetworkConnectFlow {
                 cancellation = installed;
                 cancelNow = cancellationRequested && installed != null;
             }
-            if (cancelNow) {
-                installed.cancel();
-            }
+            if (cancelNow) installed.cancel();
         }
     }
+
 }

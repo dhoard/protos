@@ -29,6 +29,8 @@ import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosHostIpEndpoint;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkConnectFlow;
@@ -61,8 +63,9 @@ final class ProtosTcpConnectionIntegratedConformanceTest {
         ProtosObjectValue local = endpoint(x.prelude, x.activation, 0x7f000001L, 41000);
         AtomicInteger release = new AtomicInteger();
         x.backend.invocations.get(0).completion.succeeded(
-                new Object(), local, new NoOpConnectionBackend(), release::incrementAndGet);
+                new Object(), host(local), new NoOpConnectionBackend(), release::incrementAndGet);
 
+        assertTrue(x.activation.executionDomain().dispatchOne());
         ProtosTcpConnectionValue connection =
                 assertInstanceOf(ProtosTcpConnectionValue.class, future.resolvedValue().orElseThrow());
         assertSame(x.prelude.tcpConnectionPrototypeForRuntime(), connection.parent().orElseThrow());
@@ -127,7 +130,7 @@ final class ProtosTcpConnectionIntegratedConformanceTest {
         AtomicInteger release = new AtomicInteger();
         invocation.completion.succeeded(
                 new Object(),
-                endpoint(x.prelude, x.activation, 0x7f000001L, 41001),
+                host(endpoint(x.prelude, x.activation, 0x7f000001L, 41001)),
                 new NoOpConnectionBackend(),
                 release::incrementAndGet);
         assertEquals(1, release.get());
@@ -162,6 +165,19 @@ final class ProtosTcpConnectionIntegratedConformanceTest {
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         endpointFactory, List.of(address, integer(port)), activation);
+    }
+
+    private static ProtosHostIpEndpoint host(ProtosObjectValue endpoint) {
+        ProtosObjectValue address =
+                (ProtosObjectValue) endpoint.readLocalSlot("address").orElseThrow();
+        int version = ProtosNumericValueSupport.exactInt(
+                address.readLocalSlot("version").orElseThrow());
+        int port = ProtosNumericValueSupport.exactInt(
+                endpoint.readLocalSlot("port").orElseThrow());
+        byte[] bytes = ProtosNumericValueSupport.unsignedBigEndianOrNull(
+                address.readLocalSlot("bits").orElseThrow(),
+                version == 4 ? 4 : 16);
+        return new ProtosHostIpEndpoint(version, bytes, port);
     }
 
     private static ProtosIntegerValue integer(long value) {
@@ -211,7 +227,7 @@ final class ProtosTcpConnectionIntegratedConformanceTest {
 
         @Override
         public ProtosNetworkConnectFlow.Cancellation connect(
-                ProtosObjectValue endpoint, ProtosNetworkConnectFlow.ConnectCompletion completion) {
+                ProtosHostIpEndpoint endpoint, ProtosNetworkConnectFlow.ConnectCompletion completion) {
             Invocation invocation = new Invocation(endpoint, completion);
             invocations.add(invocation);
             return invocation.cancelCount::incrementAndGet;
@@ -219,12 +235,12 @@ final class ProtosTcpConnectionIntegratedConformanceTest {
     }
 
     private static final class Invocation {
-        private final ProtosObjectValue endpoint;
+        private final ProtosHostIpEndpoint endpoint;
         private final ProtosNetworkConnectFlow.ConnectCompletion completion;
         private final AtomicInteger cancelCount = new AtomicInteger();
 
         private Invocation(
-                ProtosObjectValue endpoint,
+                ProtosHostIpEndpoint endpoint,
                 ProtosNetworkConnectFlow.ConnectCompletion completion) {
             this.endpoint = endpoint;
             this.completion = completion;

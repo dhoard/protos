@@ -226,7 +226,7 @@ final class ProtosNioTcpConnectionReadTest {
         long deadline = System.nanoTime() + WAIT.toNanos();
         while (future.state() == ProtosFutureValue.State.PENDING
                 && System.nanoTime() < deadline) {
-            Thread.sleep(5);
+            if (!future.domain().dispatchOne()) Thread.sleep(5);
         }
         if (future.state() == ProtosFutureValue.State.PENDING) {
             throw new AssertionError("timed out waiting for Future terminal state");

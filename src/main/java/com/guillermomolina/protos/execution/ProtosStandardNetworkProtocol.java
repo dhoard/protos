@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosHostIpEndpoint;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkConnectFlow;
 import com.guillermomolina.protos.runtime.ProtosNetworkListenFlow;
@@ -85,6 +86,24 @@ public final class ProtosStandardNetworkProtocol {
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
 
+        // Canonical recognition has completed before any host acquisition.
+        ProtosHostIpEndpoint hostEndpoint;
+        try {
+            ProtosObjectValue address =
+                    (ProtosObjectValue) endpoint.readLocalSlot("address").orElseThrow();
+            int version = boundedFieldOrInvalid(
+                    address.readLocalSlot("version").orElseThrow());
+            int port = boundedFieldOrInvalid(
+                    endpoint.readLocalSlot("port").orElseThrow());
+            byte[] octets = ProtosNumericValueSupport.unsignedBigEndianOrNull(
+                    address.readLocalSlot("bits").orElseThrow(),
+                    version == 4 ? 4 : 16);
+            hostEndpoint = new ProtosHostIpEndpoint(version, octets, port);
+        } catch (RuntimeException invalid) {
+            return failedFuture(
+                    activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
+        }
+
         Object target = network.authorityTargetForRuntime();
         if (!(target instanceof ProtosNetworkConnectFlow.Backend backend)) {
             return failedFuture(activation, ProtosCoreErrors.StandardError.I_O_ERROR);
@@ -107,7 +126,7 @@ public final class ProtosStandardNetworkProtocol {
                                         resourceState,
                                         localEndpoint,
                                         connectionBackend));
-        return flow.connect(activation, endpoint);
+        return flow.connect(activation, endpoint, hostEndpoint);
     }
 
     private record ListenRequestSlots(
@@ -220,15 +239,38 @@ public final class ProtosStandardNetworkProtocol {
             ProtosActivation activation,
             ProtosObjectValue requestedEndpoint,
             Object resourceState,
-            ProtosObjectValue localEndpoint,
+            ProtosHostIpEndpoint localDescriptor,
             com.guillermomolina.protos.runtime.ProtosTcpConnectionFlow.Backend connectionBackend) {
+        ProtosObjectValue requestedAddress = (ProtosObjectValue)
+                requestedEndpoint.readLocalSlot("address").orElseThrow();
+        int requestedVersion = boundedFieldOrInvalid(
+                requestedAddress.readLocalSlot("version").orElseThrow());
+        if (localDescriptor.version() != requestedVersion)
+            throw new IllegalArgumentException("local IP version changed");
+
+        // Private semantic materialization mirrors the canonical source
+        // constructor without invoking source closures inside a Task.
+        ProtosObjectValue localAddress =
+                new ProtosObjectValue(prelude.ipAddressPrototypeForRuntime());
+        localAddress.createLocalSlot(
+                "version", ProtosNumericValueSupport.integer(localDescriptor.version()));
+        localAddress.createLocalSlot(
+                "bits", ProtosNumericValueSupport.integerFromUnsignedBigEndian(
+                        localDescriptor.octets(), prelude));
+        localAddress.freeze();
+
+        ProtosObjectValue localEndpoint =
+                new ProtosObjectValue(prelude.ipEndpointPrototypeForRuntime());
+        localEndpoint.createLocalSlot("address", localAddress);
+        localEndpoint.createLocalSlot(
+                "port", ProtosNumericValueSupport.integer(localDescriptor.port()));
+        localEndpoint.freeze();
+
         if (!ProtosStandardIpEndpointProtocol.recognizesValue(
                 localEndpoint,
                 prelude.ipEndpointPrototypeForRuntime(),
-                prelude.ipAddressPrototypeForRuntime())) {
-            throw new IllegalArgumentException(
-                    "backend local endpoint is not a recognized IpEndpoint");
-        }
+                prelude.ipAddressPrototypeForRuntime()))
+            throw new IllegalArgumentException("invalid materialized endpoint");
         return new ProtosTcpConnectionValue(
                 prelude,
                 resourceState,

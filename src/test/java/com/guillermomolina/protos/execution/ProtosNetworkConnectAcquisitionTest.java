@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -27,6 +28,8 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosHostIpEndpoint;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkConnectFlow;
@@ -55,18 +58,24 @@ final class ProtosNetworkConnectAcquisitionTest {
         assertEquals(2, x.backend.invocations.size());
         assertEquals(ProtosFutureValue.State.PENDING, first.state());
         assertEquals(ProtosFutureValue.State.PENDING, second.state());
-        assertSame(remoteA, x.backend.invocations.get(0).endpoint);
-        assertSame(remoteB, x.backend.invocations.get(1).endpoint);
+        assertEquals(4, x.backend.invocations.get(0).endpoint.version());
+        assertEquals(443, x.backend.invocations.get(0).endpoint.port());
+        assertArrayEquals(new byte[] {1, 1, 1, 1},
+                x.backend.invocations.get(0).endpoint.octets());
+        assertArrayEquals(new byte[] {8, 8, 8, 8},
+                x.backend.invocations.get(1).endpoint.octets());
 
         ProtosObjectValue localB = endpoint(x.prelude, x.activation, 0x7f000001L, 41001);
         ProtosObjectValue localA = endpoint(x.prelude, x.activation, 0x7f000001L, 41000);
         AtomicInteger releaseA = new AtomicInteger();
         AtomicInteger releaseB = new AtomicInteger();
         x.backend.invocations.get(1).completion.succeeded(
-                new Object(), localB, new NoOpConnectionBackend(), releaseB::incrementAndGet);
+                new Object(), host(localB), new NoOpConnectionBackend(), releaseB::incrementAndGet);
         x.backend.invocations.get(0).completion.succeeded(
-                new Object(), localA, new NoOpConnectionBackend(), releaseA::incrementAndGet);
+                new Object(), host(localA), new NoOpConnectionBackend(), releaseA::incrementAndGet);
 
+        assertTrue(x.activation.executionDomain().dispatchOne());
+        assertTrue(x.activation.executionDomain().dispatchOne());
         ProtosTcpConnectionValue connectionA =
                 assertInstanceOf(
                         ProtosTcpConnectionValue.class, first.resolvedValue().orElseThrow());
@@ -152,7 +161,7 @@ final class ProtosNetworkConnectAcquisitionTest {
         AtomicInteger lateRelease = new AtomicInteger();
         cancelledInvocation.completion.succeeded(
                 new Object(),
-                endpoint(x.prelude, x.activation, 0x7f000001L, 41000),
+                host(endpoint(x.prelude, x.activation, 0x7f000001L, 41000)),
                 new NoOpConnectionBackend(),
                 lateRelease::incrementAndGet);
         assertEquals(1, lateRelease.get());
@@ -163,9 +172,10 @@ final class ProtosNetworkConnectAcquisitionTest {
         AtomicInteger firstRelease = new AtomicInteger();
         completedInvocation.completion.succeeded(
                 new Object(),
-                endpoint(x.prelude, x.activation, 0x7f000001L, 41001),
+                host(endpoint(x.prelude, x.activation, 0x7f000001L, 41001)),
                 new NoOpConnectionBackend(),
                 firstRelease::incrementAndGet);
+        assertTrue(x.activation.executionDomain().dispatchOne());
         assertEquals(ProtosFutureValue.State.RESOLVED, completed.state());
         assertFalse(completed.cancelRequest());
         assertEquals(0, firstRelease.get());
@@ -173,10 +183,58 @@ final class ProtosNetworkConnectAcquisitionTest {
         AtomicInteger duplicateRelease = new AtomicInteger();
         completedInvocation.completion.succeeded(
                 new Object(),
-                endpoint(x.prelude, x.activation, 0x7f000001L, 41002),
+                host(endpoint(x.prelude, x.activation, 0x7f000001L, 41002)),
                 new NoOpConnectionBackend(),
                 duplicateRelease::incrementAndGet);
         assertEquals(1, duplicateRelease.get());
+    }
+
+    @Test
+    void asynchronousCompletionRunsOnlyWhenTheOwningActorDispatches() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = connect(x,
+                endpoint(x.prelude, x.activation, 0x01010101L, 443));
+        AtomicInteger released = new AtomicInteger();
+        ProtosNetworkConnectFlow.ConnectCompletion completion =
+                x.backend.invocations.get(0).completion;
+
+        java.util.concurrent.CompletableFuture.runAsync(
+                () -> completion.succeeded(
+                        new Object(),
+                        new ProtosHostIpEndpoint(
+                                4, new byte[] {127, 0, 0, 1}, 41000),
+                        new NoOpConnectionBackend(),
+                        released::incrementAndGet)).get();
+
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertTrue(x.activation.executionDomain().dispatchOne());
+        assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
+        assertEquals(0, released.get());
+    }
+
+    @Test
+    void actorTerminationDropsQueuedUntransferredConnectionExactlyOnce()
+            throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = connect(x,
+                endpoint(x.prelude, x.activation, 0x01010101L, 443));
+        AtomicInteger released = new AtomicInteger();
+        ProtosNetworkConnectFlow.ConnectCompletion completion =
+                x.backend.invocations.get(0).completion;
+
+        java.util.concurrent.CompletableFuture.runAsync(
+                () -> completion.succeeded(
+                        new Object(),
+                        new ProtosHostIpEndpoint(
+                                4, new byte[] {127, 0, 0, 1}, 41000),
+                        new NoOpConnectionBackend(),
+                        released::incrementAndGet)).get();
+
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        x.activation.executionDomain().actorTerminated();
+        assertEquals(1, released.get());
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertFalse(x.activation.executionDomain().dispatchOne());
     }
 
     @Test
@@ -209,13 +267,14 @@ final class ProtosNetworkConnectAcquisitionTest {
         ProtosObjectValue remote = endpoint(x.prelude, x.activation, 0x01010101L, 443);
         ProtosFutureValue failed = connect(x, remote);
         x.backend.invocations.get(0).completion.failed();
+        assertTrue(x.activation.executionDomain().dispatchOne());
         assertFailedAs(failed, x.prelude, "IOError");
 
         ProtosFutureValue malformed = connect(x, remote);
         AtomicInteger release = new AtomicInteger();
-        ProtosObjectValue invalidLocal = new ProtosObjectValue(ProtosObjectValue.rootObject());
         x.backend.invocations.get(1).completion.succeeded(
-                new Object(), invalidLocal, new NoOpConnectionBackend(), release::incrementAndGet);
+                new Object(), null, new NoOpConnectionBackend(), release::incrementAndGet);
+        assertTrue(x.activation.executionDomain().dispatchOne());
         assertFailedAs(malformed, x.prelude, "IOError");
         assertEquals(1, release.get());
 
@@ -244,7 +303,7 @@ final class ProtosNetworkConnectAcquisitionTest {
         AtomicInteger release = new AtomicInteger();
         invocation.completion.succeeded(
                 new Object(),
-                lateLocal,
+                host(lateLocal),
                 new NoOpConnectionBackend(),
                 release::incrementAndGet);
         assertEquals(1, release.get());
@@ -292,6 +351,19 @@ final class ProtosNetworkConnectAcquisitionTest {
                         activation);
     }
 
+    private static ProtosHostIpEndpoint host(ProtosObjectValue endpoint) {
+        ProtosObjectValue address =
+                (ProtosObjectValue) endpoint.readLocalSlot("address").orElseThrow();
+        int version = ProtosNumericValueSupport.exactInt(
+                address.readLocalSlot("version").orElseThrow());
+        int port = ProtosNumericValueSupport.exactInt(
+                endpoint.readLocalSlot("port").orElseThrow());
+        byte[] bytes = ProtosNumericValueSupport.unsignedBigEndianOrNull(
+                address.readLocalSlot("bits").orElseThrow(),
+                version == 4 ? 4 : 16);
+        return new ProtosHostIpEndpoint(version, bytes, port);
+    }
+
     private static ProtosIntegerValue integer(long value) {
         return new ProtosIntegerValue(value);
     }
@@ -315,7 +387,7 @@ final class ProtosNetworkConnectAcquisitionTest {
 
         @Override
         public ProtosNetworkConnectFlow.Cancellation connect(
-                ProtosObjectValue endpoint, ProtosNetworkConnectFlow.ConnectCompletion completion) {
+                ProtosHostIpEndpoint endpoint, ProtosNetworkConnectFlow.ConnectCompletion completion) {
             Invocation invocation = new Invocation(endpoint, completion);
             invocations.add(invocation);
             return invocation.cancelCount::incrementAndGet;
@@ -323,12 +395,12 @@ final class ProtosNetworkConnectAcquisitionTest {
     }
 
     private static final class Invocation {
-        private final ProtosObjectValue endpoint;
+        private final ProtosHostIpEndpoint endpoint;
         private final ProtosNetworkConnectFlow.ConnectCompletion completion;
         private final AtomicInteger cancelCount = new AtomicInteger();
 
         private Invocation(
-                ProtosObjectValue endpoint,
+                ProtosHostIpEndpoint endpoint,
                 ProtosNetworkConnectFlow.ConnectCompletion completion) {
             this.endpoint = endpoint;
             this.completion = completion;
