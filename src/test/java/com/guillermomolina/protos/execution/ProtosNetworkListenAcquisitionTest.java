@@ -18,11 +18,18 @@ final class ProtosNetworkListenAcquisitionTest {
         ProtosObjectValue request=request(integer(4),address,integer(51000));
         ProtosFutureValue future=listen(x,request); assertEquals(1,x.backend.invocations.size());
         ListenInvocation invocation=x.backend.invocations.get(0);
-        assertEquals(4,invocation.request.ipVersion()); assertSame(address,invocation.request.addressConstraint()); assertEquals(51000, invocation.request.portConstraint());
+        assertEquals(4,invocation.request.ipVersion());
+        assertArrayEquals(new byte[] {127, 0, 0, 1}, invocation.request.addressConstraint());
+        assertEquals(51000, invocation.request.portConstraint());
+        byte[] readback = invocation.request.addressConstraint();
+        readback[0] = 0;
+        assertArrayEquals(new byte[] {127, 0, 0, 1}, invocation.request.addressConstraint());
         request.createLocalSlot("afterDispatch",integer(1));
         assertEquals(51000, invocation.request.portConstraint());
         RecordingListenerBackend listenerBackend=new RecordingListenerBackend(); AtomicInteger release=new AtomicInteger();
         invocation.completion.succeeded(new Object(),51000,listenerBackend,release::incrementAndGet);
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertTrue(future.domain().dispatchOne());
         ProtosTcpListenerValue listener=assertInstanceOf(ProtosTcpListenerValue.class,future.resolvedValue().orElseThrow());
         assertEquals(0,release.get()); assertTrue(listener.hasAcceptForRuntime());
         assertEquals(String.valueOf("51000"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(ProtosInvocation.invokeMessage(listener,"localPort",List.of(),x.activation)));
@@ -35,6 +42,8 @@ final class ProtosNetworkListenAcquisitionTest {
         ProtosFutureValue future=listen(x,request); ListenInvocation invocation=x.backend.invocations.get(0);
         assertEquals(6,invocation.request.ipVersion()); assertNull(invocation.request.addressConstraint()); assertNull(invocation.request.portConstraint());
         invocation.completion.succeeded(new Object(),54000,new RecordingListenerBackend(),()->{});
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertTrue(future.domain().dispatchOne());
         ProtosTcpListenerValue listener=assertInstanceOf(ProtosTcpListenerValue.class,future.resolvedValue().orElseThrow());
         assertEquals(54000,listener.localPortForRuntime());
     }
@@ -71,8 +80,9 @@ final class ProtosNetworkListenAcquisitionTest {
         listen(x,request(integer(6),address,integer(1))); listen(x,request(integer(4),ProtosNullValue.INSTANCE,integer(65535)));
         assertEquals(2,x.backend.invocations.size());
         ProtosNetworkListenFlow.ListenRequest first=x.backend.invocations.get(0).request;
-        assertEquals(6,first.ipVersion()); assertEquals(1,first.portConstraint()); assertSame(address,first.addressConstraint());
-        assertEquals(String.valueOf(String.valueOf(high)), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(first.addressConstraint().readLocalSlot("bits").orElseThrow()));
+        assertEquals(6,first.ipVersion()); assertEquals(1,first.portConstraint());
+        assertEquals(high, new BigInteger(1, first.addressConstraint()));
+        assertEquals(16, first.addressConstraint().length);
         ProtosNetworkListenFlow.ListenRequest second=x.backend.invocations.get(1).request;
         assertEquals(4,second.ipVersion()); assertEquals(65535,second.portConstraint());
     }
@@ -95,8 +105,49 @@ final class ProtosNetworkListenAcquisitionTest {
         ProtosFutureValue cancelled=listen(x,req); ListenInvocation ci=x.backend.invocations.get(0); assertTrue(cancelled.cancelRequest()); assertEquals(1,ci.cancels.get());
         AtomicInteger lateRelease=new AtomicInteger(); ci.completion.succeeded(new Object(),51000,new RecordingListenerBackend(),lateRelease::incrementAndGet); assertEquals(1,lateRelease.get());
         ProtosFutureValue completed=listen(x,req); ListenInvocation ok=x.backend.invocations.get(1); AtomicInteger heldRelease=new AtomicInteger();
-        ok.completion.succeeded(new Object(),51000,new RecordingListenerBackend(),heldRelease::incrementAndGet); assertEquals(ProtosFutureValue.State.RESOLVED,completed.state()); assertEquals(0,heldRelease.get());
+        ok.completion.succeeded(new Object(),51000,new RecordingListenerBackend(),heldRelease::incrementAndGet);
+        assertEquals(ProtosFutureValue.State.PENDING, completed.state());
+        assertTrue(completed.domain().dispatchOne());
+        assertEquals(ProtosFutureValue.State.RESOLVED,completed.state()); assertEquals(0,heldRelease.get());
         AtomicInteger duplicateRelease=new AtomicInteger(); ok.completion.succeeded(new Object(),51000,new RecordingListenerBackend(),duplicateRelease::incrementAndGet); assertEquals(1,duplicateRelease.get());
+    }
+
+    @Test void asynchronousListenCompletionRequiresOwningActorDispatch() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = listen(
+                x, request(integer(4), ProtosNullValue.INSTANCE, integer(51000)));
+        ListenInvocation invocation = x.backend.invocations.get(0);
+        AtomicInteger released = new AtomicInteger();
+
+        java.util.concurrent.CompletableFuture.runAsync(
+                () -> invocation.completion.succeeded(
+                        new Object(), 51000, new RecordingListenerBackend(),
+                        released::incrementAndGet)).get();
+
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertTrue(future.domain().dispatchOne());
+        assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
+        assertEquals(0, released.get());
+    }
+
+    @Test void actorTerminationDropsQueuedListenerCustodyExactlyOnce()
+            throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = listen(
+                x, request(integer(4), ProtosNullValue.INSTANCE, integer(51000)));
+        ListenInvocation invocation = x.backend.invocations.get(0);
+        AtomicInteger released = new AtomicInteger();
+
+        java.util.concurrent.CompletableFuture.runAsync(
+                () -> invocation.completion.succeeded(
+                        new Object(), 51000, new RecordingListenerBackend(),
+                        released::incrementAndGet)).get();
+
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        future.domain().actorTerminated();
+        assertEquals(1, released.get());
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertFalse(future.domain().dispatchOne());
     }
 
     @Test void actorTerminationRacingCancellationRegistrationStillCancelsBackend() throws Exception {
@@ -109,9 +160,18 @@ final class ProtosNetworkListenAcquisitionTest {
 
     @Test void backendFailureMalformedDescriptorAndFixedPortMismatchMapToIoErrorWithCustody() throws Exception {
         Fixture x=fixture(); ProtosObjectValue req=request(integer(4),ProtosNullValue.INSTANCE,integer(51000));
-        ProtosFutureValue failed=listen(x,req); x.backend.invocations.get(0).completion.failed(); assertFailedAs(failed,x.prelude,"IOError");
-        ProtosFutureValue badPort=listen(x,req); AtomicInteger release1=new AtomicInteger(); x.backend.invocations.get(1).completion.succeeded(new Object(),0,new RecordingListenerBackend(),release1::incrementAndGet); assertFailedAs(badPort,x.prelude,"IOError"); assertEquals(1,release1.get());
-        ProtosFutureValue mismatch=listen(x,req); AtomicInteger release2=new AtomicInteger(); x.backend.invocations.get(2).completion.succeeded(new Object(),51001,new RecordingListenerBackend(),release2::incrementAndGet); assertFailedAs(mismatch,x.prelude,"IOError"); assertEquals(1,release2.get());
+        ProtosFutureValue failed=listen(x,req); x.backend.invocations.get(0).completion.failed();
+        assertEquals(ProtosFutureValue.State.PENDING, failed.state());
+        assertTrue(failed.domain().dispatchOne());
+        assertFailedAs(failed,x.prelude,"IOError");
+        ProtosFutureValue badPort=listen(x,req); AtomicInteger release1=new AtomicInteger(); x.backend.invocations.get(1).completion.succeeded(new Object(),0,new RecordingListenerBackend(),release1::incrementAndGet);
+        assertEquals(ProtosFutureValue.State.PENDING, badPort.state());
+        assertTrue(badPort.domain().dispatchOne());
+        assertFailedAs(badPort,x.prelude,"IOError"); assertEquals(1,release1.get());
+        ProtosFutureValue mismatch=listen(x,req); AtomicInteger release2=new AtomicInteger(); x.backend.invocations.get(2).completion.succeeded(new Object(),51001,new RecordingListenerBackend(),release2::incrementAndGet);
+        assertEquals(ProtosFutureValue.State.PENDING, mismatch.state());
+        assertTrue(mismatch.domain().dispatchOne());
+        assertFailedAs(mismatch,x.prelude,"IOError"); assertEquals(1,release2.get());
         ProtosNetworkListenFlow.Backend throwing=(request,completion)->{ throw new IllegalStateException("backend boom"); };
         ProtosNetworkCapabilityValue network=new ProtosNetworkCapabilityValue(x.prelude,throwing); assertFailedAs(future(network,"listenTcp",List.of(req),x.activation),x.prelude,"IOError");
     }

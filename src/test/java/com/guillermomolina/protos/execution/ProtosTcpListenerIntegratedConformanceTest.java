@@ -29,6 +29,8 @@ import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosHostIpEndpoint;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkListenFlow;
@@ -73,6 +75,8 @@ final class ProtosTcpListenerIntegratedConformanceTest {
                 51000,
                 listenerBackend,
                 listenerRelease::incrementAndGet);
+                assertEquals(ProtosFutureValue.State.PENDING, listen.state());
+                assertTrue(listen.domain().dispatchOne());
 
         ProtosTcpListenerValue listener =
                 assertInstanceOf(ProtosTcpListenerValue.class, listen.resolvedValue().orElseThrow());
@@ -112,9 +116,15 @@ final class ProtosTcpListenerIntegratedConformanceTest {
         AtomicInteger releaseA = new AtomicInteger();
         AtomicInteger releaseB = new AtomicInteger();
         listenerBackend.accepts.get(1).completion.succeeded(
-                new Object(), localB, remoteB, new NoOpConnectionBackend(), releaseB::incrementAndGet);
+                new Object(), host(localB), host(remoteB),
+                new NoOpConnectionBackend(), releaseB::incrementAndGet);
+                assertEquals(ProtosFutureValue.State.PENDING, second.state());
+                assertTrue(second.domain().dispatchOne());
         listenerBackend.accepts.get(0).completion.succeeded(
-                new Object(), localA, remoteA, new NoOpConnectionBackend(), releaseA::incrementAndGet);
+                new Object(), host(localA), host(remoteA),
+                new NoOpConnectionBackend(), releaseA::incrementAndGet);
+                assertEquals(ProtosFutureValue.State.PENDING, first.state());
+                assertTrue(first.domain().dispatchOne());
 
         ProtosTcpConnectionValue connectionA =
                 assertInstanceOf(ProtosTcpConnectionValue.class, first.resolvedValue().orElseThrow());
@@ -150,8 +160,8 @@ final class ProtosTcpListenerIntegratedConformanceTest {
         AtomicInteger lateRelease = new AtomicInteger();
         pendingInvocation.completion.succeeded(
                 new Object(),
-                endpoint(x, 0x7f000001L, 51000),
-                endpoint(x, 0x09090909L, 42003),
+                host(endpoint(x, 0x7f000001L, 51000)),
+                host(endpoint(x, 0x09090909L, 42003)),
                 new NoOpConnectionBackend(),
                 lateRelease::incrementAndGet);
         assertEquals(1, lateRelease.get());
@@ -231,6 +241,19 @@ final class ProtosTcpListenerIntegratedConformanceTest {
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         endpointFactory, List.of(address, integer(port)), x.activation);
+    }
+
+    private static ProtosHostIpEndpoint host(ProtosObjectValue endpoint) {
+        ProtosObjectValue address = (ProtosObjectValue)
+                endpoint.readLocalSlot("address").orElseThrow();
+        int version = ProtosNumericValueSupport.exactInt(
+                address.readLocalSlot("version").orElseThrow());
+        int port = ProtosNumericValueSupport.exactInt(
+                endpoint.readLocalSlot("port").orElseThrow());
+        byte[] bytes = ProtosNumericValueSupport.unsignedBigEndianOrNull(
+                address.readLocalSlot("bits").orElseThrow(),
+                version == 4 ? 4 : 16);
+        return new ProtosHostIpEndpoint(version, bytes, port);
     }
 
     private static ProtosIntegerValue integer(long value) {

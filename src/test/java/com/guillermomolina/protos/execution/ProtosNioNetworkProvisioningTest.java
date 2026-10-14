@@ -13,6 +13,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosHostIpEndpoint;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -157,8 +158,8 @@ final class ProtosNioNetworkProvisioningTest {
                         @Override
                         public void succeeded(
                                 Object resourceState,
-                                ProtosObjectValue localEndpoint,
-                                ProtosObjectValue remoteEndpoint,
+                                ProtosHostIpEndpoint localEndpoint,
+                                ProtosHostIpEndpoint remoteEndpoint,
                                 ProtosTcpConnectionFlow.Backend connectionBackend,
                                 Runnable releaseIfUntransferred) {
                             releaseIfUntransferred.run();

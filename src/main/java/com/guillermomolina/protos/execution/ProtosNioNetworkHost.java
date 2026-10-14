@@ -17,7 +17,6 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
 import java.net.Inet6Address;
@@ -49,32 +48,17 @@ final class ProtosNioNetworkHost implements AutoCloseable {
     ProtosNetworkCapabilityValue provision(ProtosPrelude prelude) {
         ProtosPrelude owningPrelude = Objects.requireNonNull(prelude, "prelude");
         // Throws IllegalStateException when the Prelude does not retain the canonical families.
-        ProtosObjectValue addressPrototype = owningPrelude.ipAddressPrototypeForRuntime();
-        ProtosObjectValue endpointPrototype = owningPrelude.ipEndpointPrototypeForRuntime();
-        return new ProtosNetworkCapabilityValue(
-                owningPrelude,
-                backend(
-                        addressPrototype,
-                        endpointPrototype,
-                        owningPrelude.bigIntegerPrototype()));
+        owningPrelude.ipAddressPrototypeForRuntime();
+        owningPrelude.ipEndpointPrototypeForRuntime();
+        return new ProtosNetworkCapabilityValue(owningPrelude, backend());
     }
 
-    /**
-     * One acquisition backend on this host's poller for the canonical IP families of one Prelude.
-     * Callers that own their capability value (such as the standard Polyglot embedding) use this
-     * directly so the capability can exist before any poller does.
-     */
-    ProtosNioNetworkBackend backend(
-            ProtosObjectValue addressPrototype,
-            ProtosObjectValue endpointPrototype,
-            ProtosObjectValue integerPrototype) {
+    /** Pure host networking backend, independent of the guest numeric hierarchy. */
+    ProtosNioNetworkBackend backend() {
         return new ProtosNioNetworkBackend(
                 poller,
                 ProtosNioNetworkHost::resolveIpv6,
-                Objects.requireNonNull(addressPrototype, "addressPrototype"),
-                Objects.requireNonNull(endpointPrototype, "endpointPrototype"),
-                ProtosNioNetworkHost::authorizedIpv6ListenAddresses,
-                Objects.requireNonNull(integerPrototype, "integerPrototype"));
+                ProtosNioNetworkHost::authorizedIpv6ListenAddresses);
     }
 
     ProtosNioHostIoPoller pollerForTesting() {

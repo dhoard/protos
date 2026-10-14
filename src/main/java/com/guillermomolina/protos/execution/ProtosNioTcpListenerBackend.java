@@ -16,8 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosHostIpEndpoint;
 import com.guillermomolina.protos.runtime.ProtosTcpListenerFlow;
 import java.io.IOException;
 import java.net.Inet4Address;
@@ -41,13 +40,6 @@ final class ProtosNioTcpListenerBackend
     private final ProtosNioHostIoPoller poller;
     private final int ipVersion;
     private final List<ServerSocketChannel> channels;
-    private final ProtosObjectValue addressPrototype;
-    /*
-     * I091: owner (the Prelude's BigInteger prototype, D197-C) of accepted address bits beyond
-     * the signed-64 range; see the network backend.
-     */
-    private final ProtosObjectValue integerPrototype;
-    private final ProtosObjectValue endpointPrototype;
     private final AtomicBoolean physicalClosed = new AtomicBoolean();
     // Poller-owned queue: cardinality is proportional only to admitted pending accepts.
     private final ArrayDeque<AcceptRequest> pendingAccepts = new ArrayDeque<>();
@@ -56,11 +48,7 @@ final class ProtosNioTcpListenerBackend
     ProtosNioTcpListenerBackend(
             ProtosNioHostIoPoller poller,
             int ipVersion,
-            List<ServerSocketChannel> channels,
-            ProtosObjectValue addressPrototype,
-            ProtosObjectValue endpointPrototype,
-            ProtosObjectValue integerPrototype) {
-        this.integerPrototype = integerPrototype;
+            List<ServerSocketChannel> channels) {
         this.poller = Objects.requireNonNull(poller, "poller");
         if (ipVersion != 4 && ipVersion != 6) {
             throw new IllegalArgumentException("listener IP version must be 4 or 6");
@@ -73,8 +61,6 @@ final class ProtosNioTcpListenerBackend
         for (ServerSocketChannel channel : this.channels) {
             Objects.requireNonNull(channel, "listener channel");
         }
-        this.addressPrototype = Objects.requireNonNull(addressPrototype, "addressPrototype");
-        this.endpointPrototype = Objects.requireNonNull(endpointPrototype, "endpointPrototype");
     }
 
     void attachKey(SelectionKey key) {
@@ -200,8 +186,8 @@ final class ProtosNioTcpListenerBackend
                     || !(remote instanceof InetSocketAddress remoteSocket)) {
                 throw new IOException("accepted TCP connection has non-IP endpoint");
             }
-            ProtosObjectValue localEndpoint = materializeEndpoint(localSocket);
-            ProtosObjectValue remoteEndpoint = materializeEndpoint(remoteSocket);
+            ProtosHostIpEndpoint localEndpoint = captureEndpoint(localSocket);
+            ProtosHostIpEndpoint remoteEndpoint = captureEndpoint(remoteSocket);
 
             connectionBackend = new ProtosNioTcpConnectionBackend(poller, accepted);
             SelectionKey connectionKey = poller.register(accepted, 0, connectionBackend);
@@ -225,28 +211,20 @@ final class ProtosNioTcpListenerBackend
         }
     }
 
-    private ProtosObjectValue materializeEndpoint(InetSocketAddress socket) throws IOException {
+    private ProtosHostIpEndpoint captureEndpoint(InetSocketAddress socket)
+            throws IOException {
         InetAddress address = socket.getAddress();
         byte[] bytes = address == null ? null : address.getAddress();
-        if (address == null || bytes == null || socket.getPort() <= 0) {
+        if (bytes == null || socket.getPort() <= 0) {
             throw new IOException("accepted TCP endpoint is incomplete");
         }
-        if ((ipVersion == 4 && (!(address instanceof Inet4Address) || bytes.length != 4))
-                || (ipVersion == 6 && (!(address instanceof Inet6Address) || bytes.length != 16))) {
-            throw new IOException("accepted TCP endpoint changed listener IP version");
+        if ((ipVersion == 4
+                        && (!(address instanceof Inet4Address) || bytes.length != 4))
+                || (ipVersion == 6
+                        && (!(address instanceof Inet6Address) || bytes.length != 16))) {
+            throw new IOException("accepted endpoint changed listener IP family");
         }
-
-        ProtosObjectValue logicalAddress = new ProtosObjectValue(addressPrototype);
-        logicalAddress.createLocalSlot("version", ProtosNumericValueSupport.integer(ipVersion));
-        logicalAddress.createLocalSlot(
-                "bits",
-                ProtosNumericValueSupport.integerFromUnsignedBigEndian(bytes, integerPrototype));
-        logicalAddress.freeze();
-
-        ProtosObjectValue endpoint = new ProtosObjectValue(endpointPrototype);
-        endpoint.createLocalSlot("address", logicalAddress);
-        endpoint.createLocalSlot("port", ProtosNumericValueSupport.integer(socket.getPort()));
-        return endpoint.freeze();
+        return new ProtosHostIpEndpoint(ipVersion, bytes, socket.getPort());
     }
 
     private void cancelAcceptOnPoller(AcceptRequest request) {
@@ -307,8 +285,8 @@ final class ProtosNioTcpListenerBackend
 
         private void reportSuccess(
                 Object resourceState,
-                ProtosObjectValue localEndpoint,
-                ProtosObjectValue remoteEndpoint,
+                ProtosHostIpEndpoint localEndpoint,
+                ProtosHostIpEndpoint remoteEndpoint,
                 ProtosNioTcpConnectionBackend connectionBackend,
                 Runnable releaseIfUntransferred) {
             if (!reported.compareAndSet(false, true)) {

@@ -23,17 +23,29 @@ public final class ProtosNetworkListenFlow {
     @FunctionalInterface
     public interface Cancellation { void cancel(); }
 
-    /** Immutable execution-time capture of the validated three-slot listen request. */
-    public record ListenRequest(int ipVersion, ProtosObjectValue addressConstraint, Integer portConstraint) {
+    /** Host-only capture: an absent address or port preserves listen-request null. */
+    public record ListenRequest(int ipVersion, byte[] addressConstraint, Integer portConstraint) {
         public ListenRequest {
             if (ipVersion != 4 && ipVersion != 6) {
                 throw new IllegalArgumentException("listen ipVersion must be 4 or 6");
+            }
+            if (addressConstraint != null) {
+                if (addressConstraint.length != (ipVersion == 4 ? 4 : 16)) {
+                    throw new IllegalArgumentException("invalid listen address octet width");
+                }
+                addressConstraint = addressConstraint.clone();
             }
             if (portConstraint != null
                     && (portConstraint < 1 || portConstraint > 65535)) {
                 throw new IllegalArgumentException("listen port constraint must be in 1..65535");
             }
         }
+
+        @Override
+        public byte[] addressConstraint() {
+            return addressConstraint == null ? null : addressConstraint.clone();
+        }
+
         public boolean hasAddressConstraint() { return addressConstraint != null; }
         public boolean hasPortConstraint() { return portConstraint != null; }
     }
@@ -94,8 +106,10 @@ public final class ProtosNetworkListenFlow {
         ProtosIoOperation operation = operationLifecycle.beginOperation(activation);
         if (!operation.future().isPending()) return operation.future();
 
-        CancellationBridge bridge = new CancellationBridge();
-        operation.onCancellation(bridge::requestCancellation);
+        ProtosNetworkAcquisitionInvocation invocation =
+                new ProtosNetworkAcquisitionInvocation(domain, operation);
+        operation.onCancellation(invocation::requestCancellation);
+
         ListenCompletion completion = new ListenCompletion() {
             @Override
             public void succeeded(
@@ -104,33 +118,49 @@ public final class ProtosNetworkListenFlow {
                     ProtosTcpListenerFlow.Backend listenerBackend,
                     Runnable releaseIfUntransferred) {
                 Objects.requireNonNull(releaseIfUntransferred, "releaseIfUntransferred");
-                if (!operation.commit()) {
+                if (!operation.committed() && !operation.commit()) {
                     releaseSafely(releaseIfUntransferred);
                     return;
                 }
-                ProtosTcpListenerValue listener;
-                try {
-                    listener = Objects.requireNonNull(
-                            materializer.materialize(
-                                    activation,
-                                    request,
-                                    Objects.requireNonNull(resourceState, "resourceState"),
-                                    localPort,
-                                    Objects.requireNonNull(listenerBackend, "listenerBackend")),
-                            "materialized listener");
-                } catch (RuntimeException invalidBackendDescriptor) {
+                invocation.deliver(() -> {
+                    if (operation.terminal()) {
+                        releaseSafely(releaseIfUntransferred);
+                        return false;
+                    }
+                    try {
+                        ProtosTcpListenerValue listener = Objects.requireNonNull(
+                                materializer.materialize(
+                                        activation, request,
+                                        Objects.requireNonNull(resourceState, "resourceState"),
+                                        localPort,
+                                        Objects.requireNonNull(listenerBackend, "listenerBackend")),
+                                "materialized listener");
+                        if (operation.resolve(listener)) return true;
+                    } catch (RuntimeException invalidHostResult) {
+                        releaseSafely(releaseIfUntransferred);
+                        return operation.fail(ioError(activation));
+                    }
                     releaseSafely(releaseIfUntransferred);
-                    operation.fail(ioError(activation));
-                    return;
-                }
-                if (!operation.resolve(listener)) releaseSafely(releaseIfUntransferred);
+                    return false;
+                }, releaseIfUntransferred);
             }
 
-            @Override public void failed() { operation.fail(ioError(activation)); }
+            @Override
+            public void failed() {
+                invocation.deliver(
+                        () -> operation.fail(ioError(activation)), () -> {});
+            }
         };
 
-        try { bridge.install(backend.listen(request, completion)); }
-        catch (RuntimeException backendFailure) { operation.fail(ioError(activation)); }
+        invocation.enterBackendCall();
+        try {
+            Cancellation cancellation = backend.listen(request, completion);
+            invocation.install(cancellation == null ? null : cancellation::cancel);
+        } catch (RuntimeException backendFailure) {
+            operation.fail(ioError(activation));
+        } finally {
+            invocation.exitBackendCall();
+        }
         return operation.future();
     }
 
@@ -149,18 +179,5 @@ public final class ProtosNetworkListenFlow {
         catch (RuntimeException ignored) { /* untransferred custody cannot create a second outcome */ }
     }
 
-    private static final class CancellationBridge {
-        private Cancellation cancellation;
-        private boolean cancellationRequested;
-        void requestCancellation() {
-            Cancellation toCancel;
-            synchronized (this) { cancellationRequested = true; toCancel = cancellation; }
-            if (toCancel != null) toCancel.cancel();
-        }
-        void install(Cancellation installed) {
-            boolean cancelNow;
-            synchronized (this) { cancellation = installed; cancelNow = cancellationRequested && installed != null; }
-            if (cancelNow) installed.cancel();
-        }
-    }
+
 }

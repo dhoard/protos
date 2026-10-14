@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosHostIpEndpoint;
 import com.guillermomolina.protos.runtime.ProtosNetworkConnectFlow;
 import com.guillermomolina.protos.runtime.ProtosNetworkListenFlow;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
 import java.util.Objects;
@@ -54,9 +53,6 @@ final class ProtosEmbeddedNetworkCustody
     private static final ProtosNetworkConnectFlow.Cancellation NO_CONNECT_CANCELLATION = () -> {};
     private static final ProtosNetworkListenFlow.Cancellation NO_LISTEN_CANCELLATION = () -> {};
 
-    private final ProtosObjectValue addressPrototype;
-    private final ProtosObjectValue integerPrototype;
-    private final ProtosObjectValue endpointPrototype;
     private final HostFactory hostFactory;
     /* Guarded by this. */
     private ProtosNioNetworkHost host;
@@ -71,9 +67,8 @@ final class ProtosEmbeddedNetworkCustody
     ProtosEmbeddedNetworkCustody(ProtosPrelude prelude, HostFactory hostFactory) {
         Objects.requireNonNull(prelude, "prelude");
         // Fails bootstrap explicitly when the Prelude does not retain the canonical families.
-        this.addressPrototype = prelude.ipAddressPrototypeForRuntime();
-        this.integerPrototype = prelude.bigIntegerPrototype();
-        this.endpointPrototype = prelude.ipEndpointPrototypeForRuntime();
+        prelude.ipAddressPrototypeForRuntime();
+        prelude.ipEndpointPrototypeForRuntime();
         this.hostFactory = Objects.requireNonNull(hostFactory, "hostFactory");
     }
 
@@ -122,8 +117,7 @@ final class ProtosEmbeddedNetworkCustody
             }
             host = opened;
             activations++;
-            backend = opened.backend(
-                    addressPrototype, endpointPrototype, integerPrototype);
+            backend = opened.backend();
         }
         return backend;
     }

@@ -158,20 +158,10 @@ final class ProtosNioTcpListenerBackendTest {
         try {
             ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
             ProtosActivation activation = prelude.newModuleActivation();
-            ProtosObjectValue addressPrototype =
-                    assertInstanceOf(
-                            ProtosObjectValue.class,
-                            prelude.ipAddressPrototypeForRuntime());
-            ProtosObjectValue endpointPrototype =
-                    assertInstanceOf(
-                            ProtosObjectValue.class,
-                            prelude.ipEndpointPrototypeForRuntime());
             ProtosNioNetworkBackend backend =
                     new ProtosNioNetworkBackend(
                             poller,
                             bytes -> Inet6Address.getByAddress(null, bytes, 0),
-                            addressPrototype,
-                            endpointPrototype,
                             listenerAddresses);
             return new Fixture(
                     poller,
@@ -280,7 +270,9 @@ final class ProtosNioTcpListenerBackendTest {
     private static void awaitTerminal(ProtosFutureValue future) throws Exception {
         long deadline = System.nanoTime() + WAIT.toNanos();
         while (future.state() == ProtosFutureValue.State.PENDING && System.nanoTime() < deadline) {
-            Thread.sleep(5);
+            if (!future.domain().dispatchOne()) {
+                Thread.sleep(5);
+            }
         }
         if (future.state() == ProtosFutureValue.State.PENDING) {
             throw new AssertionError("timed out waiting for Future");

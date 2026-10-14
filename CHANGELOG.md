@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.355-SNAPSHOT
+
+- `I093` (#873), slice B2: complete descriptor-only NIO listen/accept
+  and owning-Actor endpoint materialization.
+  - Capture optional IPv4/IPv6 listen-address constraints as immutable
+    network-order octets before entering the host backend, preserving
+    null address and ephemeral-port request semantics.
+  - Remove guest IP prototypes, numeric-family dependencies and guest
+    object construction from NIO listen/accept and host provisioning.
+  - Return accepted local and remote endpoints as immutable host
+    descriptors, materialized as canonical Protos values in the owning
+    Actor execution domain.
+  - Reuse targeted Actor completion and untransferred-resource custody
+    for asynchronous listener acquisition and accepted connections.
+  - Extend listen/accept validation, endpoint-copy isolation, cancellation,
+    Actor termination, NIO provisioning and lifecycle regression tests.
+
 ## 0.3.354-SNAPSHOT
 
 - `I093` (#873), slice B1: decouple TCP connect from Protos guest values

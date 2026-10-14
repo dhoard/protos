@@ -26,8 +26,8 @@ public final class ProtosTcpListenerFlow {
     public interface AcceptCompletion {
         void succeeded(
                 Object resourceState,
-                ProtosObjectValue localEndpoint,
-                ProtosObjectValue remoteEndpoint,
+                ProtosHostIpEndpoint localEndpoint,
+                ProtosHostIpEndpoint remoteEndpoint,
                 ProtosTcpConnectionFlow.Backend connectionBackend,
                 Runnable releaseIfUntransferred);
         void failed();
@@ -48,8 +48,8 @@ public final class ProtosTcpListenerFlow {
         ProtosTcpConnectionValue materialize(
                 ProtosActivation activation,
                 Object resourceState,
-                ProtosObjectValue localEndpoint,
-                ProtosObjectValue remoteEndpoint,
+                ProtosHostIpEndpoint localEndpoint,
+                ProtosHostIpEndpoint remoteEndpoint,
                 ProtosTcpConnectionFlow.Backend connectionBackend);
     }
 
@@ -89,39 +89,63 @@ public final class ProtosTcpListenerFlow {
         ProtosIoOperation operation=lifecycle.beginOperation(activation);
         if(!operation.future().isPending()) return operation.future();
 
-        CancellationBridge bridge=new CancellationBridge();
-        operation.onCancellation(bridge::requestCancellation);
-        AcceptCompletion completion=new AcceptCompletion(){
-            @Override public void succeeded(
+        ProtosNetworkAcquisitionInvocation invocation =
+                new ProtosNetworkAcquisitionInvocation(domain, operation);
+        operation.onCancellation(invocation::requestCancellation);
+
+        AcceptCompletion completion = new AcceptCompletion() {
+            @Override
+            public void succeeded(
                     Object resourceState,
-                    ProtosObjectValue localEndpoint,
-                    ProtosObjectValue remoteEndpoint,
+                    ProtosHostIpEndpoint localEndpoint,
+                    ProtosHostIpEndpoint remoteEndpoint,
                     ProtosTcpConnectionFlow.Backend connectionBackend,
                     Runnable releaseIfUntransferred) {
-                Objects.requireNonNull(releaseIfUntransferred,"releaseIfUntransferred");
-                if(!operation.commit()) { releaseSafely(releaseIfUntransferred); return; }
-                ProtosTcpConnectionValue connection;
-                try {
-                    connection=Objects.requireNonNull(
-                            resultMaterializer.materialize(
-                                    activation,
-                                    Objects.requireNonNull(resourceState,"resourceState"),
-                                    Objects.requireNonNull(localEndpoint,"localEndpoint"),
-                                    Objects.requireNonNull(remoteEndpoint,"remoteEndpoint"),
-                                    Objects.requireNonNull(connectionBackend,"connectionBackend")),
-                            "materialized accepted connection");
-                } catch(RuntimeException invalidBackendDescriptor) {
+                Objects.requireNonNull(releaseIfUntransferred, "releaseIfUntransferred");
+                if (!operation.committed() && !operation.commit()) {
                     releaseSafely(releaseIfUntransferred);
-                    operation.fail(ioError(activation));
                     return;
                 }
-                if(!operation.resolve(connection)) releaseSafely(releaseIfUntransferred);
+                invocation.deliver(() -> {
+                    if (operation.terminal()) {
+                        releaseSafely(releaseIfUntransferred);
+                        return false;
+                    }
+                    try {
+                        ProtosTcpConnectionValue connection = Objects.requireNonNull(
+                                resultMaterializer.materialize(
+                                        activation,
+                                        Objects.requireNonNull(resourceState, "resourceState"),
+                                        Objects.requireNonNull(localEndpoint, "localEndpoint"),
+                                        Objects.requireNonNull(remoteEndpoint, "remoteEndpoint"),
+                                        Objects.requireNonNull(connectionBackend, "connectionBackend")),
+                                "materialized accepted connection");
+                        if (operation.resolve(connection)) return true;
+                    } catch (RuntimeException invalidHostResult) {
+                        releaseSafely(releaseIfUntransferred);
+                        return operation.fail(ioError(activation));
+                    }
+                    releaseSafely(releaseIfUntransferred);
+                    return false;
+                }, releaseIfUntransferred);
             }
-            @Override public void failed() { operation.fail(ioError(activation)); }
+
+            @Override
+            public void failed() {
+                invocation.deliver(
+                        () -> operation.fail(ioError(activation)), () -> {});
+            }
         };
 
-        try { bridge.install(backend.accept(completion)); }
-        catch(RuntimeException backendFailure) { operation.fail(ioError(activation)); }
+        invocation.enterBackendCall();
+        try {
+            Cancellation cancellation = backend.accept(completion);
+            invocation.install(cancellation == null ? null : cancellation::cancel);
+        } catch (RuntimeException backendFailure) {
+            operation.fail(ioError(activation));
+        } finally {
+            invocation.exitBackendCall();
+        }
         return operation.future();
     }
 
@@ -157,18 +181,5 @@ public final class ProtosTcpListenerFlow {
         catch(RuntimeException ignored) { /* custody release cannot create a second portable outcome */ }
     }
 
-    private static final class CancellationBridge {
-        private Cancellation cancellation;
-        private boolean cancellationRequested;
-        void requestCancellation() {
-            Cancellation toCancel;
-            synchronized(this) { cancellationRequested=true; toCancel=cancellation; }
-            if(toCancel!=null) toCancel.cancel();
-        }
-        void install(Cancellation installed) {
-            boolean cancelNow;
-            synchronized(this) { cancellation=installed; cancelNow=cancellationRequested && installed!=null; }
-            if(cancelNow) installed.cancel();
-        }
-    }
+
 }

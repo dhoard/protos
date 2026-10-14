@@ -168,7 +168,7 @@ public final class ProtosStandardNetworkProtocol {
             return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
 
-        ProtosObjectValue addressConstraint = null;
+        byte[] addressConstraint = null;
         Object addressValue = slots.address();
         if (addressValue != ProtosNullValue.INSTANCE) {
             if (!(addressValue instanceof ProtosObjectValue address)
@@ -179,7 +179,12 @@ public final class ProtosStandardNetworkProtocol {
             if (boundedFieldOrInvalid(address.readLocalSlot("version").orElse(null)) != ipVersion) {
                 return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
             }
-            addressConstraint = address;
+            addressConstraint = ProtosNumericValueSupport.unsignedBigEndianOrNull(
+                    address.readLocalSlot("bits").orElse(null),
+                    ipVersion == 4 ? 4 : 16);
+            if (addressConstraint == null) {
+                return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
+            }
         }
 
         Integer portConstraint = null;
@@ -234,6 +239,40 @@ public final class ProtosStandardNetworkProtocol {
                 ProtosStandardTcpListenerProtocol::materializeAcceptedConnection);
     }
 
+    /**
+     * Private Actor-local projection of the source-backed canonical endpoint shape.
+     * Host/poller callbacks must never invoke this method.
+     */
+    static ProtosObjectValue materializeHostEndpoint(
+            ProtosPrelude prelude, ProtosHostIpEndpoint descriptor) {
+        Objects.requireNonNull(prelude, "prelude");
+        Objects.requireNonNull(descriptor, "descriptor");
+
+        ProtosObjectValue address =
+                new ProtosObjectValue(prelude.ipAddressPrototypeForRuntime());
+        address.createLocalSlot(
+                "version", ProtosNumericValueSupport.integer(descriptor.version()));
+        address.createLocalSlot(
+                "bits", ProtosNumericValueSupport.integerFromUnsignedBigEndian(
+                        descriptor.octets(), prelude));
+        address.freeze();
+
+        ProtosObjectValue endpoint =
+                new ProtosObjectValue(prelude.ipEndpointPrototypeForRuntime());
+        endpoint.createLocalSlot("address", address);
+        endpoint.createLocalSlot(
+                "port", ProtosNumericValueSupport.integer(descriptor.port()));
+        endpoint.freeze();
+
+        if (!ProtosStandardIpEndpointProtocol.recognizesValue(
+                endpoint,
+                prelude.ipEndpointPrototypeForRuntime(),
+                prelude.ipAddressPrototypeForRuntime())) {
+            throw new IllegalArgumentException("invalid host endpoint projection");
+        }
+        return endpoint;
+    }
+
     private static ProtosTcpConnectionValue materializeConnection(
             ProtosPrelude prelude,
             ProtosActivation activation,
@@ -248,29 +287,8 @@ public final class ProtosStandardNetworkProtocol {
         if (localDescriptor.version() != requestedVersion)
             throw new IllegalArgumentException("local IP version changed");
 
-        // Private semantic materialization mirrors the canonical source
-        // constructor without invoking source closures inside a Task.
-        ProtosObjectValue localAddress =
-                new ProtosObjectValue(prelude.ipAddressPrototypeForRuntime());
-        localAddress.createLocalSlot(
-                "version", ProtosNumericValueSupport.integer(localDescriptor.version()));
-        localAddress.createLocalSlot(
-                "bits", ProtosNumericValueSupport.integerFromUnsignedBigEndian(
-                        localDescriptor.octets(), prelude));
-        localAddress.freeze();
-
-        ProtosObjectValue localEndpoint =
-                new ProtosObjectValue(prelude.ipEndpointPrototypeForRuntime());
-        localEndpoint.createLocalSlot("address", localAddress);
-        localEndpoint.createLocalSlot(
-                "port", ProtosNumericValueSupport.integer(localDescriptor.port()));
-        localEndpoint.freeze();
-
-        if (!ProtosStandardIpEndpointProtocol.recognizesValue(
-                localEndpoint,
-                prelude.ipEndpointPrototypeForRuntime(),
-                prelude.ipAddressPrototypeForRuntime()))
-            throw new IllegalArgumentException("invalid materialized endpoint");
+        ProtosObjectValue localEndpoint = materializeHostEndpoint(
+                prelude, localDescriptor);
         return new ProtosTcpConnectionValue(
                 prelude,
                 resourceState,

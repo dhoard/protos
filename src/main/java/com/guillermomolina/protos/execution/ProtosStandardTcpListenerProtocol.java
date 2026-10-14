@@ -39,17 +39,20 @@ public final class ProtosStandardTcpListenerProtocol {
     public static ProtosTcpConnectionValue materializeAcceptedConnection(
             ProtosActivation activation,
             Object resourceState,
-            ProtosObjectValue localEndpoint,
-            ProtosObjectValue remoteEndpoint,
+            ProtosHostIpEndpoint localDescriptor,
+            ProtosHostIpEndpoint remoteDescriptor,
             ProtosTcpConnectionFlow.Backend connectionBackend) {
-        Objects.requireNonNull(activation,"activation");
-        ProtosPrelude prelude=activation.prelude().orElseThrow();
-        ProtosObjectValue endpointPrototype=prelude.ipEndpointPrototypeForRuntime();
-        ProtosObjectValue addressPrototype=prelude.ipAddressPrototypeForRuntime();
-        if(!ProtosStandardIpEndpointProtocol.recognizesValue(localEndpoint,endpointPrototype,addressPrototype)
-                || !ProtosStandardIpEndpointProtocol.recognizesValue(remoteEndpoint,endpointPrototype,addressPrototype)) {
-            throw new IllegalArgumentException("accepted TCP endpoint descriptor is not a recognized IpEndpoint");
+        Objects.requireNonNull(activation, "activation");
+        ProtosPrelude prelude = activation.prelude().orElseThrow();
+        if (localDescriptor.version() != remoteDescriptor.version()) {
+            throw new IllegalArgumentException("accepted endpoints have different IP families");
         }
+        ProtosObjectValue localEndpoint =
+                ProtosStandardNetworkProtocol.materializeHostEndpoint(
+                        prelude, localDescriptor);
+        ProtosObjectValue remoteEndpoint =
+                ProtosStandardNetworkProtocol.materializeHostEndpoint(
+                        prelude, remoteDescriptor);
         return new ProtosTcpConnectionValue(
                 prelude,
                 Objects.requireNonNull(resourceState,"resourceState"),
