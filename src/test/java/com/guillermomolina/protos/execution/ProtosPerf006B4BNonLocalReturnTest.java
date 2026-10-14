@@ -67,7 +67,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
                     ProtosClosureExecutionPlan.bytecode(
                             definition,
                             scope.language(),
-                            source(closureCharacters, "perf006-b4b-direct-closure.protos"));
+                            source(closureCharacters, "perf006-b4b-direct-closure.protos"), ProtosExecutionMode.NORMAL);
             module.context().createLocalSlot(
                     "entry",
                     semanticClosure(definition, plan, module));
@@ -104,7 +104,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
                     ProtosClosureExecutionPlan.bytecode(
                             definition,
                             scope.language(),
-                            source(closureCharacters, "perf006-b4b-captured-home.protos"));
+                            source(closureCharacters, "perf006-b4b-captured-home.protos"), ProtosExecutionMode.NORMAL);
             ProtosReturnHome capturedHome = new ProtosReturnHome();
             ProtosClosureValue closure =
                     semanticClosureWithHome(
@@ -150,7 +150,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
                     ProtosClosureExecutionPlan.bytecode(
                             definition,
                             scope.language(),
-                            source(closureCharacters, "perf006-b4b-invalid-return.protos"));
+                            source(closureCharacters, "perf006-b4b-invalid-return.protos"), ProtosExecutionMode.NORMAL);
             ProtosReturnHome completedHome = new ProtosReturnHome();
             completedHome.complete();
             ProtosClosureValue closure =
@@ -210,7 +210,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
                     ProtosClosureExecutionPlan.bytecode(
                             definition,
                             scope.language(),
-                            source(closureCharacters, "perf006-b4b-resume-closure.protos"));
+                            source(closureCharacters, "perf006-b4b-resume-closure.protos"), ProtosExecutionMode.NORMAL);
             creator.context().createLocalSlot(
                     "entry",
                     semanticClosure(definition, plan, creator));
@@ -264,7 +264,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
                     ProtosClosureExecutionPlan.bytecode(
                             definition,
                             scope.language(),
-                            source(closureCharacters, "perf006-b4b-default-return.protos"));
+                            source(closureCharacters, "perf006-b4b-default-return.protos"), ProtosExecutionMode.NORMAL);
             module.context().createLocalSlot(
                     "entry",
                     semanticClosure(definition, plan, module));
@@ -362,7 +362,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
             String sourceName)
             throws Exception {
         Source source = source(characters, sourceName);
-        return new CanonicalToBytecodeLowerer(language, source)
+        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                 .lowerRoot(canonicalize(characters));
     }
 

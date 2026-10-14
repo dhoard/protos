@@ -91,7 +91,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 definition.body().expressions().get(0));
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosClosureValue closure =
@@ -208,7 +208,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 definition.body().expressions().get(0));
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosClosureValue closure =
@@ -328,7 +328,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 definition.body().expressions().get(0));
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosClosureValue closure =
@@ -447,7 +447,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 sequence.expressions().get(1));
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosClosureValue closure =
@@ -528,7 +528,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 sequence.expressions().get(1));
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosClosureValue closure =
@@ -623,7 +623,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 innerDefinition.body().expressions().get(0));
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosClosureValue outerClosure =
@@ -728,7 +728,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
 
                 CanonicalSequence sequence = canonicalize(characters);
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosClosureValue closure =
@@ -806,7 +806,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 createY.value());
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosClosureValue closure =
@@ -898,7 +898,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 definition.body().expressions().get(0));
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosClosureValue closure =
@@ -1001,7 +1001,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
 
                 CanonicalSequence sequence = canonicalize(characters);
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosObjectValue object =
@@ -1092,7 +1092,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
 
                 CanonicalSequence original = canonicalize(characters);
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(original);
 
                 ProtosClosureValue closure =
@@ -1121,7 +1121,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                 ProtosClosureExecutionPlan rebuilt =
                         template.rebuildBytecodeForLanguage(
                                 reparsedDefinition,
-                                language);
+                                language, ProtosExecutionMode.NORMAL);
 
                 CanonicalBindingResolution.CapturedResolved resolution =
                         assertInstanceOf(
@@ -1227,7 +1227,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 definition.body().expressions().get(0));
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosClosureValue closure =

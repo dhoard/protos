@@ -864,7 +864,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
                 (CanonicalSequence)
                         new Canonicalizer()
                                 .canonicalize(new ProtosParser(characters).parseProgram());
-        return new CanonicalToBytecodeLowerer(LANGUAGE_REF.get(null), source)
+        return new CanonicalToBytecodeLowerer(LANGUAGE_REF.get(null), source, ProtosExecutionMode.NORMAL)
                 .lowerRoot(sequence);
     }
 

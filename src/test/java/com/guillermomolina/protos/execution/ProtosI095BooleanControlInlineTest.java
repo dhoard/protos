@@ -51,10 +51,12 @@ import org.junit.jupiter.api.Test;
  * unobservable runs inline in the caller's Bytecode root. DEBUG mode and
  * unproven callbacks keep the established topology.
  *
- * <p>Inline admission is observed through the {@code IsNormalExecutionMode}
- * branch in {@code run}'s bytecode; physical callees through the guest
- * CallTarget stack seen by a native {@code probe} (depth 2 is {@code run}
- * over the module root). No test mutates the frozen global root.
+ * <p>I101-A: each program is lowered under the immutable profile of the
+ * entered Context, so a NORMAL root holds only the admitted lowering and a
+ * DEBUG root only the ordinary one. Inline admission is observed through
+ * {@code run}'s bytecode; physical callees through the guest CallTarget stack
+ * seen by a native {@code probe} (depth 2 is {@code run} over the module
+ * root). No test mutates the frozen global root.
  */
 final class ProtosI095BooleanControlInlineTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -169,14 +171,13 @@ final class ProtosI095BooleanControlInlineTest {
         Execution normal = execute(false, source);
         assertInteger(1210 + 36, normal.value());
         List<String> names = instructionNames(normal.rootOfFirstProbe());
-        int mode = position(names, "IsNormalExecutionMode");
         int classify = position(names, "TryCompactCanonicalBooleanOne");
         int falseClass = position(names, "IsCanonicalBooleanFalseClass");
-        assertTrue(mode >= 0, () -> "no NORMAL branch: " + names);
-        assertTrue(classify > mode, () -> "classify " + classify + " mode " + mode);
+        // I101-A: the classifier is the admitted site's semantic guard; no mode test precedes it.
+        assertTrue(classify >= 0, () -> "no canonical classification: " + names);
         assertTrue(falseClass > classify,
                 () -> "falseClass " + falseClass + " classify " + classify);
-        // MISS keeps an ordinary prepared send in the NORMAL branch.
+        // MISS keeps an ordinary prepared send in the NORMAL lowering.
         int prepare = falseClass + 1
                 + position(names.subList(falseClass + 1, names.size()), "PrepareSendOne");
         assertTrue(prepare > falseClass,
@@ -208,8 +209,8 @@ final class ProtosI095BooleanControlInlineTest {
         assertInteger(42, normal.value());
         assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
         ProtosSemanticBytecodeRootNode runRoot = normal.rootOfFirstProbe();
-        List<String> names = instructionNames(runRoot);
-        assertTrue(position(names, "IsNormalExecutionMode") >= 0, names::toString);
+        // Materializes the tag tree read below.
+        runRoot.getRootNodes().ensureComplete();
         assertTrue(rootTags(runRoot.getBytecodeNode()) >= 2,
                 "run's RootTag plus the inline callback's semantic RootTag");
         assertTrue(
@@ -223,8 +224,7 @@ final class ProtosI095BooleanControlInlineTest {
 
     /**
      * NORMAL and DEBUG agree on the result and on exactly one callback
-     * execution. Both modes share one bytecode, so this does not observe
-     * which IsNormalExecutionMode branch DEBUG takes.
+     * execution, each under its own profile-specific lowering.
      */
     @Test
     void normalAndDebugAgreeOnResultAndSingleCallbackExecution() throws Exception {
@@ -554,7 +554,9 @@ final class ProtosI095BooleanControlInlineTest {
                 """;
         Execution normal = execute(false, source);
         List<String> names = instructionNames(normal.rootOfFirstProbe());
-        assertTrue(position(names, "IsNormalExecutionMode") < 0, names::toString);
+        // The site is not admitted: no canonical classification, only the ordinary send.
+        assertTrue(position(names, "TryCompactCanonicalBooleanOne") < 0, names::toString);
+        assertTrue(position(names, "PrepareSend") >= 0, names::toString);
         System.out.println("I095_C_UNPROVEN_FALLBACK=PASS");
     }
 
@@ -653,7 +655,11 @@ final class ProtosI095BooleanControlInlineTest {
                 (CanonicalSequence)
                         new Canonicalizer()
                                 .canonicalize(new ProtosParser(characters).parseProgram());
-        return new CanonicalToBytecodeLowerer(LANGUAGE_REF.get(null), source)
+        // I101-A: lowered under the immutable profile of the entered Context.
+        return new CanonicalToBytecodeLowerer(
+                        LANGUAGE_REF.get(null),
+                        source,
+                        ProtosLanguageContext.current().executionMode())
                 .lowerRoot(sequence);
     }
 

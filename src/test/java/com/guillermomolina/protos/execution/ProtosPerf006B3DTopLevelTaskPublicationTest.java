@@ -495,7 +495,7 @@ final class ProtosPerf006B3DTopLevelTaskPublicationTest {
                         .build();
         return new CanonicalToBytecodeLowerer(
                         language,
-                        source)
+                        source, ProtosExecutionMode.NORMAL)
                 .lowerRoot(
                         canonicalize(characters));
     }
@@ -518,7 +518,7 @@ final class ProtosPerf006B3DTopLevelTaskPublicationTest {
                 ProtosClosureExecutionPlan.bytecode(
                         definition,
                         language,
-                        source);
+                        source, ProtosExecutionMode.NORMAL);
         return new ProtosClosureValue(
                 definition,
                 creator.lexicalContextsForClosureCapture(),

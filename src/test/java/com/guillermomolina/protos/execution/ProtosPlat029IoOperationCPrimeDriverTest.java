@@ -303,7 +303,7 @@ final class ProtosPlat029IoOperationCPrimeDriverTest {
                 ProtosClosureExecutionPlan.bytecode(
                         definition,
                         language,
-                        source(characters, sourceName));
+                        source(characters, sourceName), ProtosExecutionMode.NORMAL);
         return new ProtosClosureValue(
                 definition,
                 creator.lexicalContextsForClosureCapture(),
@@ -319,7 +319,7 @@ final class ProtosPlat029IoOperationCPrimeDriverTest {
             String characters,
             String sourceName)
             throws Exception {
-        return new CanonicalToBytecodeLowerer(language, source(characters, sourceName))
+        return new CanonicalToBytecodeLowerer(language, source(characters, sourceName), ProtosExecutionMode.NORMAL)
                 .lowerRoot(canonicalize(characters));
     }
 

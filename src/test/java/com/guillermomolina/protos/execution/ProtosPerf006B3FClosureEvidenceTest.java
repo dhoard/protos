@@ -531,7 +531,7 @@ final class ProtosPerf006B3FClosureEvidenceTest {
             throws Exception {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, characters, sourceName).build();
-        return new CanonicalToBytecodeLowerer(language, source)
+        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                 .lowerRoot(canonicalize(characters));
     }
 
@@ -545,7 +545,7 @@ final class ProtosPerf006B3FClosureEvidenceTest {
                 Source.newBuilder(ProtosLanguage.ID, characters, sourceName).build();
         CanonicalClosure definition = closureDefinition(characters);
         ProtosClosureExecutionPlan plan =
-                ProtosClosureExecutionPlan.bytecode(definition, language, source);
+                ProtosClosureExecutionPlan.bytecode(definition, language, source, ProtosExecutionMode.NORMAL);
         return new ProtosClosureValue(
                 definition,
                 creator.lexicalContextsForClosureCapture(),

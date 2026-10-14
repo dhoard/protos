@@ -117,7 +117,7 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
                                         "perf006-b3b-top.protos")
                                 .build();
                 ProtosSemanticBytecodeRootNode topRoot =
-                        new CanonicalToBytecodeLowerer(language, topSource)
+                        new CanonicalToBytecodeLowerer(language, topSource, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(canonicalize(topCharacters));
                 AtomicInteger segments = new AtomicInteger();
 
@@ -232,7 +232,7 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
                 ProtosClosureExecutionPlan.bytecode(
                         definition,
                         language,
-                        source);
+                        source, ProtosExecutionMode.NORMAL);
         return new ProtosClosureValue(
                 definition,
                 creator.lexicalContextsForClosureCapture(),

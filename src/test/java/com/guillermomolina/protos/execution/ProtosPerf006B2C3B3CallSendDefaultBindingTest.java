@@ -52,18 +52,18 @@ final class ProtosPerf006B2C3B3CallSendDefaultBindingTest {
                 Source childSource = Source.newBuilder(ProtosLanguage.ID, childChars, "perf006-b2c3b3-child.protos").build();
                 CanonicalClosure childDef = closureDefinition(childChars);
                 ProtosSemanticBytecodeRootNode childRoot = yieldingLeafRoot(language, childSource, childDef.body().span(), finalValue);
-                ProtosClosureValue child = semanticClosure(childDef, ProtosClosureExecutionPlan.bytecode(childDef, language, childSource, childRoot), module);
+                ProtosClosureValue child = semanticClosure(childDef, ProtosClosureExecutionPlan.bytecode(childDef, language, childSource, childRoot, ProtosExecutionMode.NORMAL), module);
                 module.context().createLocalSlot("child", child);
 
                 String chars = "(first = child(), second = first) => { second }";
                 Source source = Source.newBuilder(ProtosLanguage.ID, chars, "perf006-b2c3b3-default-call.protos").build();
                 CanonicalClosure def = closureDefinition(chars);
-                ProtosClosureValue semantic = semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, source), module);
+                ProtosClosureValue semantic = semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, source, ProtosExecutionMode.NORMAL), module);
                 ProtosActivation invocation = ProtosActivation.forClosureInvocation(
                         semantic, List.of(), module.prelude().orElseThrow(), module.actorModuleState(),
                         module.currentModuleKey().orElse(null), module.executionDomain());
 
-                Object first = new ProtosBytecodeClosureExecutionPlan(def, language, source).executeActivation(invocation);
+                Object first = new ProtosBytecodeClosureExecutionPlan(def, language, source, ProtosExecutionMode.NORMAL).executeActivation(invocation);
                 ContinuationResult parent = assertInstanceOf(ContinuationResult.class, first);
                 assertInstanceOf(ContinuationResult.class, parent.getResult());
                 assertTrue(ProtosLexicalFallback.readByName(invocation, "first").isEmpty());
@@ -93,16 +93,16 @@ final class ProtosPerf006B2C3B3CallSendDefaultBindingTest {
                 String methodChars = "() => { marker }";
                 Source methodSource = Source.newBuilder(ProtosLanguage.ID, methodChars, "perf006-b2c3b3-method.protos").build();
                 CanonicalClosure methodDef = closureDefinition(methodChars);
-                receiver.createLocalSlot("pick", semanticClosure(methodDef, ProtosClosureExecutionPlan.bytecode(methodDef, language, methodSource), module));
+                receiver.createLocalSlot("pick", semanticClosure(methodDef, ProtosClosureExecutionPlan.bytecode(methodDef, language, methodSource, ProtosExecutionMode.NORMAL), module));
 
                 String chars = "(head, fallback = head.pick()) => { fallback }";
                 Source source = Source.newBuilder(ProtosLanguage.ID, chars, "perf006-b2c3b3-default-send.protos").build();
                 CanonicalClosure def = closureDefinition(chars);
-                ProtosClosureValue semantic = semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, source), module);
+                ProtosClosureValue semantic = semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, source, ProtosExecutionMode.NORMAL), module);
                 ProtosActivation invocation = ProtosActivation.forClosureInvocation(
                         semantic, List.of(receiver), module.prelude().orElseThrow(), module.actorModuleState(),
                         module.currentModuleKey().orElse(null), module.executionDomain());
-                Object result = new ProtosBytecodeClosureExecutionPlan(def, language, source).executeActivation(invocation);
+                Object result = new ProtosBytecodeClosureExecutionPlan(def, language, source, ProtosExecutionMode.NORMAL).executeActivation(invocation);
                 assertSame(marker, result);
                 assertSame(marker, ProtosLexicalFallback.readByName(invocation, "fallback").orElseThrow());
             } finally {

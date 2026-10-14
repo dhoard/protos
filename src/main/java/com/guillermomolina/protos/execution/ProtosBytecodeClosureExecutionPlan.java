@@ -61,26 +61,34 @@ final class ProtosBytecodeClosureExecutionPlan {
     private final CanonicalBindingAnalysis bindingAnalysis;
     private final ProtosSemanticBytecodeRootNode activationRoot;
     private final RootCallTarget activationTarget;
+    /**
+     * I101-A (PLAT058-D): the immutable physical compilation profile under which {@link
+     * #activationRoot} was lowered; the profile of the Context owning this executable projection.
+     */
+    private final ProtosExecutionMode profile;
     /** PERF025: see {@link CanonicalReturnHomeAnalysis}; fixed per definition. */
     private final boolean mayObserveReturnHome;
 
     ProtosBytecodeClosureExecutionPlan(
             CanonicalClosure definition,
             ProtosLanguage language,
-            Source source) {
+            Source source,
+            ProtosExecutionMode profile) {
         this(
                 definition,
                 language,
                 source,
                 CanonicalBindingAnalyzer.analyzeClosure(
-                        Objects.requireNonNull(definition, "definition")));
+                        Objects.requireNonNull(definition, "definition")),
+                profile);
     }
 
     ProtosBytecodeClosureExecutionPlan(
             CanonicalClosure definition,
             ProtosLanguage language,
             Source source,
-            CanonicalBindingAnalysis bindingAnalysis) {
+            CanonicalBindingAnalysis bindingAnalysis,
+            ProtosExecutionMode profile) {
         this(
                 definition,
                 language,
@@ -89,25 +97,29 @@ final class ProtosBytecodeClosureExecutionPlan {
                 new CanonicalToBytecodeLowerer(
                                 Objects.requireNonNull(language, "language"),
                                 Objects.requireNonNull(source, "source"),
-                                bindingAnalysis)
+                                bindingAnalysis,
+                                Objects.requireNonNull(profile, "profile"))
                         .lowerClosureActivationRoot(
                                 Objects.requireNonNull(
                                         definition,
-                                        "definition")));
+                                        "definition")),
+                profile);
     }
 
     ProtosBytecodeClosureExecutionPlan(
             CanonicalClosure definition,
             ProtosLanguage language,
             Source source,
-            ProtosSemanticBytecodeRootNode activationRoot) {
+            ProtosSemanticBytecodeRootNode activationRoot,
+            ProtosExecutionMode profile) {
         this(
                 definition,
                 language,
                 source,
                 CanonicalBindingAnalyzer.analyzeClosure(
                         Objects.requireNonNull(definition, "definition")),
-                activationRoot);
+                activationRoot,
+                profile);
     }
 
     /**
@@ -127,9 +139,11 @@ final class ProtosBytecodeClosureExecutionPlan {
             ProtosLanguage language,
             Source source,
             CanonicalBindingAnalysis bindingAnalysis,
-            ProtosSemanticBytecodeRootNode activationRoot) {
+            ProtosSemanticBytecodeRootNode activationRoot,
+            ProtosExecutionMode profile) {
         this.definition =
                 Objects.requireNonNull(definition, "definition");
+        this.profile = Objects.requireNonNull(profile, "profile");
         this.language =
                 Objects.requireNonNull(language, "language");
         this.source =
@@ -195,9 +209,14 @@ final class ProtosBytecodeClosureExecutionPlan {
         return source;
     }
 
+    ProtosExecutionMode profile() {
+        return profile;
+    }
+
     ProtosBytecodeClosureExecutionPlan rebuildForLanguage(
             CanonicalClosure newDefinition,
-            ProtosLanguage newLanguage) {
+            ProtosLanguage newLanguage,
+            ProtosExecutionMode newProfile) {
         CanonicalClosure requiredDefinition =
                 Objects.requireNonNull(newDefinition, "newDefinition");
         CanonicalBindingAnalysis analysisForDefinition =
@@ -209,7 +228,8 @@ final class ProtosBytecodeClosureExecutionPlan {
                 requiredDefinition,
                 Objects.requireNonNull(newLanguage, "newLanguage"),
                 source,
-                analysisForDefinition);
+                analysisForDefinition,
+                Objects.requireNonNull(newProfile, "newProfile"));
     }
 
     CanonicalBindingAnalysis bindingAnalysisForTesting() {

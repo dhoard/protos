@@ -53,7 +53,8 @@ import org.junit.jupiter.api.Test;
  * invoked.
  *
  * <p>Topology is read from the bytecode of the root that called the native
- * {@code probe} first: after {@code IsNormalExecutionMode}, the
+ * {@code probe} first, lowered under the entered Context's immutable profile
+ * (I101-A): after the canonical classification, the
  * {@code IsCanonicalIfTrueTrue} and {@code IsCanonicalBooleanFalseClass}
  * branches hold the TRUE and FALSE paths and the next prepared send is MISS.
  * An aggressive inline path contains no prepared send, no prepared Boolean
@@ -266,7 +267,7 @@ final class ProtosI095BooleanProtocolInlineTest {
                 """;
         Execution normal = execute(false, source);
         assertTrue(position(instructionNames(normal.rootOfFirstProbe()),
-                        "IsNormalExecutionMode", 0) >= 0,
+                        "TryCompactCanonicalBooleanOne", 0) >= 0,
                 "the site is admitted");
         assertParity(source, 1291251295257L);
 
@@ -325,9 +326,12 @@ final class ProtosI095BooleanProtocolInlineTest {
                 """;
         Execution normal = execute(false, structure);
         assertInteger(1, normal.value());
-        assertTrue(position(instructionNames(normal.rootOfFirstProbe()),
-                        "IsNormalExecutionMode", 0) >= 0,
-                "an unselected binding argument is admitted");
+        // I101-A: the literal receiver selects nothing statically, so the
+        // admitted NORMAL site keeps neither a classification nor a send.
+        List<String> structureNames = instructionNames(normal.rootOfFirstProbe());
+        assertTrue(position(structureNames, "PrepareSend", 0) < 0
+                        && position(structureNames, "TryCompactCanonicalBooleanOne", 0) < 0,
+                () -> "an unselected binding argument is admitted: " + structureNames);
 
         String error = """
                 run: () => {
@@ -694,9 +698,9 @@ final class ProtosI095BooleanProtocolInlineTest {
     }
 
     /**
-     * Staged operands are emitted once for NORMAL, MISS and DEBUG, so a
-     * chain of admitted sites whose receivers are admitted sites lowers in
-     * linear size (per-mode copies doubled at every level).
+     * Staged operands are emitted once for every canonical path and MISS,
+     * so a chain of admitted sites whose receivers are admitted sites lowers
+     * in linear size (per-path copies would double at every level).
      */
     @Test
     void longOperatorChainLowersLinearly() throws Exception {
@@ -728,19 +732,18 @@ final class ProtosI095BooleanProtocolInlineTest {
     /**
      * TRUE and FALSE paths completed by the first admitted dynamic Boolean
      * control; null when that canonical receiver has no own path and takes
-     * the shared ordinary send (MISS, DEBUG and ORDINARY), whose prepared
-     * send follows the last classification test.
+     * the shared ordinary send (MISS and ORDINARY), whose prepared send
+     * follows the last classification test.
      */
     private record Regions(List<String> onTrue, List<String> onFalse) {}
 
     private static Regions regions(List<String> names) {
-        int mode = position(names, "IsNormalExecutionMode", 0);
-        int classify = position(names, "TryCompactCanonicalBooleanOne", mode);
+        int classify = position(names, "TryCompactCanonicalBooleanOne", 0);
         int trueClass = position(names, "IsCanonicalIfTrueTrue", classify);
         int falseClass = position(names, "IsCanonicalBooleanFalseClass", classify);
         int last = Math.max(trueClass, falseClass);
         int shared = position(names, "PrepareSend", last);
-        assertTrue(mode >= 0 && classify > mode && last > classify
+        assertTrue(classify >= 0 && last > classify
                         && (trueClass < 0 || falseClass < 0 || falseClass > trueClass)
                         && shared > last,
                 names::toString);
@@ -852,7 +855,11 @@ final class ProtosI095BooleanProtocolInlineTest {
                 (CanonicalSequence)
                         new Canonicalizer()
                                 .canonicalize(new ProtosParser(characters).parseProgram());
-        return new CanonicalToBytecodeLowerer(LANGUAGE_REF.get(null), source)
+        // I101-A: lowered under the immutable profile of the entered Context.
+        return new CanonicalToBytecodeLowerer(
+                        LANGUAGE_REF.get(null),
+                        source,
+                        ProtosLanguageContext.current().executionMode())
                 .lowerRoot(sequence);
     }
 

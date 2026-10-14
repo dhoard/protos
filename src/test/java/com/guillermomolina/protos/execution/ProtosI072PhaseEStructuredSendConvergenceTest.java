@@ -389,7 +389,7 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
                 ProtosClosureExecutionPlan.bytecode(
                         definition,
                         language,
-                        source(characters, sourceName));
+                        source(characters, sourceName), ProtosExecutionMode.NORMAL);
         return new ProtosClosureValue(
                 definition,
                 creator.lexicalContextsForClosureCapture(),
@@ -437,7 +437,7 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
             String sourceName)
             throws Exception {
         Source source = source(characters, sourceName);
-        return new CanonicalToBytecodeLowerer(language, source)
+        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                 .lowerRoot(canonicalize(characters));
     }
 

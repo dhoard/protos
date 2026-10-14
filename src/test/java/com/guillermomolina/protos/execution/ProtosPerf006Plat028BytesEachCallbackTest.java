@@ -193,7 +193,7 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
             String sourceName)
             throws Exception {
         Source source = source(characters, sourceName);
-        return new CanonicalToBytecodeLowerer(language, source)
+        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                 .lowerRoot(canonicalize(characters));
     }
 

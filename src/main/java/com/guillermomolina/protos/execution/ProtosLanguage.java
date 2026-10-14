@@ -142,8 +142,13 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
             throw new IllegalArgumentException(
                     "Protos top-level parsing does not accept host argument names");
         }
+        /*
+         * I101-A (PLAT058-D): the ParsingRequest is served for the entered Context, whose
+         * immutable profile selects the physical lowering of the parsed executable.
+         */
+        ProtosExecutionMode profile = ProtosLanguageContext.current().executionMode();
         return new ProtosHostEvalRootNode(
-                        this, sourceCompiler.compileBytecode(request.getSource(), this))
+                        this, sourceCompiler.compileBytecode(request.getSource(), this, profile))
                 .getCallTarget();
     }
 }

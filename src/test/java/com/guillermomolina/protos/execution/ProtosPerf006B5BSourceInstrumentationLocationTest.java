@@ -67,7 +67,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                             .build();
             CanonicalSequence sequence = canonicalize(characters);
             ProtosSemanticBytecodeRootNode root =
-                    new CanonicalToBytecodeLowerer(scope.language(), source)
+                    new CanonicalToBytecodeLowerer(scope.language(), source, ProtosExecutionMode.NORMAL)
                             .lowerRoot(sequence);
 
             root.getRootNodes().ensureComplete();
@@ -169,7 +169,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                             childDefinition,
                             scope.language(),
                             childSource,
-                            childRoot);
+                            childRoot, ProtosExecutionMode.NORMAL);
             ProtosSemanticBytecodeRootNode childSemanticRoot =
                     assertInstanceOf(
                             ProtosSemanticBytecodeRootNode.class,
@@ -191,7 +191,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                                     "perf006-b5b-parent.protos")
                             .build();
             ProtosSemanticBytecodeRootNode parentRoot =
-                    new CanonicalToBytecodeLowerer(scope.language(), parentSource)
+                    new CanonicalToBytecodeLowerer(scope.language(), parentSource, ProtosExecutionMode.NORMAL)
                             .lowerRoot(canonicalize(parentCharacters));
             parentRoot.getRootNodes().ensureComplete();
 

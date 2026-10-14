@@ -348,6 +348,10 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
             return hostExecutable;
         }
 
+        ProtosClosureValue closureForTesting() {
+            return closure;
+        }
+
         /**
          * Invokes the captured Closure with no arguments and returns its terminal outcome; guest
          * failure is a {@code FAILED} outcome. Throws {@link IllegalStateException} when the owning

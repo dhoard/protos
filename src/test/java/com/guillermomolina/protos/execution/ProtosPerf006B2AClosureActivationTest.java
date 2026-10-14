@@ -85,7 +85,7 @@ final class ProtosPerf006B2AClosureActivationTest {
 
                 ProtosBytecodeClosureExecutionPlan plan =
                         new ProtosBytecodeClosureExecutionPlan(
-                                definition, language, source);
+                                definition, language, source, ProtosExecutionMode.NORMAL);
 
                 Object result = plan.executeActivation(invocation);
 
@@ -155,7 +155,7 @@ final class ProtosPerf006B2AClosureActivationTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                         definition,
                                         language,
-                                        source)
+                                        source, ProtosExecutionMode.NORMAL)
                                 .executeActivation(bytecodeActivation);
 
                 assertSame(captured, bytecodeResult);
@@ -213,7 +213,7 @@ final class ProtosPerf006B2AClosureActivationTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                         definition,
                                         language,
-                                        source)
+                                        source, ProtosExecutionMode.NORMAL)
                                 .executeActivation(invocation);
 
                 assertSame(
@@ -255,7 +255,7 @@ final class ProtosPerf006B2AClosureActivationTest {
                 CanonicalClosure definition = closureDefinition(characters);
                 ProtosBytecodeClosureExecutionPlan plan =
                         new ProtosBytecodeClosureExecutionPlan(
-                                definition, language, source);
+                                definition, language, source, ProtosExecutionMode.NORMAL);
 
                 SourceSection section =
                         plan.activationRootForTesting().ensureSourceSection();
@@ -295,7 +295,7 @@ final class ProtosPerf006B2AClosureActivationTest {
                 new ProtosBytecodeClosureExecutionPlan(
                                                 definition,
                                                 language,
-                                                source);
+                                                source, ProtosExecutionMode.NORMAL);
             } finally {
                 context.leave();
             }

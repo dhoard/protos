@@ -277,7 +277,7 @@ final class ProtosPerf006Plat029TextReaderCallbackTest {
                 ProtosClosureExecutionPlan.bytecode(
                         definition,
                         language,
-                        source(characters, sourceName));
+                        source(characters, sourceName), ProtosExecutionMode.NORMAL);
         return new ProtosClosureValue(
                 definition,
                 creator.lexicalContextsForClosureCapture(),
@@ -306,7 +306,7 @@ final class ProtosPerf006Plat029TextReaderCallbackTest {
             String characters,
             String sourceName)
             throws Exception {
-        return new CanonicalToBytecodeLowerer(language, source(characters, sourceName))
+        return new CanonicalToBytecodeLowerer(language, source(characters, sourceName), ProtosExecutionMode.NORMAL)
                 .lowerRoot(canonicalize(characters));
     }
 

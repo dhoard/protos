@@ -247,7 +247,7 @@ final class ProtosPerf006B2D2NestedArgumentCompositionTest {
                         ProtosClosureExecutionPlan.bytecode(
                                 definition,
                                 language,
-                                source);
+                                source, ProtosExecutionMode.NORMAL);
                 ProtosClosureValue semantic =
                         semanticClosure(definition, executionPlan, module);
                 ProtosActivation invocation =
@@ -263,7 +263,7 @@ final class ProtosPerf006B2D2NestedArgumentCompositionTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                         definition,
                                         language,
-                                        source)
+                                        source, ProtosExecutionMode.NORMAL)
                                 .executeActivation(invocation);
 
                 ContinuationResult parent =
@@ -293,7 +293,7 @@ final class ProtosPerf006B2D2NestedArgumentCompositionTest {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, characters, sourceName)
                         .build();
-        return new CanonicalToBytecodeLowerer(language, source)
+        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                 .lowerRoot(canonicalize(characters))
                 .getCallTarget()
                 .call(module);
@@ -314,7 +314,7 @@ final class ProtosPerf006B2D2NestedArgumentCompositionTest {
                 ProtosClosureExecutionPlan.bytecode(
                         definition,
                         language,
-                        source),
+                        source, ProtosExecutionMode.NORMAL),
                 creator);
     }
 
@@ -341,7 +341,7 @@ final class ProtosPerf006B2D2NestedArgumentCompositionTest {
                         definition,
                         language,
                         source,
-                        root),
+                        root, ProtosExecutionMode.NORMAL),
                 creator);
     }
 

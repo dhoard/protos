@@ -54,6 +54,12 @@ import org.junit.jupiter.api.Test;
  * non-admitted shape, a non-canonical {@code call} selection, and DEBUG mode
  * keep the physical callee root. No test mutates the frozen global root.
  *
+ * <p>I101-A: each program is lowered under the immutable profile of the
+ * entered Context. A NORMAL root holds only the inline region (its run-time
+ * admission and the carrier's physical fallback), with no execution-mode
+ * branch and no retained ordinary call; a DEBUG root holds only the ordinary
+ * call.
+ *
  * <p>Inline execution is observed through the guest CallTarget stack seen by a
  * native {@code probe}: an admitted body leaves only {@code run} over the
  * module root (depth 2); a physical callee adds its own root.
@@ -101,15 +107,13 @@ final class ProtosI096InlineClosureLiteralCallTest {
         ProtosSemanticBytecodeRootNode runRoot = normal.innermostRoot();
         runRoot.getRootNodes().ensureComplete();
         List<String> names = instructionNames(runRoot.getBytecodeNode());
-        int mode = position(names, "IsNormalExecutionMode");
         int prepare = position(names, "PrepareInlineClosureLiteralCall");
         int admit = position(names, "AdmitsInlineClosureLiteralCall");
-        assertTrue(mode >= 0, names::toString);
-        assertTrue(prepare > mode && admit > prepare, names::toString);
-        // The admission miss keeps the carrier's ordinary physical fallback,
-        // and the DEBUG alternative keeps the unchanged direct-call attempt.
+        assertTrue(prepare >= 0 && admit > prepare, names::toString);
+        // The admission miss keeps the carrier's ordinary physical fallback;
+        // I101-A: no ordinary direct-call alternative remains in NORMAL.
         assertTrue(position(names, "LoadInlineLiteralFallbackCall") > admit, names::toString);
-        assertTrue(position(names, "TryDirectCallZero") > admit, names::toString);
+        assertTrue(position(names, "TryDirectCallZero") < 0, names::toString);
         /*
          * Physical frames and semantic RootTags are separate evidence. The
          * stack proves no callee CallTarget frame exists (only run over the
@@ -150,9 +154,10 @@ final class ProtosI096InlineClosureLiteralCallTest {
         Execution normal = execute(false, source);
         assertInteger(4115, normal.value());
         assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
+        // I101-A: the NORMAL root keeps no ordinary C1 direct-call alternative.
         assertTrue(
-                position(instructionNames(normal.innermostRoot()), "TryDirectCallOne") >= 0,
-                "the DEBUG alternative keeps the C1 direct-call attempt");
+                position(instructionNames(normal.innermostRoot()), "TryDirectCallOne") < 0,
+                "NORMAL keeps no C1 direct-call alternative");
         assertParity(source, 4115);
         System.out.println("I096_A_C1_OWN_SCOPE=YES");
     }
@@ -435,6 +440,10 @@ final class ProtosI096InlineClosureLiteralCallTest {
         ProtosSemanticBytecodeRootNode callee = debug.innermostRoot();
         callee.getRootNodes().ensureComplete();
         assertEquals(1, rootTags(callee.getBytecodeNode()), "the callee's own RootTag");
+        // I101-A: the DEBUG caller holds only the ordinary C1 call, no inline region.
+        List<String> runNames = instructionNames(debug.outermostGuestRoot());
+        assertTrue(position(runNames, "PrepareInlineClosureLiteralCall") < 0, runNames::toString);
+        assertTrue(position(runNames, "TryDirectCallOne") >= 0, runNames::toString);
         System.out.println("I096_A_DEBUG_TOPOLOGY_PRESERVED=YES");
     }
 
@@ -493,12 +502,11 @@ final class ProtosI096InlineClosureLiteralCallTest {
         ProtosSemanticBytecodeRootNode runRoot = normal.innermostRoot();
         runRoot.getRootNodes().ensureComplete();
         List<String> names = instructionNames(runRoot.getBytecodeNode());
-        int mode = position(names, "IsNormalExecutionMode");
         int prepare = position(names, "PrepareInlineClosureLiteralCall");
         int admit = position(names, "AdmitsInlineClosureLiteralCall");
-        assertTrue(mode >= 0 && prepare > mode && admit > prepare, names::toString);
+        assertTrue(prepare >= 0 && admit > prepare, names::toString);
         assertTrue(position(names, "LoadInlineLiteralFallbackCall") > admit, names::toString);
-        assertTrue(position(names, "TryDirectCallZero") > admit, names::toString);
+        assertTrue(position(names, "TryDirectCallZero") < 0, names::toString);
         assertEquals(1, count(names, "PrepareInlineClosureLiteralCall"), "one candidate per site");
         List<RootNode> stack = normal.probe().stacks.get(0);
         assertSame(runRoot, stack.get(0));
@@ -558,8 +566,8 @@ final class ProtosI096InlineClosureLiteralCallTest {
                         "the C1 parameter is bound inside the caller");
                 assertTrue(fallback > admit,
                         "the rejected candidate retains its physical fallback");
-                assertTrue(direct > admit,
-                        "the DEBUG branch retains ordinary C1 invocation");
+                assertTrue(direct < 0,
+                        "I101-A: NORMAL retains no ordinary C1 invocation branch");
 
                 assertEquals(2, rootTags(caller.getBytecodeNode()),
                         "caller RootTag plus inline identity body RootTag");
@@ -1866,7 +1874,11 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 (CanonicalSequence)
                         new Canonicalizer()
                                 .canonicalize(new ProtosParser(characters).parseProgram());
-        return new CanonicalToBytecodeLowerer(LANGUAGE_REF.get(null), source)
+        // I101-A: lowered under the immutable profile of the entered Context.
+        return new CanonicalToBytecodeLowerer(
+                        LANGUAGE_REF.get(null),
+                        source,
+                        ProtosLanguageContext.current().executionMode())
                 .lowerRoot(sequence);
     }
 

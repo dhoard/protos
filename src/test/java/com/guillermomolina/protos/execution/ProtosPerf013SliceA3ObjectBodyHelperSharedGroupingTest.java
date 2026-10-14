@@ -82,7 +82,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                         CanonicalObject.class, sequence.expressions().get(0));
 
                 CanonicalToBytecodeLowerer lowerer =
-                        new CanonicalToBytecodeLowerer(language, source);
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL);
                 ProtosSemanticBytecodeRootNode root = lowerer.lowerRoot(sequence);
 
                 ProtosObjectValue object =
@@ -135,7 +135,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                 findObjectDefinition(sequence, "obj");
 
                 CanonicalToBytecodeLowerer lowerer =
-                        new CanonicalToBytecodeLowerer(language, source);
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL);
                 ProtosSemanticBytecodeRootNode root = lowerer.lowerRoot(sequence);
 
                 ProtosObjectValue object =
@@ -226,7 +226,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                 findObjectDefinition(sequence, "obj");
 
                 CanonicalToBytecodeLowerer lowerer =
-                        new CanonicalToBytecodeLowerer(language, source);
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL);
                 ProtosSemanticBytecodeRootNode root = lowerer.lowerRoot(sequence);
 
                 ProtosObjectValue object =

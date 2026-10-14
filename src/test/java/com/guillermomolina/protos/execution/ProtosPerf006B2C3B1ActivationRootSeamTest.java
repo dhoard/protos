@@ -94,7 +94,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                 definition,
                                 language,
-                                source);
+                                source, ProtosExecutionMode.NORMAL);
 
                 /*
                  * B2C3B1 intentionally does NOT call plan.bind(...).
@@ -158,7 +158,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                         ProtosClosureExecutionPlan.bytecode(
                                 definition,
                                 language,
-                                closureSource);
+                                closureSource, ProtosExecutionMode.NORMAL);
                 module.context().createLocalSlot(
                         "entry",
                         semanticClosure(definition, plan, module));
@@ -171,7 +171,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                                         "perf006-b2c3b1-composed-call.protos")
                                 .build();
                 ProtosSemanticBytecodeRootNode callerRoot =
-                        new CanonicalToBytecodeLowerer(language, callSource)
+                        new CanonicalToBytecodeLowerer(language, callSource, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(canonicalize(callCharacters));
 
                 assertSame(first, callerRoot.getCallTarget().call(module));
@@ -212,7 +212,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                                 ProtosClosureExecutionPlan.bytecode(
                                         requiredDefinition,
                                         language,
-                                        requiredSource),
+                                        requiredSource, ProtosExecutionMode.NORMAL),
                                 module));
 
                 String missingCharacters = "entry(null)";
@@ -223,7 +223,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                                         "perf006-b2c3b1-missing.protos")
                                 .build();
                 ProtosSemanticBytecodeRootNode missingRoot =
-                        new CanonicalToBytecodeLowerer(language, missingSource)
+                        new CanonicalToBytecodeLowerer(language, missingSource, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(canonicalize(missingCharacters));
                 assertThrows(
                         ProtosSignalException.class,
@@ -242,7 +242,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                 new ProtosBytecodeClosureExecutionPlan(
                                                 defaultDefinition,
                                                 language,
-                                                defaultSource);
+                                                defaultSource, ProtosExecutionMode.NORMAL);
             } finally {
                 context.leave();
             }

@@ -36,38 +36,44 @@ public final class ProtosClosureExecutionPlan {
     static ProtosClosureExecutionPlan bytecode(
             CanonicalClosure definition,
             ProtosLanguage language,
-            Source source) {
+            Source source,
+            ProtosExecutionMode profile) {
         return new ProtosClosureExecutionPlan(
                 new ProtosBytecodeClosureExecutionPlan(
                         definition,
                         language,
-                        source));
+                        source,
+                        profile));
     }
 
     static ProtosClosureExecutionPlan bytecode(
             CanonicalClosure definition,
             ProtosLanguage language,
             Source source,
-            CanonicalBindingAnalysis bindingAnalysis) {
+            CanonicalBindingAnalysis bindingAnalysis,
+            ProtosExecutionMode profile) {
         return new ProtosClosureExecutionPlan(
                 new ProtosBytecodeClosureExecutionPlan(
                         definition,
                         language,
                         source,
-                        bindingAnalysis));
+                        bindingAnalysis,
+                        profile));
     }
 
     static ProtosClosureExecutionPlan bytecode(
             CanonicalClosure definition,
             ProtosLanguage language,
             Source source,
-            ProtosSemanticBytecodeRootNode bodyRoot) {
+            ProtosSemanticBytecodeRootNode bodyRoot,
+            ProtosExecutionMode profile) {
         return new ProtosClosureExecutionPlan(
                 new ProtosBytecodeClosureExecutionPlan(
                         definition,
                         language,
                         source,
-                        bodyRoot));
+                        bodyRoot,
+                        profile));
     }
 
     /**
@@ -81,14 +87,16 @@ public final class ProtosClosureExecutionPlan {
             ProtosLanguage language,
             Source source,
             CanonicalBindingAnalysis bindingAnalysis,
-            ProtosSemanticBytecodeRootNode bodyRoot) {
+            ProtosSemanticBytecodeRootNode bodyRoot,
+            ProtosExecutionMode profile) {
         return new ProtosClosureExecutionPlan(
                 new ProtosBytecodeClosureExecutionPlan(
                         definition,
                         language,
                         source,
                         bindingAnalysis,
-                        bodyRoot));
+                        bodyRoot,
+                        profile));
     }
 
     CanonicalBindingAnalysis bytecodeBindingAnalysisForTesting() {
@@ -117,13 +125,24 @@ public final class ProtosClosureExecutionPlan {
         return !bytecodePlan.mayObserveReturnHome();
     }
 
+    /**
+     * Context-local executable projection of this plan's semantic definition, lowered under the
+     * destination Context's immutable {@code profile} (I101-A, PLAT058-D).
+     */
     ProtosClosureExecutionPlan rebuildBytecodeForLanguage(
             CanonicalClosure definition,
-            ProtosLanguage language) {
+            ProtosLanguage language,
+            ProtosExecutionMode profile) {
         Objects.requireNonNull(definition, "definition");
         Objects.requireNonNull(language, "language");
+        Objects.requireNonNull(profile, "profile");
         return new ProtosClosureExecutionPlan(
-                bytecodePlan.rebuildForLanguage(definition, language));
+                bytecodePlan.rebuildForLanguage(definition, language, profile));
+    }
+
+    /** I101-A: the physical compilation profile the activation root was lowered under. */
+    ProtosExecutionMode bytecodeProfileForTesting() {
+        return bytecodePlan.profile();
     }
 
     Optional<ProtosLanguage> language() {

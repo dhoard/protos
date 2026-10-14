@@ -93,8 +93,14 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
 
     @Test
     void frameNativeZeroParameterCallbackEntersWithoutActivation() throws Exception {
+        /*
+         * I101-A: in NORMAL this literal ifTrue site is the admitted I095
+         * inline lowering; the B-prime frame-native callback region of its
+         * ordinary send is the lowering of the DEBUG profile.
+         */
         List<String> names =
                 assertRegionWithoutActivation(
+                        true,
                         """
                         run: () => {
                             probe()
@@ -632,14 +638,28 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
      */
     private static List<String> assertRegionWithoutActivation(String characters)
             throws Exception {
-        return assertRegionInstructionsWithoutActivation(characters).stream()
+        return assertRegionWithoutActivation(false, characters);
+    }
+
+    private static List<String> assertRegionWithoutActivation(boolean debug, String characters)
+            throws Exception {
+        return assertRegionInstructionsWithoutActivation(debug, characters).stream()
                 .map(Instruction::getName)
                 .toList();
     }
 
     private static List<Instruction> assertRegionInstructionsWithoutActivation(String characters)
             throws Exception {
-        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+        return assertRegionInstructionsWithoutActivation(false, characters);
+    }
+
+    private static List<Instruction> assertRegionInstructionsWithoutActivation(
+            boolean debug, String characters) throws Exception {
+        Context.Builder builder = Context.newBuilder(ProtosLanguage.ID);
+        if (debug) {
+            builder.allowExperimentalOptions(true).option("protos.Debug", "true");
+        }
+        try (Context context = builder.build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
@@ -707,7 +727,11 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                 (CanonicalSequence)
                         new Canonicalizer()
                                 .canonicalize(new ProtosParser(characters).parseProgram());
-        return new CanonicalToBytecodeLowerer(LANGUAGE_REF.get(null), source)
+        // I101-A: lowered under the immutable profile of the entered Context.
+        return new CanonicalToBytecodeLowerer(
+                        LANGUAGE_REF.get(null),
+                        source,
+                        ProtosLanguageContext.current().executionMode())
                 .lowerRoot(sequence);
     }
 

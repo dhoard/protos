@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.353-SNAPSHOT
+
+- `I101` (#892), slice A: Context-owned NORMAL/DEBUG compilation profile
+  (PLAT058-D).
+  - The immutable profile of the owning Context reaches the lowerer
+    explicitly from top-level parsing, module imports and cross-Context
+    Closure projections; the runtime `IsNormalExecutionMode` operation is
+    removed and no emitted instruction selects a lowering at run time.
+  - NORMAL emits only the admitted I095 Boolean-control and I096 inline-call
+    lowerings, keeping their semantic guards and fallbacks; DEBUG keeps the
+    ordinary send and physical callee activations.
+  - Standard-root publication is snapshotted once per lowerer, so reparses
+    repeat every admission decision.
+  - An admitted constant Boolean-control terminal whose selected callback is
+    one pure literal folds to that literal: `() => { true.ifTrue() { 1 } }`
+    emits the instructions of `() => { 1 }` and gets its non-suspending and
+    headerless-entry capabilities.
+  - Captured frame-local fast paths now require the owner's root to be open,
+    so an I096 inline copy that first lowers an omitted capturing callback
+    uses the runtime-authority path.
+
 ## 0.3.352-SNAPSHOT
 
 - `I090` (#868): Standard Library `std:math/Math` with its only member

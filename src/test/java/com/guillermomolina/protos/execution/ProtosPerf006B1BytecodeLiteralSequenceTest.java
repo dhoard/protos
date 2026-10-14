@@ -120,7 +120,7 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
                         new CanonicalSequence(List.of(), new SourceSpan(0, 0));
 
                 Object bytecode =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lower(sequence)
                                 .call();
 
@@ -150,7 +150,7 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
                 CanonicalSequence sequence = canonicalize(characters);
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 SourceSection section = root.ensureSourceSection();
@@ -198,7 +198,7 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
                                 UnsupportedOperationException.class,
                                 () ->
                                         new CanonicalToBytecodeLowerer(
-                                                        language, source)
+                                                        language, source, ProtosExecutionMode.NORMAL)
                                                 .lower(sequence));
 
                 String unsupportedKind =
@@ -227,7 +227,7 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
                                 "perf006-b1-bytecode.protos")
                         .build();
         CanonicalSequence sequence = canonicalize(characters);
-        return new CanonicalToBytecodeLowerer(language, source)
+        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                 .lower(sequence)
                 .call();
     }

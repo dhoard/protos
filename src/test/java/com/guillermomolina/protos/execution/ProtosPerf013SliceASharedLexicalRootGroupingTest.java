@@ -72,7 +72,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                 CanonicalSequence sequence = canonicalize(characters);
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosClosureValue closure =
@@ -123,7 +123,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                 CanonicalSequence sequence = canonicalize(characters);
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosClosureValue closureA =
@@ -210,7 +210,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                 CanonicalSequence sequence = canonicalize(characters);
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosClosureValue closureA =
@@ -276,7 +276,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                 CanonicalSequence sequence = canonicalize(characters);
 
                 ProtosSemanticBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
                 ProtosObjectValue object =

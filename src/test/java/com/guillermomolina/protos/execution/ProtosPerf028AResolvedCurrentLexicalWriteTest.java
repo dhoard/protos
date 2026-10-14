@@ -637,7 +637,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
 
     private static ProtosSemanticBytecodeRootNode lower(ProtosLanguage language, String characters) {
         Source source = Source.newBuilder(ProtosLanguage.ID, characters, "perf028-a.protos").build();
-        return new CanonicalToBytecodeLowerer(language, source).lowerRoot(canonicalize(characters));
+        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL).lowerRoot(canonicalize(characters));
     }
 
     private static CanonicalSequence canonicalize(String characters) {

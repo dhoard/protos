@@ -393,7 +393,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
             throws Exception {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, characters, sourceName).build();
-        return new CanonicalToBytecodeLowerer(language, source)
+        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                 .lowerRoot(canonicalize(characters));
     }
 

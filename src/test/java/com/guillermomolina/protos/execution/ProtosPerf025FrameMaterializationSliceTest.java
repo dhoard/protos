@@ -482,7 +482,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
         Source source = Source.newBuilder(ProtosLanguage.ID, characters, "perf025-frame.protos").build();
         CanonicalSequence canonical =
                 (CanonicalSequence) new Canonicalizer().canonicalize(new ProtosParser(characters).parseProgram());
-        return new CanonicalToBytecodeLowerer(fixture.language, source)
+        return new CanonicalToBytecodeLowerer(fixture.language, source, ProtosExecutionMode.NORMAL)
                 .lowerRoot(canonical)
                 .getCallTarget()
                 .call(fixture.module);

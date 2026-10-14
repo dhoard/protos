@@ -5646,27 +5646,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     /** Spread: exact arity is part of canonical classification. */
 
     /*
-     * I095-A2: Context mode is fixed at Context construction.
-     * The lowering does not inspect mutable debugger state.
+     * I101-A (PLAT058-D): there is no run-time execution-mode operation. The
+     * immutable profile of the owning Context selects the physical lowering
+     * when the root is built (CanonicalToBytecodeLowerer).
      */
-    /*
-     * I095-B2: execution mode is immutable per Context.
-     *
-     * A cached Context has a constant mode for the lifetime of
-     * the specialization. The generic path remains correct for
-     * other Contexts and uncached interpretation.
-     *
-     * This is not a debugger-attachment test.
-     */
-    @Operation
-    public static final class IsNormalExecutionMode {
-        @Specialization
-        public static boolean perform(@Bind Node node) {
-            return ProtosLanguageContext.current(node)
-                            .executionMode()
-                    == ProtosExecutionMode.NORMAL;
-        }
-    }
 
     @Operation
     public static final class TryCompactCanonicalBooleanVector {

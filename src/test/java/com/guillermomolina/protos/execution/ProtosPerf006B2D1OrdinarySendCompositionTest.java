@@ -82,7 +82,7 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
                                         methodDefinition,
                                         language,
                                         methodSource,
-                                        methodRoot),
+                                        methodRoot, ProtosExecutionMode.NORMAL),
                                 module);
                 receiver.createLocalSlot("pick", method);
                 module.context().createLocalSlot("receiver", receiver);
@@ -95,7 +95,7 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
                                         "perf006-b2d1-source-send.protos")
                                 .build();
                 Object first =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(canonicalize(characters))
                                 .getCallTarget()
                                 .call(module);
@@ -170,7 +170,7 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
                                         "perf006-b2d1-native-send.protos")
                                 .build();
                 Object result =
-                        new CanonicalToBytecodeLowerer(language, source)
+                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(canonicalize(characters))
                                 .getCallTarget()
                                 .call(module);
@@ -212,7 +212,7 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
                 new ProtosBytecodeClosureExecutionPlan(
                                                 definition,
                                                 language,
-                                                source);
+                                                source, ProtosExecutionMode.NORMAL);
             } finally {
                 context.leave();
             }

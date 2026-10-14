@@ -171,7 +171,7 @@ final class ProtosI068Slice6DebuggerReflectionProjectionTest {
                                     new ProtosBytecodeClosureExecutionPlan(
                                                     definition,
                                                     language,
-                                                    source)
+                                                    source, ProtosExecutionMode.NORMAL)
                                             .executeActivation(
                                                     invocation));
 
@@ -419,7 +419,7 @@ final class ProtosI068Slice6DebuggerReflectionProjectionTest {
                         .build();
         ProtosSemanticBytecodeRootNode root =
                 new CanonicalToBytecodeLowerer(
-                                language, source)
+                                language, source, ProtosExecutionMode.NORMAL)
                         .lowerRoot(
                                 canonicalize(characters));
         return root.getCallTarget().call(module);

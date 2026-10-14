@@ -32,14 +32,21 @@ public final class ProtosSourceCompiler {
         this.canonicalizer = new Canonicalizer();
     }
 
-    RootCallTarget compileBytecode(Source source, ProtosLanguage language) {
+    /**
+     * I101-A (PLAT058-D): compiles {@code source} under the immutable physical compilation
+     * {@code profile} of the Context that owns the resulting executable. The caller resolves that
+     * profile at its language-entry boundary; the compiler never guesses it.
+     */
+    RootCallTarget compileBytecode(
+            Source source, ProtosLanguage language, ProtosExecutionMode profile) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(language, "language");
+        Objects.requireNonNull(profile, "profile");
         SurfaceSequence surface =
                 new ProtosParser(source.getCharacters().toString()).parseProgram();
         CanonicalSequence canonical =
                 (CanonicalSequence) canonicalizer.canonicalize(surface);
-        return new CanonicalToBytecodeLowerer(language, source)
+        return new CanonicalToBytecodeLowerer(language, source, profile)
                 .lowerRoot(canonical)
                 .getCallTarget();
     }

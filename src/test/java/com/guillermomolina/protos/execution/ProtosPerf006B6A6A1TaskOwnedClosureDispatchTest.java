@@ -265,7 +265,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                         .compileBytecode(
                                                 source,
                                                 ProtosLanguageContext.current()
-                                                        .languageForTesting());
+                                                        .languageForTesting(), ProtosExecutionMode.NORMAL);
                         ProtosClosureValue closure =
                                 assertInstanceOf(
                                         ProtosClosureValue.class,

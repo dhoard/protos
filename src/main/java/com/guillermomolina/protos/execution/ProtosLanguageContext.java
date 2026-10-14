@@ -393,8 +393,12 @@ final class ProtosLanguageContext {
             return existing;
         }
 
+        /*
+         * I101-A (PLAT058-D): the projection is lowered under this destination Context's profile,
+         * never under the profile of the Context that created the template.
+         */
         ProtosClosureExecutionPlan rebuilt =
-                template.rebuildBytecodeForLanguage(definition, language);
+                template.rebuildBytecodeForLanguage(definition, language, executionMode);
         sharedBytecodeExecutionPlans.put(template, rebuilt);
         return rebuilt;
     }

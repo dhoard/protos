@@ -24,6 +24,11 @@ package com.guillermomolina.protos.execution;
  * entered without the activation provenance header, and a debugger scope request on such a frame
  * fails explicitly. A {@link #DEBUG} execution transports provenance on every call from the first
  * one, so a debugger attached at any later point observes exact scopes.
+ *
+ * <p>I101-A (PLAT058-D): the mode is also the immutable physical compilation profile of every
+ * executable owned by the Context. It is passed explicitly to {@link CanonicalToBytecodeLowerer},
+ * which emits the proven minimal NORMAL lowering or the complete DEBUG lowering; no emitted
+ * instruction selects between them at run time.
  */
 enum ProtosExecutionMode {
     NORMAL,

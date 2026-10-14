@@ -56,7 +56,7 @@ final class ProtosPerf006B6BFinalConformanceArchitectureTest {
                 language.contains(
                         "new ProtosHostEvalRootNode(\n"
                                 + "                        this, sourceCompiler.compileBytecode("
-                                + "request.getSource(), this))"));
+                                + "request.getSource(), this, profile))"));
         assertTrue(languageContext.contains("return hostEntry.bytecodeTarget();"));
         assertTrue(
                 rootTask.contains(

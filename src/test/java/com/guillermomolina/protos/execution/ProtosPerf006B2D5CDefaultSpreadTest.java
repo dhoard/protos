@@ -545,7 +545,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                         ProtosClosureExecutionPlan.bytecode(
                                 definition,
                                 language,
-                                source),
+                                source, ProtosExecutionMode.NORMAL),
                         module);
         ProtosActivation invocation =
                 ProtosActivation.forClosureInvocation(
@@ -559,7 +559,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                 new ProtosBytecodeClosureExecutionPlan(
                                 definition,
                                 language,
-                                source)
+                                source, ProtosExecutionMode.NORMAL)
                         .executeActivation(invocation);
         return new Execution(result, invocation);
     }
@@ -591,7 +591,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                         definition,
                         language,
                         source,
-                        root),
+                        root, ProtosExecutionMode.NORMAL),
                 creator);
     }
 

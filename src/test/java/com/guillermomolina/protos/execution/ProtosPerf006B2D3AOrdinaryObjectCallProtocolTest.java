@@ -242,7 +242,7 @@ final class ProtosPerf006B2D3AOrdinaryObjectCallProtocolTest {
                                 ProtosClosureExecutionPlan.bytecode(
                                         definition,
                                         language,
-                                        source),
+                                        source, ProtosExecutionMode.NORMAL),
                                 module);
                 ProtosActivation invocation =
                         ProtosActivation.forClosureInvocation(
@@ -257,7 +257,7 @@ final class ProtosPerf006B2D3AOrdinaryObjectCallProtocolTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                         definition,
                                         language,
-                                        source)
+                                        source, ProtosExecutionMode.NORMAL)
                                 .executeActivation(invocation);
 
                 assertSame(marker, result);
@@ -299,7 +299,7 @@ final class ProtosPerf006B2D3AOrdinaryObjectCallProtocolTest {
                         definition,
                         language,
                         source,
-                        root),
+                        root, ProtosExecutionMode.NORMAL),
                 creator);
     }
 
@@ -345,7 +345,7 @@ final class ProtosPerf006B2D3AOrdinaryObjectCallProtocolTest {
                         .build();
         return new CanonicalToBytecodeLowerer(
                         language,
-                        source)
+                        source, ProtosExecutionMode.NORMAL)
                 .lowerRoot(canonicalize(characters))
                 .getCallTarget()
                 .call(module);

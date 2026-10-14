@@ -93,7 +93,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                 definition,
                                 language,
-                                closureSource);
+                                closureSource, ProtosExecutionMode.NORMAL);
                 directPlan.bind(invocation);
 
                 assertSame(first, ProtosLexicalFallback.readByName(invocation, "a").orElseThrow());
@@ -110,7 +110,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                         ProtosClosureExecutionPlan.bytecode(
                                 definition,
                                 language,
-                                closureSource);
+                                closureSource, ProtosExecutionMode.NORMAL);
                 ProtosClosureValue sourceClosure =
                         semanticClosure(definition, sourcePlan, module);
                 module.context().createLocalSlot("entry", sourceClosure);
@@ -124,7 +124,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                         "perf006-b2c2-call.protos")
                                 .build();
                 ProtosSemanticBytecodeRootNode topRoot =
-                        new CanonicalToBytecodeLowerer(language, topSource)
+                        new CanonicalToBytecodeLowerer(language, topSource, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(canonicalize(topCharacters));
 
                 assertSame(third, topRoot.getCallTarget().call(module));
@@ -164,7 +164,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                 ProtosClosureExecutionPlan.bytecode(
                                         definition,
                                         language,
-                                        closureSource),
+                                        closureSource, ProtosExecutionMode.NORMAL),
                                 module));
 
                 assertGuestArityError(
@@ -208,7 +208,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                 new ProtosBytecodeClosureExecutionPlan(
                                                 defaultDefinition,
                                                 language,
-                                                defaultSource);
+                                                defaultSource, ProtosExecutionMode.NORMAL);
             } finally {
                 context.leave();
             }
@@ -231,7 +231,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                 sourceName)
                         .build();
         ProtosSemanticBytecodeRootNode root =
-                new CanonicalToBytecodeLowerer(language, source)
+                new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                         .lowerRoot(canonicalize(characters));
         assertThrows(
                 ProtosSignalException.class,

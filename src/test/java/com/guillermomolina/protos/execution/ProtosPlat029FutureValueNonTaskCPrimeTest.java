@@ -140,7 +140,7 @@ final class ProtosPlat029FutureValueNonTaskCPrimeTest {
 
     private static ProtosSemanticBytecodeRootNode lowerRoot(ProtosLanguage language,String chars,String name) throws Exception {
         Source source=Source.newBuilder(ProtosLanguage.ID,chars,name).build();
-        return new CanonicalToBytecodeLowerer(language,source).lowerRoot(
+        return new CanonicalToBytecodeLowerer(language,source, ProtosExecutionMode.NORMAL).lowerRoot(
                 (CanonicalSequence)new Canonicalizer().canonicalize(new ProtosParser(chars).parseProgram()));
     }
 

@@ -263,7 +263,7 @@ final class ProtosPerf012FrameLexicalLayoutTest {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, characters, "perf012-layout.protos")
                         .build();
-        return new CanonicalToBytecodeLowerer(language, source)
+        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                 .lowerRoot(canonicalize(characters));
     }
 

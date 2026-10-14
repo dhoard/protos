@@ -498,7 +498,7 @@ final class ProtosPerf006B3EStandardFutureValueCPrimeTest {
                         .build();
         return new CanonicalToBytecodeLowerer(
                         language,
-                        source)
+                        source, ProtosExecutionMode.NORMAL)
                 .lowerRoot(
                         (CanonicalSequence)
                                 new Canonicalizer()

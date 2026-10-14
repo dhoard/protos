@@ -151,6 +151,26 @@ final class CanonicalToBytecodeLowerer {
     private final Source source;
 
     /**
+     * I101-A (PLAT058-D): the immutable physical compilation profile of the
+     * Context that owns every executable this lowerer produces. It selects the
+     * physical lowering at emission time; no emitted instruction tests the
+     * execution mode at run time.
+     */
+    private final ProtosExecutionMode profile;
+
+    /**
+     * I101-A: whether the standard root {@code Object} was already published
+     * (FROZEN) when this lowerer was created. Publication is irreversible and
+     * validates the standard Boolean and {@code call} behaviors, so a
+     * {@code true} snapshot holds for every execution of every site lowered
+     * here; a {@code false} snapshot keeps generic dispatch. The snapshot is
+     * taken once, before any group is created, so a {@code BytecodeRootNodes}
+     * reparse after a later publication replays exactly the decisions of the
+     * original parse instead of acquiring a different executable path.
+     */
+    private final boolean standardObjectPublished;
+
+    /**
      * I068 Slice 5 backend-private whole-tree lexical analysis supplied by an
      * enclosing lowering unit. When present, nested Closure activation roots
      * reuse this analysis so captured binding owners/depths are not lost by
@@ -362,6 +382,21 @@ final class CanonicalToBytecodeLowerer {
             frameLocalsByScope = new java.util.IdentityHashMap<>();
 
     /*
+     * I101-A: the top scopes of the genuine roots open in the builder at the
+     * current emission point of this parse. A frameLocalsByScope entry is a
+     * usable materialized-access target only while its root is open, i.e.
+     * encloses the root being emitted: the Bytecode DSL rejects a
+     * materialized access to a local whose root scope has ended. Before
+     * I101-A every Closure root was first lowered inside its lexical owner;
+     * a NORMAL root now omits the roots of inlined, unselected or folded
+     * Boolean callbacks, so an I096 inline copy of that root may lower such a
+     * callback for the first time at its own site, where the owner's root is
+     * already closed.
+     */
+    private final java.util.Set<CanonicalLexicalScope> openRootScopes =
+            java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+
+    /*
      * PERF025-D179-A: BytecodeRootNodes may invoke its retained parser again
      * to materialize source/instrumentation metadata. BytecodeLocal objects
      * are parse-local and are intentionally refreshed in frameLocalsByScope,
@@ -378,17 +413,21 @@ final class CanonicalToBytecodeLowerer {
     private final java.util.IdentityHashMap<CanonicalLexicalScope, ProtosFrameLexicalLayout>
             frameLayoutsByScope = new java.util.IdentityHashMap<>();
 
-    CanonicalToBytecodeLowerer(ProtosLanguage language, Source source) {
-        this(language, source, null);
+    CanonicalToBytecodeLowerer(
+            ProtosLanguage language, Source source, ProtosExecutionMode profile) {
+        this(language, source, null, profile);
     }
 
     CanonicalToBytecodeLowerer(
             ProtosLanguage language,
             Source source,
-            CanonicalBindingAnalysis inheritedBindingAnalysis) {
+            CanonicalBindingAnalysis inheritedBindingAnalysis,
+            ProtosExecutionMode profile) {
         this.language = Objects.requireNonNull(language, "language");
         this.source = Objects.requireNonNull(source, "source");
         this.inheritedBindingAnalysis = inheritedBindingAnalysis;
+        this.profile = Objects.requireNonNull(profile, "profile");
+        this.standardObjectPublished = ProtosObjectValue.rootObject().isFrozen();
     }
 
     /**
@@ -479,6 +518,12 @@ final class CanonicalToBytecodeLowerer {
      * exactly as a physical invocation of the callee would. The choice
      * depends only on the order of this parse, so a reparse makes it
      * identically. Outside inline bodies nothing changes.
+     *
+     * <p>I101-A: a NORMAL callee root omits the roots of the Boolean
+     * callbacks it inlines, folds or never selects, so its inline copy, which
+     * keeps the ordinary send, lowers such a callback here for the first
+     * time; captures of the closed callee scope then take the
+     * runtime-authority path ({@link #capturedOwnerBytecodeLocal}).
      */
     private ProtosClosureExecutionPlanCell bytecodeClosurePlan(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -647,7 +692,8 @@ final class CanonicalToBytecodeLowerer {
                                         language,
                                         source,
                                         pending.bindingAnalysis(),
-                                        pending.root()));
+                                        pending.root(),
+                                        profile));
             }
 
             return roots.getNode(0);
@@ -726,6 +772,7 @@ final class CanonicalToBytecodeLowerer {
         java.util.Set<CanonicalClosure> savedMaterializedClosures =
                 currentRootMaterializedClosures;
         boolean savedInlineClosureCallBody = currentInlineClosureCallBody;
+        boolean openedRootScope = openRootScopes.add(scopeForThisRoot);
         try {
             currentInlineClosureCallBody = false;
             /*
@@ -778,6 +825,9 @@ final class CanonicalToBytecodeLowerer {
             currentRootBindingCallCandidates = savedBindingCallCandidates;
             currentRootMaterializedClosures = savedMaterializedClosures;
             currentInlineClosureCallBody = savedInlineClosureCallBody;
+            if (openedRootScope) {
+                openRootScopes.remove(scopeForThisRoot);
+            }
         }
     }
 
@@ -1055,6 +1105,21 @@ final class CanonicalToBytecodeLowerer {
                     defaultResumeValue);
         }
 
+        /*
+         * I101-A: the emission plan of an admitted constant Boolean-control
+         * terminal is its proven effective result. The canonical sequence is
+         * not rewritten: every analysis keeps inspecting the original
+         * statement, which also owns the statement's source section. The
+         * decision is a function of the canonical tree, the profile and the
+         * publication snapshot, so every reparse repeats it.
+         */
+        CanonicalLiteral foldedTerminal =
+                sequence.expressions().isEmpty()
+                        ? null
+                        : foldedConstantControlResult(
+                                sequence.expressions().get(
+                                        sequence.expressions().size() - 1));
+
         if (sequence.expressions().isEmpty()) {
             builder.beginReturn();
             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
@@ -1062,8 +1127,10 @@ final class CanonicalToBytecodeLowerer {
         } else {
             java.util.List<CanonicalExpression> expressions =
                     sequence.expressions();
-            CanonicalExpression last =
+            CanonicalExpression lastStatement =
                     expressions.get(expressions.size() - 1);
+            CanonicalExpression last =
+                    foldedTerminal == null ? lastStatement : foldedTerminal;
 
             boolean scalarTerminal =
                     last instanceof CanonicalLookup lookup
@@ -1093,7 +1160,7 @@ final class CanonicalToBytecodeLowerer {
                  * BytecodeRootNodes group before the Return operation opens.
                  * The Closure value itself is still created at runtime.
                  */
-                beginStatement(builder, last);
+                beginStatement(builder, lastStatement);
                 ProtosClosureExecutionPlanCell terminalClosurePlan =
                         closureTerminal
                                 ? bytecodeClosurePlan(
@@ -1203,17 +1270,28 @@ final class CanonicalToBytecodeLowerer {
 
         ProtosSemanticBytecodeRootNode result = builder.endRoot();
         builder.endSourceSection();
+        /*
+         * I101-A: both capabilities are proved over the root's effective body:
+         * its original canonical statements, except that a folded terminal is
+         * its proven result ({@link #foldedConstantControlResult}). That proof
+         * already establishes that the whole site evaluates to exactly that
+         * literal with no effect, failure, suspension, activation, Context,
+         * capture or ReturnHome observation, so each capability rule below
+         * judges the literal by its own unchanged criteria.
+         */
+        java.util.List<CanonicalExpression> effectiveBody =
+                effectiveBody(sequence, foldedTerminal);
         result.recordProvablyNonSuspendingBody(
                 provesNonSuspendingBody(
-                        activationDefinition, currentRootAnalysis));
+                        activationDefinition, currentRootAnalysis, effectiveBody));
         // PERF032: prove the exact parameterless literal-one body eligible for
         // the NORMAL-mode headerless entry. Never infer this capability merely
         // from non-suspension.
         result.recordHeaderlessEntryBody(
                 activationDefinition != null
                         && activationDefinition.parameters().isEmpty()
-                        && sequence.expressions().size() == 1
-                        && sequence.expressions().get(0)
+                        && effectiveBody.size() == 1
+                        && effectiveBody.get(0)
                                 instanceof CanonicalLiteral literal
                         && literal.kind() == CanonicalLiteral.Kind.NUMBER
                         && "1".equals(literal.value()));
@@ -1272,9 +1350,26 @@ final class CanonicalToBytecodeLowerer {
      * A canonical binding identity is compared by Java identity:
      * coincidentally equal names never establish this proof.
      */
+    /**
+     * I101-A: the statements the root actually evaluates; the original
+     * sequence, with a folded terminal replaced by its proven result.
+     */
+    private static java.util.List<CanonicalExpression> effectiveBody(
+            CanonicalSequence sequence, CanonicalLiteral foldedTerminal) {
+        java.util.List<CanonicalExpression> expressions = sequence.expressions();
+        if (foldedTerminal == null) {
+            return expressions;
+        }
+        java.util.List<CanonicalExpression> effective =
+                new java.util.ArrayList<>(expressions);
+        effective.set(effective.size() - 1, foldedTerminal);
+        return java.util.List.copyOf(effective);
+    }
+
     private static boolean provesNonSuspendingBody(
             CanonicalClosure definition,
-            CanonicalBindingAnalysis analysis) {
+            CanonicalBindingAnalysis analysis,
+            java.util.List<CanonicalExpression> effectiveBody) {
         if (definition == null || analysis == null) {
             return false;
         }
@@ -1287,8 +1382,7 @@ final class CanonicalToBytecodeLowerer {
             }
         }
 
-        for (CanonicalExpression expression :
-                definition.body().expressions()) {
+        for (CanonicalExpression expression : effectiveBody) {
             if (expression instanceof CanonicalLiteral) {
                 continue;
             }
@@ -6842,8 +6936,15 @@ final class CanonicalToBytecodeLowerer {
          * no physical frame (its own root is closed, and its bindings live on
          * the invocation's named activation), so no captured owner is proven
          * here; the runtime-authority path selects the real owner.
+         *
+         * I101-A: the same holds for a Closure root first lowered inside such
+         * a body: its owner's root is closed (openRootScopes), so it takes the
+         * same runtime-authority path instead of a materialized access to a
+         * local whose root scope has ended.
          */
-        if (currentInlineClosureCallBody || !capturedOwnerMatchesCurrentRoot(captured)) {
+        if (currentInlineClosureCallBody
+                || !capturedOwnerMatchesCurrentRoot(captured)
+                || !openRootScopes.contains(captured.identity().owner())) {
             return null;
         }
         java.util.Map<String, BytecodeLocal> ownerFrameLocals =
@@ -7054,12 +7155,13 @@ final class CanonicalToBytecodeLowerer {
      * irreversible and publication validates its ifTrue and call behaviors, so
      * the canonical-Boolean selection proven here holds for every execution of
      * the site. Sources lowered during unpublished bootstrap stay generic.
+     * I101-A: publication is the lowerer's snapshot, stable across reparses.
      */
-    private static boolean admitsNativeIfTrue(
+    private boolean admitsNativeIfTrue(
             CanonicalSend send, boolean spreadArguments) {
         return "ifTrue".equals(send.message())
                 && (spreadArguments || send.arguments().size() == 1)
-                && ProtosObjectValue.rootObject().isFrozen();
+                && standardObjectPublished;
     }
 
     /**
@@ -7524,8 +7626,9 @@ final class CanonicalToBytecodeLowerer {
 
     /*
      * I095-A2: open-code an admitted constant Boolean-control site
-     * in NORMAL mode. The existing path is retained independently
-     * for DEBUG and for all non-admitted sends.
+     * in NORMAL mode. I101-A: only a NORMAL lowerer admits a site
+     * ({@link #normalBooleanControlSite}); DEBUG and every non-admitted
+     * send emit the established ordinary send, with no run-time mode test.
      */
     private void emitComposedSend(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -7552,21 +7655,8 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (booleanControl != null) {
-            builder.beginIfThenElse();
-            builder.emitIsNormalExecutionMode();
-
-            builder.beginBlock();
             emitNormalBooleanControlLiteral(
                     builder, send, booleanControl, result);
-            builder.endBlock();
-
-            builder.beginBlock();
-            emitComposedSendUnfolded(
-                    builder, send, result, preparedCall,
-                    childResult, resumeValue, primitiveCarrierResult);
-            builder.endBlock();
-
-            builder.endIfThenElse();
             return;
         }
 
@@ -7696,17 +7786,23 @@ final class CanonicalToBytecodeLowerer {
      * callback inline or no path invokes one (not); otherwise the existing
      * prepared/B-prime lowering is kept unchanged. Spread arguments and
      * arities other than the standard one keep ordinary dispatch.
+     *
+     * I101-A: admission is a pure function of the canonical site, this
+     * lowerer's immutable profile and its publication snapshot, so every
+     * reparse of a group makes the same decision. A DEBUG lowerer admits no
+     * site: it keeps the complete ordinary send and callback activation.
      */
     private NormalBooleanControlSite normalBooleanControlSite(
             CanonicalSend send) {
         NormalBooleanControl control =
                 NormalBooleanControl.of(send.message());
         if (control == null
+                || profile != ProtosExecutionMode.NORMAL
+                || !standardObjectPublished
                 || currentInlineCallbackFrameNative
                 || currentActivationLocal != null
                 || send.arguments().size() != control.arity
-                || hasSpreadArgument(send.arguments())
-                || !ProtosObjectValue.rootObject().isFrozen()) {
+                || hasSpreadArgument(send.arguments())) {
             return null;
         }
 
@@ -7912,6 +8008,57 @@ final class CanonicalToBytecodeLowerer {
         };
     }
 
+    /**
+     * I101-A (PLAT058-D) complete fold of a constant Boolean-control site:
+     * the literal that is the site's exact normal result in every execution,
+     * or {@code null} when that is not proven.
+     *
+     * <p>The proof composes existing ones without weakening them. The site is
+     * admitted by {@link #normalBooleanControlSite} (NORMAL profile, standard
+     * root published in this lowerer's snapshot, standard selector and
+     * arity, no spread). Its receiver is a canonical Boolean literal and
+     * every argument is a literal Closure, so no operand evaluation exists to
+     * preserve and no Closure identity can be observed (an unselected or
+     * inline literal is never materialized, I095-C). The selected callback's
+     * path is INLINE, which carries the I095-B proof of its whole activation
+     * (no parameters, unobservable ReturnHome and lexical scope), and its row
+     * returns the callback's exact result (ifTrue, ifFalse, ifTrueIfFalse).
+     * Finally the callback body is one literal accepted by {@link
+     * #isNormalPureControlExpression}: evaluating it has no effect, cannot
+     * fail, suspend or observe any Context, and its value does not depend on
+     * the activation evaluating it. The site therefore evaluates exactly to
+     * that literal, which is emitted in place of the whole send.
+     */
+    private CanonicalLiteral foldedConstantControlResult(
+            CanonicalExpression expression) {
+        if (!(expression instanceof CanonicalSend send)
+                || !(send.receiver() instanceof CanonicalLiteral receiver)
+                || !send.arguments().stream()
+                        .allMatch(CanonicalClosure.class::isInstance)) {
+            return null;
+        }
+        NormalBooleanControlSite site = normalBooleanControlSite(send);
+        if (site == null) {
+            return null;
+        }
+        boolean value = receiver.kind() == CanonicalLiteral.Kind.TRUE;
+        if (site.path(value) != NormalBooleanControlPath.INLINE
+                || site.control().selectedResult
+                        != NormalBooleanControl.SelectedResult.EXACT) {
+            return null;
+        }
+        CanonicalClosure selected = (CanonicalClosure)
+                send.arguments().get(site.control().selectedIndex(value));
+        java.util.List<CanonicalExpression> body =
+                selected.body().expressions();
+        if (body.size() == 1
+                && body.get(0) instanceof CanonicalLiteral literal
+                && isNormalPureControlExpression(literal)) {
+            return literal;
+        }
+        return null;
+    }
+
     private boolean isNormalPureControlExpression(
             CanonicalExpression expression) {
         if (expression instanceof CanonicalLiteral literal) {
@@ -7939,11 +8086,10 @@ final class CanonicalToBytecodeLowerer {
 
     /**
      * I095-D: whether the site evaluates a receiver or argument expression.
-     * Such operands are evaluated exactly once, before the execution-mode
-     * test, and shared by NORMAL, MISS and DEBUG: emitting them once per
-     * mode would duplicate every nested admitted site (a chain of {@code &&}
-     * sends doubles at each level). A canonical literal receiver with only
-     * literal Closure arguments evaluates nothing and keeps the I095-C shape.
+     * Such operands are evaluated exactly once, before classification, and
+     * shared by every canonical path and the MISS ordinary send. A canonical
+     * literal receiver with only literal Closure arguments evaluates nothing
+     * and keeps the I095-C shape.
      */
     private static boolean stagesNormalBooleanControlOperands(
             CanonicalSend send) {
@@ -7952,7 +8098,7 @@ final class CanonicalToBytecodeLowerer {
                         .allMatch(CanonicalClosure.class::isInstance);
     }
 
-    /** I095-C: the NORMAL branch of a literal receiver with only literal Closures. */
+    /** I095-C: the NORMAL lowering of a literal receiver with only literal Closures. */
     private void emitNormalBooleanControlLiteral(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
@@ -7971,15 +8117,20 @@ final class CanonicalToBytecodeLowerer {
 
     /*
      * I095-C/D: the receiver and then every non-Closure argument expression
-     * are evaluated once, in source order, before the mode test and before
-     * any selection. A literal Closure argument has no evaluation effect: it
-     * is materialized only by the ordinary send, so an inline or unselected
-     * literal never becomes a physical Closure. In NORMAL mode the receiver
-     * is classified (a literal receiver statically, any other by the I092
-     * canonical Boolean classifier); a canonical receiver whose path is
-     * IMMEDIATE or INLINE completes here. MISS, an ORDINARY canonical path
-     * and DEBUG share one ordinary send with the staged operands, which
+     * are evaluated once, in source order, before any selection. A literal
+     * Closure argument has no evaluation effect: it is materialized only by
+     * the ordinary send, so an inline or unselected literal never becomes a
+     * physical Closure. A literal receiver selects its path statically
+     * (admission guarantees it is not ORDINARY), so it needs neither a
+     * classification nor the ordinary send. Any other receiver is classified
+     * by the I092 canonical Boolean classifier; a canonical receiver whose
+     * path is IMMEDIATE or INLINE completes here, while MISS and an ORDINARY
+     * canonical path share one ordinary send with the staged operands, which
      * keeps PLAT043 sequencing and the B-prime literal candidates.
+     *
+     * I101-A: only a NORMAL lowerer reaches here, so no run-time execution
+     * mode test is emitted; the classifier and its MISS fallback remain the
+     * necessary semantic guard of a dynamic receiver.
      */
     private void emitNormalBooleanControl(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -8016,36 +8167,28 @@ final class CanonicalToBytecodeLowerer {
             argumentValues.add(argumentValue);
         }
 
-        BytecodeLocal classification =
-                builder.createLocal("normalBooleanControlClass", null);
-        emitStoreConstant(builder, classification,
-                ProtosCanonicalBooleanOneNode.CLASS_MISS);
-        builder.beginIfThen();
-        builder.emitIsNormalExecutionMode();
-        builder.beginStoreLocal(classification);
-        java.util.List<Boolean> selecting = new java.util.ArrayList<>(2);
         if (send.receiver() instanceof CanonicalLiteral receiver) {
-            boolean value = receiver.kind() == CanonicalLiteral.Kind.TRUE;
-            builder.emitLoadConstant(value
-                    ? ProtosCanonicalBooleanOneNode.CLASS_TRUE
-                    : ProtosCanonicalBooleanOneNode.CLASS_FALSE);
-            selecting.add(value);
+            emitNormalBooleanControlPath(
+                    builder, send, site,
+                    receiver.kind() == CanonicalLiteral.Kind.TRUE, result);
         } else {
+            BytecodeLocal classification =
+                    builder.createLocal("normalBooleanControlClass", null);
+            builder.beginStoreLocal(classification);
             builder.beginTryCompactCanonicalBooleanOne();
             builder.emitLoadLocal(receiverValue);
             builder.endTryCompactCanonicalBooleanOne();
-            selecting.add(true);
-            selecting.add(false);
-        }
-        builder.endStoreLocal();
-        builder.endIfThen();
+            builder.endStoreLocal();
 
-        selecting.removeIf(receiver ->
-                site.path(receiver) == NormalBooleanControlPath.ORDINARY);
-        emitNormalBooleanControlSelection(
-                builder, send, site, selecting, 0, classification,
-                receiverValue, argumentValues, result,
-                preparedCall, childResult, resumeValue);
+            java.util.List<Boolean> selecting =
+                    new java.util.ArrayList<>(java.util.List.of(true, false));
+            selecting.removeIf(receiver ->
+                    site.path(receiver) == NormalBooleanControlPath.ORDINARY);
+            emitNormalBooleanControlSelection(
+                    builder, send, site, selecting, 0, classification,
+                    receiverValue, argumentValues, result,
+                    preparedCall, childResult, resumeValue);
+        }
 
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
@@ -9086,20 +9229,20 @@ final class CanonicalToBytecodeLowerer {
 
         /*
          * I096-A/B1: the receiver (the literal, or the ordinary lookup of a
-         * candidate binding) was staged above exactly once; both branches
-         * consume the same receiver and argument locals, so neither repeats
-         * an evaluation or a binding read. DEBUG keeps the unchanged physical
-         * call topology.
+         * candidate binding) was staged above exactly once and the inline
+         * region consumes those locals, so it never repeats an evaluation or
+         * a binding read. I101-A: only a NORMAL lowerer has a candidate
+         * ({@link #inlineClosureLiteralCallCandidate}); its region is the
+         * complete lowering of the call, because the run-time admission of
+         * the canonical Object.call selection and the carrier's exact
+         * physical fallback inside it remain the necessary semantic guard.
+         * DEBUG keeps the unchanged physical call topology.
          */
         ProtosClosureExecutionPlanCell inlineLiteralPlan =
                 inlineLiteral == null
                         ? null
                         : bytecodeClosurePlans.get(inlineLiteral);
         if (inlineLiteralPlan != null) {
-            builder.beginIfThenElse();
-            builder.emitIsNormalExecutionMode();
-
-            builder.beginBlock();
             emitInlineClosureLiteralCall(
                     builder,
                     inlineLiteral,
@@ -9110,8 +9253,8 @@ final class CanonicalToBytecodeLowerer {
                     childResult,
                     resumeValue);
             builder.endBlock();
-
-            builder.beginBlock();
+            builder.endTag(StandardTags.CallTag.class);
+            return;
         }
 
         BytecodeLocal directCallResult = null;
@@ -9259,11 +9402,6 @@ final class CanonicalToBytecodeLowerer {
             builder.endIfThenElse();
         }
 
-        if (inlineLiteralPlan != null) {
-            builder.endBlock();
-            builder.endIfThenElse();
-        }
-
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
@@ -9312,9 +9450,15 @@ final class CanonicalToBytecodeLowerer {
      * the body's contents are not proofs of selection: the inline region is
      * entered only after the run-time admission in {@link
      * #emitInlineClosureLiteralCall}.
+     *
+     * <p>I101-A: a DEBUG lowerer has no candidate, so its call keeps the
+     * physical callee activation.
      */
     private CanonicalClosure inlineClosureLiteralCallCandidate(
             CanonicalCall call) {
+        if (profile != ProtosExecutionMode.NORMAL) {
+            return null;
+        }
         CanonicalClosure candidate =
                 call.receiver() instanceof CanonicalClosure literal
                         ? literal
@@ -9336,7 +9480,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I096-A (PLAT057-B) NORMAL-mode region of an admitted candidate ({@link
+     * I096-A (PLAT057-B) NORMAL-profile lowering of an admitted candidate ({@link
      * #inlineClosureLiteralCallCandidate}).
      *
      * <p>Ordinary {@code call} selection happens exactly once, on the already

@@ -88,7 +88,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                         definition,
                                         language,
-                                        source)
+                                        source, ProtosExecutionMode.NORMAL)
                                 .executeActivation(invocation);
 
                 assertSame(head, result);
@@ -153,7 +153,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                                 ProtosClosureExecutionPlan.bytecode(
                                         definition,
                                         language,
-                                        closureSource),
+                                        closureSource, ProtosExecutionMode.NORMAL),
                                 module));
 
                 String callCharacters =
@@ -165,7 +165,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                                         "perf006-b2c3b2-suppression-call.protos")
                                 .build();
                 ProtosSemanticBytecodeRootNode caller =
-                        new CanonicalToBytecodeLowerer(language, callSource)
+                        new CanonicalToBytecodeLowerer(language, callSource, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(canonicalize(callCharacters));
 
                 assertSame(third, caller.getCallTarget().call(module));
@@ -216,7 +216,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                 definition,
                                 language,
-                                source);
+                                source, ProtosExecutionMode.NORMAL);
 
                 ProtosActivation omitted =
                         ProtosActivation.forClosureInvocation(
@@ -300,7 +300,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                 requiredDefinition,
                                 language,
-                                requiredSource);
+                                requiredSource, ProtosExecutionMode.NORMAL);
                 assertThrows(
                         ProtosSignalException.class,
                         () -> requiredPlan.executeActivation(missing));
@@ -318,7 +318,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                 new ProtosBytecodeClosureExecutionPlan(
                                                 complexDefinition,
                                                 language,
-                                                complexSource);
+                                                complexSource, ProtosExecutionMode.NORMAL);
             } finally {
                 context.leave();
             }

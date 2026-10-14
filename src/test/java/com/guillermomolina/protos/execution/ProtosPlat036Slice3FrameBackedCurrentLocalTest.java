@@ -202,7 +202,7 @@ final class ProtosPlat036Slice3FrameBackedCurrentLocalTest {
     private static Object run(ProtosLanguage language, ProtosActivation module, String characters) {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, characters, "plat036-slice3.protos").build();
-        ProtosSemanticBytecodeRootNode root = new CanonicalToBytecodeLowerer(language, source).lowerRoot(canonicalize(characters));
+        ProtosSemanticBytecodeRootNode root = new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL).lowerRoot(canonicalize(characters));
         return root.getCallTarget().call(module);
     }
 

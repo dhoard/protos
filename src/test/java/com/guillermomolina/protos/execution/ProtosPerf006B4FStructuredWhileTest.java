@@ -652,7 +652,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
                 ProtosClosureExecutionPlan.bytecode(
                         definition,
                         language,
-                        source(characters, sourceName));
+                        source(characters, sourceName), ProtosExecutionMode.NORMAL);
         return new ProtosClosureValue(
                 definition,
                 creator.lexicalContextsForClosureCapture(),
@@ -738,7 +738,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
             String sourceName)
             throws Exception {
         Source source = source(characters, sourceName);
-        return new CanonicalToBytecodeLowerer(language, source)
+        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                 .lowerRoot(canonicalize(characters));
     }
 

@@ -320,7 +320,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             ProtosLanguageContext context = ProtosLanguageContext.current();
             ProtosClosureExecutionPlan rebuilt =
                     template.rebuildBytecodeForLanguage(
-                            original.definition(), context.languageForTesting());
+                            original.definition(), context.languageForTesting(), ProtosExecutionMode.NORMAL);
             ProtosPrelude prelude = module.prelude().orElseThrow();
             ProtosClosureValue projected =
                     original.parallelProjection(

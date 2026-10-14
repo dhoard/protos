@@ -48,8 +48,14 @@ final class ProtosI092CompactBooleanTest {
                 """));
     }
 
+    /**
+     * I101-A: a NORMAL root holds only the admitted lowering of a constant
+     * Boolean-control site, with no execution-mode branch and no retained
+     * ordinary send; DEBUG roots are covered by
+     * ProtosI101ProfileSpecializedLoweringTest.
+     */
     @Test
-    void constantBooleanControlHasDirectNormalBranch()
+    void constantBooleanControlHasOnlyTheNormalLowering()
             throws Exception {
         for (String booleanLiteral : List.of("true", "false")) {
             ProtosActivation module =
@@ -78,18 +84,8 @@ final class ProtosI092CompactBooleanTest {
                     .map(Instruction::getName)
                     .toList();
 
-            int mode = position(names, "IsNormalExecutionMode");
-            int generic = position(names, "PrepareSendOne");
-
-            assertTrue(mode >= 0, names.toString());
-            assertTrue(generic > mode, names.toString());
-
-            // The DEBUG alternative retains the established
-            // canonical/generic protocol and its callback.
-            assertTrue(
-                    position(names, "IsCompactCanonicalBooleanMiss")
-                            > mode,
-                    names.toString());
+            assertTrue(position(names, "PrepareSendOne") < 0, names.toString());
+            assertTrue(normalControlAdmitted(names), names.toString());
 
             Object value = ProtosTestExecutionSupport.evaluate(
                     "i095-constant-control-run.protos",
@@ -139,7 +135,7 @@ final class ProtosI092CompactBooleanTest {
                 .toList();
 
         assertTrue(
-                position(names, "IsNormalExecutionMode") >= 0,
+                normalControlAdmitted(names),
                 names.toString());
 
         assertInteger(
@@ -183,7 +179,7 @@ final class ProtosI092CompactBooleanTest {
                 .toList();
 
         assertTrue(
-                position(names, "IsNormalExecutionMode") >= 0,
+                normalControlAdmitted(names),
                 names.toString());
 
         assertSame(
@@ -228,7 +224,7 @@ final class ProtosI092CompactBooleanTest {
                 .toList();
 
         assertTrue(
-                position(names, "IsNormalExecutionMode") >= 0,
+                normalControlAdmitted(names),
                 names.toString());
 
         assertTrue(
@@ -278,7 +274,7 @@ final class ProtosI092CompactBooleanTest {
                 .toList();
 
         assertTrue(
-                position(names, "IsNormalExecutionMode") >= 0,
+                normalControlAdmitted(names),
                 names.toString());
 
         assertInteger(
@@ -323,7 +319,7 @@ final class ProtosI092CompactBooleanTest {
                 .toList();
 
         assertTrue(
-                position(names, "IsNormalExecutionMode") >= 0,
+                normalControlAdmitted(names),
                 names.toString());
 
         assertTrue(
@@ -372,7 +368,7 @@ final class ProtosI092CompactBooleanTest {
                 .toList();
 
         assertTrue(
-                position(names, "IsNormalExecutionMode") >= 0,
+                normalControlAdmitted(names),
                 names.toString());
 
         assertInteger(
@@ -416,7 +412,7 @@ final class ProtosI092CompactBooleanTest {
                 .toList();
 
         assertTrue(
-                position(names, "IsNormalExecutionMode") >= 0,
+                normalControlAdmitted(names),
                 names.toString());
 
         assertTrue(
@@ -468,7 +464,7 @@ final class ProtosI092CompactBooleanTest {
                 .toList();
 
         assertTrue(
-                position(names, "IsNormalExecutionMode") >= 0,
+                normalControlAdmitted(names),
                 names.toString());
 
         assertInteger(
@@ -513,7 +509,7 @@ final class ProtosI092CompactBooleanTest {
                 .toList();
 
         assertTrue(
-                position(names, "IsNormalExecutionMode") >= 0,
+                normalControlAdmitted(names),
                 names.toString());
 
         assertTrue(
@@ -570,7 +566,7 @@ final class ProtosI092CompactBooleanTest {
                 .toList();
 
         assertTrue(
-                position(names, "IsNormalExecutionMode") < 0,
+                !normalControlAdmitted(names),
                 names.toString());
 
         assertInteger(
@@ -606,7 +602,7 @@ final class ProtosI092CompactBooleanTest {
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(Instruction::getName).toList();
-        assertTrue(position(names, "IsNormalExecutionMode") >= 0, names.toString());
+        assertTrue(normalControlAdmitted(names), names.toString());
         for (int i = 0; i < 3; i++) {
             assertInteger(51, ProtosTestExecutionSupport.evaluate(
                     "i095-b6a-own-scope-call.protos", "run()", module));
@@ -643,7 +639,7 @@ final class ProtosI092CompactBooleanTest {
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(Instruction::getName).toList();
-        assertTrue(position(names, "IsNormalExecutionMode") >= 0, names.toString());
+        assertTrue(normalControlAdmitted(names), names.toString());
         for (int i = 0; i < 3; i++) {
             assertInteger(43, ProtosTestExecutionSupport.evaluate(
                     "i095-b6a-two-callbacks-call.protos", "run()", module));
@@ -669,7 +665,7 @@ final class ProtosI092CompactBooleanTest {
             root.getRootNodes().ensureComplete();
             var names = root.getBytecodeNode().getInstructionsAsList()
                     .stream().map(Instruction::getName).toList();
-            assertTrue(position(names, "IsNormalExecutionMode") < 0, names.toString());
+            assertTrue(!normalControlAdmitted(names), names.toString());
         }
         System.out.println("I095_B6A_UNPROVEN_PRESENCE=B_PRIME");
     }
@@ -701,7 +697,7 @@ final class ProtosI092CompactBooleanTest {
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(Instruction::getName).toList();
-        assertTrue(position(names, "IsNormalExecutionMode") >= 0, names.toString());
+        assertTrue(normalControlAdmitted(names), names.toString());
         assertTrue(position(names, "ReadRootFrameLocal") >= 0, names.toString());
         assertTrue(position(names, "ResolveRootFrameLocalWriteTarget") >= 0, names.toString());
         assertTrue(position(names, "AssignRootFrameLocal") >= 0, names.toString());
@@ -735,7 +731,7 @@ final class ProtosI092CompactBooleanTest {
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(Instruction::getName).toList();
-        assertTrue(position(names, "IsNormalExecutionMode") >= 0, names.toString());
+        assertTrue(normalControlAdmitted(names), names.toString());
         assertTrue(position(names, "ReadRootFrameLocal") >= 0, names.toString());
         for (int i = 0; i < 3; i++) {
             assertInteger(42, ProtosTestExecutionSupport.evaluate(
@@ -767,7 +763,7 @@ final class ProtosI092CompactBooleanTest {
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(Instruction::getName).toList();
-        assertTrue(position(names, "IsNormalExecutionMode") < 0, names.toString());
+        assertTrue(!normalControlAdmitted(names), names.toString());
         System.out.println("I095_B6B_DYNAMIC_FALLBACK=B_PRIME");
     }
 
@@ -830,26 +826,18 @@ final class ProtosI092CompactBooleanTest {
     }
 
 
+    /**
+     * I101-A: a NORMAL root holds only the admitted I095 lowering of this site, so the I092
+     * native ordinary lowering is observed in the DEBUG profile, which keeps it.
+     */
     @Test
     void canonicalBooleanHasIndependentNativeBytecodeBranch() throws Exception {
-        ProtosActivation module =
-                new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
-        ProtosClosureValue run = assertInstanceOf(
-                ProtosClosureValue.class,
-                ProtosTestExecutionSupport.evaluate(
-                        "i092-native.protos",
-                        """
-                        run: () => { true.ifTrue(() => { 41 }) }
-                        run
-                        """,
-                        module));
-
-        var root = run.executionPlan().orElseThrow()
-                .bytecodeActivationRootForTesting();
-        root.getRootNodes().ensureComplete();
-        List<String> names = root.getBytecodeNode()
-                .getInstructionsAsList().stream()
-                .map(Instruction::getName).toList();
+        List<String> names = debugRunInstructionNames(
+                "i092-native.protos",
+                """
+                run: () => { true.ifTrue(() => { 41 }) }
+                run
+                """);
 
         int selection = position(names, "TryCompactCanonicalBooleanOne");
         int miss = position(names, "IsCompactCanonicalBooleanMiss");
@@ -866,6 +854,56 @@ final class ProtosI092CompactBooleanTest {
         assertFalse(Arrays.stream(ProtosBytecodeRootNode.class.getDeclaredClasses())
                 .anyMatch(type -> type.getSimpleName()
                         .equals("CompactCanonicalBooleanCall")));
+    }
+
+    /**
+     * I101-A: complete instruction names of the {@code run} Closure root (the first root the
+     * module root creates) of {@code characters}, parsed through the production ParsingRequest
+     * path of a DEBUG Context, so it is lowered under the DEBUG profile.
+     */
+    private static List<String> debugRunInstructionNames(String name, String characters)
+            throws Exception {
+        try (org.graalvm.polyglot.Context context =
+                org.graalvm.polyglot.Context.newBuilder(ProtosLanguage.ID)
+                        .allowExperimentalOptions(true)
+                        .option("protos.Debug", "true")
+                        .build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                // Publishes the standard root before the program is lowered.
+                new ProtosCoreBootstrap().bootstrap(CORE);
+                ProtosLanguageContext languageContext = ProtosLanguageContext.current();
+                assertEquals(ProtosExecutionMode.DEBUG, languageContext.executionMode());
+                var target = assertInstanceOf(
+                        com.oracle.truffle.api.RootCallTarget.class,
+                        languageContext.parsePublic(
+                                com.oracle.truffle.api.source.Source.newBuilder(
+                                                ProtosLanguage.ID, characters, name)
+                                        .build()));
+                var module = assertInstanceOf(
+                        ProtosSemanticBytecodeRootNode.class, target.getRootNode());
+                module.getRootNodes().ensureComplete();
+                var run = assertInstanceOf(
+                        ProtosSemanticBytecodeRootNode.class,
+                        module.getRootNodes().getNode(1));
+                return run.getBytecodeNode().getInstructionsAsList().stream()
+                        .map(Instruction::getName)
+                        .toList();
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    /**
+     * I101-A: whether the NORMAL I095 lowering replaced the ordinary ifTrue
+     * send. A non-admitted site keeps the I092 canonical-miss protocol or the
+     * PLAT044 B-prime callback admission of the ordinary send.
+     */
+    private static boolean normalControlAdmitted(List<String> names) {
+        return position(names, "IsCompactCanonicalBooleanMiss") < 0
+                && position(names, "AdmitsInlineLiteralCallback") < 0;
     }
 
     private static int position(List<String> names, String operation) {
@@ -1076,29 +1114,23 @@ final class ProtosI092CompactBooleanTest {
     }
 
 
+    /**
+     * I101-A: in NORMAL the outer site is the admitted I095 inline lowering, so the B-prime
+     * frame-native callback region holding the native inner controls exists in DEBUG.
+     */
     @Test
     void inlineFrameNativeEmitsNativeControl() throws Exception {
-        var module = new ProtosCoreBootstrap()
-                .bootstrap(CORE).newModuleActivation();
-        var run = assertInstanceOf(
-                ProtosClosureValue.class,
-                ProtosTestExecutionSupport.evaluate(
-                        "i092-inline-frame.protos",
-                        """
-                        run: (callback, callbacks) => {
-                            true.ifTrue(() => {
-                                true.ifTrue(callback)
-                                true.ifTrue(...callbacks)
-                            })
-                        }
-                        run
-                        """,
-                        module));
-        var root = run.executionPlan().orElseThrow()
-                .bytecodeActivationRootForTesting();
-        root.getRootNodes().ensureComplete();
-        var names = root.getBytecodeNode().getInstructionsAsList()
-                .stream().map(Instruction::getName).toList();
+        var names = debugRunInstructionNames(
+                "i092-inline-frame.protos",
+                """
+                run: (callback, callbacks) => {
+                    true.ifTrue(() => {
+                        true.ifTrue(callback)
+                        true.ifTrue(...callbacks)
+                    })
+                }
+                run
+                """);
 
         assertTrue(position(names, "TryCompactCanonicalBooleanInlineOne") >= 0);
         assertTrue(position(names, "TryCompactCanonicalBooleanInlineVector") >= 0);
