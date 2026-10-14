@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
@@ -162,6 +163,103 @@ final class ProtosMathModuleTest {
                 .parent().orElseThrow());
         assertSame(other.complexPrototype(), assertInstanceOf(ProtosObjectValue.class, there)
                 .parent().orElseThrow());
+    }
+
+    @Test
+    void sqrtResultsRetainFamiliesAndSignedZerosThroughActorAndPTransfer()
+            throws IOException {
+        Object exactComplex = call(complex(integer(3), integer(4)));
+        Object exactFraction = call(fraction(1, 4));
+        Object signedZero = call(complex(flt(-4.0), flt(-0.0)));
+        Object mixed = call(complex(large(BigInteger.ONE.shiftLeft(1200)), flt(1.0)));
+        Object largeRoot = call(large(BigInteger.ONE.shiftLeft(360)));
+
+        Object product = ProtosTestExecutionSupport.callEntered(
+                () -> ProtosInvocation.invokeMessage(
+                        complex(integer(1), integer(2)),
+                        "*",
+                        List.of(complex(integer(3), integer(4))),
+                        caller));
+
+        List<Object> roots = List.of(
+                exactComplex, exactComplex, exactFraction,
+                signedZero, mixed, largeRoot, product);
+
+        ProtosPrelude destination = bootstrapPrelude();
+        ProtosActivation receiver = destination.newModuleActivation();
+
+        List<Object> actorSnapshot =
+                ProtosActorValueTransfer.snapshotArguments(roots, caller);
+        assertTrue(ProtosActorValueTransfer.requiresMaterialization(actorSnapshot));
+        List<?> actorValues =
+                ProtosActorValueTransfer.materializeArguments(actorSnapshot, receiver);
+
+        boolean[] pRecords = new boolean[1];
+        List<Object> pSnapshot =
+                ProtosParallelRuntime.captureValuesForTesting(roots, caller, pRecords);
+        assertTrue(pRecords[0]);
+        List<?> pValues =
+                ProtosParallelRuntime.materializeValuesForTesting(pSnapshot, receiver);
+
+        for (List<?> values : List.of(actorValues, pValues)) {
+            Object copiedComplex = values.get(0);
+            assertNotSame(exactComplex, copiedComplex);
+            assertSame(copiedComplex, values.get(1));
+            assertSame(
+                    destination.complexPrototype(),
+                    assertInstanceOf(ProtosObjectValue.class, copiedComplex)
+                            .parent().orElseThrow());
+            assertTrue(ProtosIdentity.identical(exactComplex, copiedComplex));
+            assertExactComponent(
+                    integer(2), ProtosComplexNumericSupport.real(copiedComplex));
+            assertExactComponent(
+                    integer(1), ProtosComplexNumericSupport.imaginary(copiedComplex));
+
+            Object copiedFraction = values.get(2);
+            assertTrue(ProtosNumericValueSupport.isFraction(copiedFraction));
+            assertSame(
+                    destination.fractionPrototype(),
+                    assertInstanceOf(ProtosObjectValue.class, copiedFraction)
+                            .parent().orElseThrow());
+            assertTrue(ProtosIdentity.identical(exactFraction, copiedFraction));
+
+            Object copiedSignedZero = values.get(3);
+            assertSame(
+                    destination.complexPrototype(),
+                    assertInstanceOf(ProtosObjectValue.class, copiedSignedZero)
+                            .parent().orElseThrow());
+            assertFloatComplex(copiedSignedZero, 0.0, -2.0);
+            assertTrue(ProtosIdentity.identical(signedZero, copiedSignedZero));
+
+            Object copiedMixed = values.get(4);
+            assertSame(
+                    destination.complexPrototype(),
+                    assertInstanceOf(ProtosObjectValue.class, copiedMixed)
+                            .parent().orElseThrow());
+            assertFloatComplex(
+                    copiedMixed,
+                    Math.scalb(1.0, 600),
+                    Math.scalb(1.0, -601));
+            assertTrue(ProtosIdentity.identical(mixed, copiedMixed));
+
+            Object copiedLarge = values.get(5);
+            assertSame(
+                    destination.bigIntegerPrototype(),
+                    assertInstanceOf(ProtosObjectValue.class, copiedLarge)
+                            .parent().orElseThrow());
+            assertTrue(ProtosIdentity.identical(largeRoot, copiedLarge));
+
+            Object copiedProduct = values.get(6);
+            assertSame(
+                    destination.complexPrototype(),
+                    assertInstanceOf(ProtosObjectValue.class, copiedProduct)
+                            .parent().orElseThrow());
+            assertTrue(ProtosIdentity.identical(product, copiedProduct));
+            assertExactComponent(
+                    integer(-5), ProtosComplexNumericSupport.real(copiedProduct));
+            assertExactComponent(
+                    integer(10), ProtosComplexNumericSupport.imaginary(copiedProduct));
+        }
     }
 
     // ---- Exact real and Complex roots (F3) ----
