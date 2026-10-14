@@ -144,6 +144,9 @@ final class ProtosNetworkListenAcquisitionTest {
                         released::incrementAndGet)).get();
 
         assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertTrue(future.cancelRequest());
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertEquals(0, released.get());
         future.domain().actorTerminated();
         assertEquals(1, released.get());
         assertEquals(ProtosFutureValue.State.PENDING, future.state());

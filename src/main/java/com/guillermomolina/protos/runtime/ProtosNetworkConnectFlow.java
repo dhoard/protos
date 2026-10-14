@@ -230,8 +230,11 @@ public final class ProtosNetworkConnectFlow {
             }
             try {
                 domain.enqueueTargetedFutureCompletionForRuntime(
-                        operation.future(),
-                        () -> claim(delivery) && action.getAsBoolean());
+                    operation.future(),
+                    () -> claim(delivery) && action.getAsBoolean(),
+                    () -> {
+                        if (claim(delivery)) releaseSafely(releaseOnDrop);
+                    });
             } catch (IllegalStateException terminatingActor) {
                 if (claim(delivery)) releaseSafely(releaseOnDrop);
             }

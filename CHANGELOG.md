@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.356-SNAPSHOT
+
+- `I093` (#873), slice C1: preserve untransferred TCP acquisition
+  custody when Actor termination discards targeted completions.
+  - Extend targeted runtime completion scheduling with optional
+    host-only discard cleanup, preserving the existing two-argument API.
+  - Drain discarded completion cleanup outside the Actor-domain lock
+    during termination, without executing guest materialization.
+  - Apply claim-once resource release to TCP connect, listen and accept
+    completion handoffs.
+  - Add regression coverage for post-commit cancellation followed by
+    Actor termination, preserving Future commitment semantics and
+    releasing untransferred resources exactly once.
+
 ## 0.3.355-SNAPSHOT
 
 - `I093` (#873), slice B2: complete descriptor-only NIO listen/accept

@@ -39,16 +39,20 @@ import java.util.function.BooleanSupplier;
  */
 public final class ProtosActorExecutionDomain {
     private static final Runnable NOOP_WAKEUP = () -> {};
+    private static final Runnable NOOP_DISCARD = () -> {};
 
     private static final class TargetedRuntimeCompletion {
         private final ProtosFutureValue future;
         private final BooleanSupplier completion;
+        private final Runnable onDiscard;
 
         private TargetedRuntimeCompletion(
                 ProtosFutureValue future,
-                BooleanSupplier completion) {
+                BooleanSupplier completion,
+                Runnable onDiscard) {
             this.future = Objects.requireNonNull(future, "future");
             this.completion = Objects.requireNonNull(completion, "completion");
+            this.onDiscard = Objects.requireNonNull(onDiscard, "onDiscard");
         }
     }
 
@@ -212,8 +216,21 @@ public final class ProtosActorExecutionDomain {
     public void enqueueTargetedFutureCompletionForRuntime(
             ProtosFutureValue future,
             BooleanSupplier completion) {
+        enqueueTargetedFutureCompletionForRuntime(
+                future, completion, NOOP_DISCARD);
+    }
+
+    /**
+     * Host-only cleanup when an Actor termination discards a completion.
+     * onDiscard must never perform guest execution.
+     */
+    public void enqueueTargetedFutureCompletionForRuntime(
+            ProtosFutureValue future,
+            BooleanSupplier completion,
+            Runnable onDiscard) {
         Objects.requireNonNull(future, "future");
         Objects.requireNonNull(completion, "completion");
+        Objects.requireNonNull(onDiscard, "onDiscard");
         if (future.domain() != this) {
             throw new IllegalArgumentException(
                     "targeted Future completion belongs to another Actor domain");
@@ -230,7 +247,8 @@ public final class ProtosActorExecutionDomain {
                         "terminating Actor cannot accept targeted runtime completion");
             }
             targetedRuntimeCompletions.addLast(
-                    new TargetedRuntimeCompletion(future, completion));
+                    new TargetedRuntimeCompletion(
+                            future, completion, onDiscard));
             notifyAll();
             wakeup = schedulerWakeup;
         }
@@ -486,13 +504,24 @@ public final class ProtosActorExecutionDomain {
         Set<ProtosTask> tasks;
         Set<ProtosIoOperation> io;
         Set<ProtosFutureValue> nonTask;
+        java.util.List<TargetedRuntimeCompletion> dropped;
         synchronized (this) {
             actorTerminationBegun = true;
+            dropped = java.util.List.copyOf(targetedRuntimeCompletions);
             targetedRuntimeCompletions.clear();
             notifyAll();
             tasks = Set.copyOf(liveTasks);
             io = Set.copyOf(actorIoOperations);
             nonTask = Set.copyOf(actorNonTaskFutures);
+        }
+        // Reconcile host custody before cancelling remaining operations.
+        // Never run cleanup under the domain lock or execute guest code here.
+        for (TargetedRuntimeCompletion completion : dropped) {
+            try {
+                completion.onDiscard.run();
+            } catch (RuntimeException ignored) {
+                // A failed cleanup cannot suppress the termination cutover.
+            }
         }
         for (ProtosTask task : tasks) task.requestCancellation();
         for (ProtosIoOperation operation : io) operation.requestCancellation();
