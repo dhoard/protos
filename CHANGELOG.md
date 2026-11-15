@@ -8,6 +8,15 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.126-SNAPSHOT
+
+- **I167 — Protos-first module import promoted to production (PLAT075).**
+  - Core: `import.call` is now the source-backed Closure of `protos/lib/core/import.protos` in every Prelude. It admits exact semantic Strings via `String.recognizes`, then resolves, performs an authorized Actor-local cache lookup, and on a miss calls `begin` and the structured `execute` of a private bootstrap-local bridge. The bridge is never a Prelude binding or a slot of `import`; `import` stays a frozen Core object with only `call`.
+  - Bootstrap: `ProtosCoreBootstrap` creates the Process `ProtosModuleRuntime` before loading `import.protos`, installs the private bridge, validates and freezes the source-created facility without replacing `call`, and binds the runtime once to the Prelude's private association (`ProtosPrelude.bindModuleRuntimeForRuntime`). The experimental bootstrap seam and the `sourceBackedImportPolicy` mode were removed.
+  - Import protocol: removed the native `StandardImportBody` and its recognition helpers (`runtimeForImplementation`, `selectedRuntimeForBytecodeIntrinsic`). The bridge keeps opaque single-use tokens with runtime, Actor, execution-domain and Task checks; `begin` inserts no record, and the claimed `execute` inserts INITIALIZING immediately before source initialization or FOREIGN acquisition. The only import specialization is exact post-selection recognition of the private `execute` implementation, which runs through the existing C-prime module-initialization child.
+  - Module runtime: removed the obsolete native-policy entry points `prepareBytecodeImport`, `prepareBytecodeImportForTask`, `prepareBytecodeImportWithTask` and `importModule`. Shared preparation, authorization-before-cache, MODULE/SOURCE frames, FOREIGN acquisition, internal host loading and exact-record eviction are unchanged.
+  - Tests: `ProtosPlat075ProtosFirstImportFeasibilityTest` now exercises the production bootstrap; `ProtosModuleRuntimeTest` and `ProtosCoreNativeBoundaryArchitectureTest` require a source-backed `import.call` (the import protocol now provides the four private bridge Closures); `module-source-separation.protos` adds cases for non-String specifiers, String impostors, local `import` shadowing and repeated canonical identity.
+
 ## 0.4.125-SNAPSHOT
 
 - **I115 — Task-presence profiling on direct Closure calls and verified recompilation in the semantic performance gate.**

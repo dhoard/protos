@@ -36,7 +36,7 @@ class ProtosModuleRuntimeTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
 
     @Test
-    void coreImportFacilityIsSourceBackedIdentityWithOnlyNativeCallBridge()
+    void coreImportFacilityIsFrozenWithOnlySourceBackedCall()
             throws Exception {
         MemoryResolver resolver = new MemoryResolver();
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -52,17 +52,23 @@ class ProtosModuleRuntimeTest {
                 assertInstanceOf(
                         ProtosClosureValue.class,
                         facility.readLocalSlot("call").orElseThrow());
-        assertTrue(call.nativeBody().isPresent());
-        assertNull(call.definition());
+        assertTrue(call.nativeBody().isEmpty(), "public import.call must not be native");
+        assertNotNull(call.definition(), "public import.call must be source-defined");
+        assertTrue(call.executionPlan().isPresent());
+        assertSame(
+                ProtosStandardImportProtocol.runtimeForPrelude(prelude),
+                prelude.moduleRuntimeForRuntime());
+        assertNotNull(prelude.moduleRuntimeForRuntime());
 
+        // Installation only validates and freezes the source-created facility; it never supplies
+        // a native call of its own.
         ProtosObjectValue supplied =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosObjectValue installed =
-                ProtosStandardImportProtocol.installImportFacility(
-                        supplied, new ProtosModuleRuntime(resolver));
-        assertSame(supplied, installed);
-        assertTrue(installed.isFrozen());
-        assertEquals(java.util.Set.of("call"), installed.localSlotsSnapshot().keySet());
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosStandardImportProtocol.installImportFacility(supplied));
+        assertTrue(supplied.isOpen());
+        assertTrue(supplied.localSlotsSnapshot().isEmpty());
     }
 
     @Test

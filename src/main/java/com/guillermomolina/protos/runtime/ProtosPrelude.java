@@ -52,6 +52,12 @@ public final class ProtosPrelude {
             Map<String, Supplier<ProtosObjectValue>>>
             lazyStandardModuleMembers;
     private final Map<ProtosModuleKey, ProtosSemanticTransferFamily> semanticTransferFamilies;
+    /*
+     * Private, per-instance identity of the Process module runtime installed by this Prelude's
+     * bootstrap behind its source-backed import facility. Bound at most once, never a binding or
+     * slot.
+     */
+    private Object moduleRuntime;
 
     public ProtosPrelude(
             ProtosObjectValue bindings,
@@ -632,6 +638,23 @@ public final class ProtosPrelude {
 
     public ProtosObjectValue textWriterPrototype() {
         return requiredOrdinaryBinding("TextWriter");
+    }
+
+    /**
+     * Binds, exactly once during bootstrap, the module runtime installed behind this Prelude's
+     * source-backed import facility. Not part of the public Prelude meaning.
+     */
+    public synchronized void bindModuleRuntimeForRuntime(Object runtime) {
+        Objects.requireNonNull(runtime, "runtime");
+        if (moduleRuntime != null) {
+            throw new IllegalStateException("module runtime is already bound");
+        }
+        moduleRuntime = runtime;
+    }
+
+    /** The bound module runtime of this Prelude's import facility, or {@code null}. */
+    public synchronized Object moduleRuntimeForRuntime() {
+        return moduleRuntime;
     }
 
     /** Runtime-only exact source-backed Bytes prototype omitted from public prelude bindings. */

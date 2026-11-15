@@ -82,7 +82,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/protocols/values/ProtosStandardStringProtocol.java", 5),
                     Map.entry("execution/protocols/io/ProtosStandardBufferedByteIoProtocol.java", 4),
                     Map.entry("execution/protocols/actors/ProtosStandardErrorProtocol.java", 2),
-                    Map.entry("execution/protocols/actors/ProtosStandardImportProtocol.java", 1),
+                    // I167: private import bridge primitives (resolve, lookup, begin, execute)
+                    // behind the source-backed public import.call; no public native import.
+                    Map.entry("execution/protocols/actors/ProtosStandardImportProtocol.java", 4),
                     Map.entry("execution/protocols/numeric/ProtosStandardIntegerProtocol.java", 3),
                     Map.entry("execution/protocols/actors/ProtosStandardFutureProtocol.java", 2),
                     Map.entry("execution/protocols/numeric/ProtosStandardFloatProtocol.java", 2),
@@ -223,7 +225,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(39, actualCore.size());
-        assertEquals(147, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(150, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -513,10 +515,24 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "BufferedWriter",
                 ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude),
                 Set.of("construct", "owning"));
-        assertNativeSelectors(
-                "import",
-                ordinaryBinding(prelude, "import"),
-                Set.of("call"));
+        // I167: the public import is source-backed; its private bridge and tokens are never
+        // public members or Prelude bindings.
+        ProtosObjectValue importFacility = ordinaryBinding(prelude, "import");
+        assertNativeSelectors("import", importFacility, Set.of());
+        assertEquals(
+                Set.of("call"),
+                importFacility.localSlotsSnapshot().keySet(),
+                "unexpected standard import surface");
+        assertTrue(importFacility.isFrozen(), "standard import facility must be frozen");
+        assertSourceBacked(importFacility, "call");
+        for (String privateName : List.of("_coreImportBridge", "resolve", "lookup", "begin", "execute")) {
+            assertFalse(
+                    importFacility.hasLocalSlot(privateName),
+                    privateName + " must not be a public import member");
+        }
+        assertTrue(
+                prelude.bindings().readLocalSlot("_coreImportBridge").isEmpty(),
+                "_coreImportBridge must not be a Prelude binding");
     }
 
     @Test

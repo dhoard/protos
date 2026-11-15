@@ -246,7 +246,7 @@ final class ProtosPreparedCalls {
                                     ProtosStandardMapProtocol.isStandardRemoveImplementation(closure),
                                     ProtosStandardErrorProtocol.isStandardSignalImplementation(closure),
                                     ProtosStandardObjectProtocol.isStandardCallImplementation(closure),
-                                    ProtosStandardImportProtocol.runtimeForImplementation(closure)));
+                                    ProtosStandardImportProtocol.structuredImportRuntimeForImplementation(closure)));
             return invocation.requiresStructuredDispatch() ? invocation : null;
         }
 
@@ -412,11 +412,12 @@ final class ProtosPreparedCalls {
                 throw new IllegalStateException(
                         "prepared Closure call has no PLAT032 import capability");
             }
-            return new PreparedStandardImportCall(
-                    new ModuleInitializationCall(
-                            structured.importRuntime.prepareBytecodeImport(
-                                    supplied,
-                                    activation)));
+            // The private bridge `execute` hands over the attempt that the source-backed Core
+            // import policy already decided; it never resolves or decides on its own.
+            ProtosModuleRuntime.PreparedModuleInitialization initialization =
+                    ProtosStandardImportProtocol.claimImportAttempt(
+                            nativeBody, activation, supplied);
+            return new PreparedStandardImportCall(new ModuleInitializationCall(initialization));
         }
 
         PreparedEnsureCall prepareStructuredEnsure() {

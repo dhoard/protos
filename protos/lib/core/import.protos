@@ -13,4 +13,32 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-import: {}
+// The Core import policy, written in Protos. This source-backed `call` is the
+// sole implementation of `import`; bootstrap freezes the facility without
+// replacing it.
+//
+// The policy decides here: semantic String admission, cache hit versus miss on
+// the canonical identity, and when a new initialization begins. A READY or
+// INITIALIZING instance is answered immediately, so a cycle observes the partial
+// object without waiting. `_coreImportBridge` is a private bootstrap-local anchor
+// whose primitives re-check every argument and keep no module state of their own;
+// `execute` hands the reserved attempt to the structured import protocol, which
+// answers the MODULE object, SOURCE Context or FOREIGN facade, never the
+// initializer's final value.
+import: {
+    call: (specifier) => {
+        String.recognizes(specifier).ifFalse(() => {
+            Error().signal()
+        })
+        key: _coreImportBridge.resolve(specifier)
+        cached: _coreImportBridge.lookup(key)
+
+        result: cached
+        if(cached === null) {
+            pending: _coreImportBridge.begin(key)
+            result = _coreImportBridge.execute(pending)
+        }
+
+        result
+    }
+}

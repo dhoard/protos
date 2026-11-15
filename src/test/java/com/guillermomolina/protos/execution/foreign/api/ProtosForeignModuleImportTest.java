@@ -399,10 +399,15 @@ class ProtosForeignModuleImportTest {
             return assertInstanceOf(ProtosObjectValue.class, outcome.value());
         }
 
-        /** Provider-initiated reentrant import in the Actor whose import is in progress. */
+        /**
+         * Provider-initiated reentrant import in the Actor whose import is in progress. This is a
+         * host-owned internal load through the shared canonical resolution and lifecycle of the
+         * Prelude's module runtime, not the public guest import policy.
+         */
         Object reentrantImport(String specifier) {
-            return ProtosStandardImportProtocol.runtimeForPrelude(prelude)
-                    .importModule(new ProtosStringValue(specifier), current);
+            ProtosModuleRuntime runtime = ProtosStandardImportProtocol.runtimeForPrelude(prelude);
+            return runtime.loadCanonicalModule(
+                    runtime.resolveModuleKey(new ProtosStringValue(specifier), current), current);
         }
 
         @Override

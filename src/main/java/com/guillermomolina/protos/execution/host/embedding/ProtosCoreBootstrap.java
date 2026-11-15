@@ -100,8 +100,8 @@ public final class ProtosCoreBootstrap {
         return prelude;
     }
 
-    private ProtosPrelude bootstrapInHost(Path coreDirectory, ProtosModuleResolver moduleResolver)
-            throws IOException {
+    private ProtosPrelude bootstrapInHost(
+            Path coreDirectory, ProtosModuleResolver moduleResolver) throws IOException {
         try (ProtosPolyglotExecutionContext bootstrapHost =
                 ProtosPolyglotExecutionContext.open(
                         java.io.InputStream.nullInputStream(),
@@ -123,9 +123,7 @@ public final class ProtosCoreBootstrap {
     }
 
     private ProtosPrelude bootstrapEntered(
-            Path coreDirectory,
-            ProtosModuleResolver moduleResolver)
-            throws IOException {
+            Path coreDirectory, ProtosModuleResolver moduleResolver) throws IOException {
         publishStandardRoot(coreDirectory);
 
         ProtosObjectValue bootstrapContext =
@@ -280,9 +278,24 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("TextWriter.protos"))
                 .call(bootstrapActivation);
-        sourceLoader
-                .load(coreDirectory.resolve("import.protos"))
-                .call(bootstrapActivation);
+        // The Process module runtime exists before import.protos so that the source-backed import
+        // policy can anchor its private bridge; constructing it observes and initializes nothing.
+        ProtosModuleRuntime moduleRuntime = new ProtosModuleRuntime(moduleResolver);
+        // Private lexical bridge of the source-backed import policy. Like the other bootstrap
+        // bridges it stays in this unpublished context, never a Prelude binding nor a slot of
+        // `import`, and it remains there because the policy Closure resolves it lexically.
+        // Loading import.protos only declares the policy; no import runs.
+        bootstrapContext.createLocalSlot(
+                ProtosStandardImportProtocol.IMPORT_BRIDGE_SLOT,
+                ProtosStandardImportProtocol.createImportBridge(moduleRuntime));
+        try {
+            sourceLoader
+                    .load(coreDirectory.resolve("import.protos"))
+                    .call(bootstrapActivation);
+        } catch (RuntimeException | Error failure) {
+            bootstrapContext.removeLocalSlot(ProtosStandardImportProtocol.IMPORT_BRIDGE_SLOT);
+            throw failure;
+        }
         sourceLoader
                 .load(coreDirectory.resolve("Bytes.protos"))
                 .call(bootstrapActivation);
@@ -529,13 +542,12 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue importFacility =
                 requirePrototype(
                         bootstrapContext, "import", ProtosObjectValue.rootObject());
-        ProtosModuleRuntime moduleRuntime = new ProtosModuleRuntime(moduleResolver);
         ProtosStandardActorProtocol actorProtocol =
                 new ProtosStandardActorProtocol(
                         moduleRuntime, actorRefPrototype, sendOperationPrototype);
         actorProtocol.installGroupRefPrototype(groupRefPrototype);
         actorProtocol.installActorObject(actorObject);
-        ProtosStandardImportProtocol.installImportFacility(importFacility, moduleRuntime);
+        ProtosStandardImportProtocol.installImportFacility(importFacility);
 
         // Bytes is standardized but intentionally not a required Core-prelude binding.
         ProtosObjectValue bufferedBytesPrototype =
@@ -650,6 +662,9 @@ public final class ProtosCoreBootstrap {
                 filesystemOpenMethod,
                 entropyPrototype,
                 clockPrototype);
+        // The source-backed facility hides its runtime behind guest code, so the Prelude keeps
+        // that identity privately for runtimeForPrelude (semantic transfer and Actor consumers).
+        prelude.bindModuleRuntimeForRuntime(moduleRuntime);
         /*
          * The numeric constructor belongs to the entered language Context from
          * the moment its Core exists; the first established Core keeps it.

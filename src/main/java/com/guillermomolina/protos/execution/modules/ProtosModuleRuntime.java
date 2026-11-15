@@ -18,7 +18,6 @@ import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.RootCallTarget;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -202,50 +201,6 @@ public final class ProtosModuleRuntime {
         }
     }
 
-    PreparedModuleInitialization prepareBytecodeImport(
-            List<?> supplied,
-            ProtosActivation caller) {
-        return prepareBytecodeImportWithTask(
-                supplied,
-                caller,
-                caller.task().orElse(null));
-    }
-
-    PreparedModuleInitialization prepareBytecodeImportForTask(
-            List<?> supplied,
-            ProtosActivation caller,
-            ProtosTask task) {
-        Objects.requireNonNull(task, "task");
-        return prepareBytecodeImportWithTask(
-                supplied,
-                caller,
-                task);
-    }
-
-    /*
-     * TEST009-E: import preparation (specifier resolution, Actor module-state lookup/insertion,
-     * module activation creation) is host-side work with no partial-evaluation value. Without
-     * this boundary the generic send operation's native-method dispatch inlines the resolver
-     * and the JDK beneath it into every compiled send site (TooDeepInlining in JDK reflection).
-     */
-    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
-    private PreparedModuleInitialization prepareBytecodeImportWithTask(
-            List<?> supplied,
-            ProtosActivation caller,
-            ProtosTask task) {
-        Objects.requireNonNull(supplied, "supplied");
-        Objects.requireNonNull(caller, "caller");
-        if (supplied.size() != 1) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
-        }
-        return prepareBytecodeCanonicalModule(
-                resolveModuleKey(supplied.get(0), caller),
-                caller,
-                task,
-                Map.of(),
-                false);
-    }
-
     /**
      * I158 / D251-A1: prepares the initial MODULE/SOURCE of one Actor initialization for the
      * Task-free bootstrap C-prime root instead of executing it synchronously.
@@ -290,22 +245,63 @@ public final class ProtosModuleRuntime {
             ProtosTask task,
             Map<String, ?> bootstrapLocals,
             boolean initialBootstrap) {
-        Objects.requireNonNull(key, "key");
-        Objects.requireNonNull(caller, "caller");
-        // LIB022-B: authority of the entered Context is checked before any cached instance.
-        ProtosInspectFacility.requireAuthorizedImport(key, caller);
-
-        ProtosActorModuleState actorState = caller.actorModuleState();
-        ProtosActorModuleState.ModuleRecord existing =
-                actorState.lookup(key).orElse(null);
+        ProtosActorModuleState.ModuleRecord existing = authorizedRecordOrNull(key, caller);
         if (existing != null) {
             if (initialBootstrap) {
                 throw new IllegalStateException(
                         "RootActor initial module was cached before bootstrap-local provisioning");
             }
             return PreparedModuleInitialization.cached(
-                    key, actorState, existing, caller);
+                    key, caller.actorModuleState(), existing, caller);
         }
+        return prepareFreshInitialization(key, caller, task, bootstrapLocals, initialBootstrap);
+    }
+
+    /**
+     * Authority check followed by the Actor-local cache observation for one canonical key.
+     *
+     * <p>LIB022-B: authority of the entered Context is checked before any cached instance is
+     * observed. Answers the READY or INITIALIZING record, or {@code null} on a miss.
+     */
+    ProtosActorModuleState.ModuleRecord authorizedRecordOrNull(
+            ProtosModuleKey key, ProtosActivation caller) {
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(caller, "caller");
+        ProtosInspectFacility.requireAuthorizedImport(key, caller);
+        return caller.actorModuleState().lookup(key).orElse(null);
+    }
+
+    /**
+     * PLAT075 experiment: prepares a new initialization after the caller (the source-backed Core
+     * import policy) has already decided that the Actor holds no record for {@code key}.
+     *
+     * <p>Authority is re-checked and the absence of a record is verified defensively; neither is a
+     * second cache-decision algorithm. The returned lifecycle handle is the same {@link
+     * PreparedModuleInitialization} the standard import produces.
+     *
+     * <p>It is invoked only when the structured experimental {@code execute} claims its token,
+     * never by {@code begin}: this is where the INITIALIZING record is inserted, before the
+     * initializer body or FOREIGN acquisition runs, and from here on completion and exact eviction
+     * belong to the structured import protocol.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    PreparedModuleInitialization prepareDecidedCacheMiss(
+            ProtosModuleKey key, ProtosActivation caller) {
+        if (authorizedRecordOrNull(key, caller) != null) {
+            throw new IllegalStateException(
+                    "module initialization requested for a key that is already cached");
+        }
+        return prepareFreshInitialization(
+                key, caller, caller.task().orElse(null), Map.of(), false);
+    }
+
+    private PreparedModuleInitialization prepareFreshInitialization(
+            ProtosModuleKey key,
+            ProtosActivation caller,
+            ProtosTask task,
+            Map<String, ?> bootstrapLocals,
+            boolean initialBootstrap) {
+        ProtosActorModuleState actorState = caller.actorModuleState();
         if (ProtosForeignModuleKey.owns(key)) {
             if (initialBootstrap) {
                 throw new IllegalStateException("RootActor initial module must be source-backed");
@@ -358,10 +354,6 @@ public final class ProtosModuleRuntime {
             actorState.removeIfSame(key, record);
             throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
         }
-    }
-
-    public Object importModule(Object specifier, ProtosActivation caller) {
-        return loadCanonicalModule(resolveModuleKey(specifier, caller), caller);
     }
 
     /** Resolves one exact semantic String in the caller's module-resolution environment. */

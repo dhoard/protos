@@ -100,6 +100,27 @@ tests: [
         Assertions.signals(Error, () => { import("std:collections/internal/ArrayBulk") })
         null
     }),
+    Test("non-String specifier is rejected with an ordinary Error", () => {
+        Assertions.signals(Error, () => { import(42) })
+        Assertions.signals(Error, () => { import(null) })
+        null
+    }),
+    Test("object delegating to String is not a semantic String specifier", () => {
+        fake: String {}
+        Assertions.signals(Error, () => { import(fake) })
+        null
+    }),
+    Test("local import binding shadows the Prelude facility", () => {
+        import: { call: (specifier) => specifier }
+        Assertions.require(import("./fixtures/range/Range.protos") == "./fixtures/range/Range.protos")
+        null
+    }),
+    Test("repeated canonical imports answer the exact same object", () => {
+        first: import("./fixtures/range/Range.protos")
+        Assertions.require(import("./fixtures/range/Range.protos") === first)
+        Assertions.require(import("./fixtures/range/Range.protos") === first)
+        null
+    }),
     Test("extracted module closure rebinds its receiver normally", () => {
         Assertions: import("std:test/assertions")
         require: Assertions.require

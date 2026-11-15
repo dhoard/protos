@@ -54,12 +54,14 @@ import org.junit.jupiter.api.Test;
  * repeated monomorphic invocation, fresh per-call activation, exact
  * receiver/methodHome, and authoritative D013 lookup observing
  * delegation-visible changes (replacement, shadowing, removal) after the
- * fast specialization has already been populated. Native Closure and
- * canonical standard-import behavior are unaffected by construction (the
- * fast specialization's guard admits only a non-native selected Closure,
- * and {@code ProtosStandardImportProtocol.selectedRuntimeForBytecodeIntrinsic}
- * only recognizes a native {@code StandardImportBody}), so their existing
- * regression coverage elsewhere remains the applicable net; one native-send
+ * fast specialization has already been populated. The public
+ * {@code import.call} is itself an ordinary source-backed Closure and is
+ * selected like any other such send; the only import specialization is the
+ * exact post-selection recognition of the private bridge {@code execute}
+ * implementation (a native Closure, never admitted by the fast
+ * specialization's non-native guard), so native Closure and module
+ * initialization behavior keep their existing regression coverage
+ * elsewhere as the applicable net; one native-send
  * regression test is retained here to confirm repeated native sends through
  * the same call site are unaffected.
  */
