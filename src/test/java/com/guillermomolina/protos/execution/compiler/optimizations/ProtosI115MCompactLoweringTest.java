@@ -36,8 +36,10 @@ import org.junit.jupiter.api.Test;
  * sends without callback roots or Context-backed lexical authority.
  * I115 shared numeric lowering: NumberAdd, NumberMultiply,
  * NumberSubtract and RichCompareLt execute the standard behavior internally.
- * Every numeric site must retain IsStandardNumericSelection and ordinary
- * selected-method fallback. Assignment stores the result in its classified
+ * Each numeric site is one fused operation that classifies the selected
+ * behavior and dispatches a redefined method itself: no separate
+ * IsStandardNumericSelection guard or GetMethod/CallUnary fallback is
+ * emitted for it. Assignment stores the result in its classified
  * binding; no separate in-place message protocol is introduced.
  * Retired H7 operations are forbidden. Full DSL counts are reported
  * independently of semantic and topology acceptance.
@@ -317,11 +319,11 @@ final class ProtosI115MCompactLoweringTest {
                                 .count(),
                         required.getKey() + ": " + names);
             }
-            assertEquals(5L, names.stream()
+            assertEquals(0L, names.stream()
                             .filter(op -> op.startsWith(
                                     "c.IsStandardNumericSelection"))
                             .count(),
-                    "all five numeric selections must be guarded");
+                    "fused numeric sites keep no separate selection guard");
             for (String forbidden : List.of(
                     "ExperimentalInteger", "TryPrimitiveNumeric",
                     "PrepareSendOne", "EnterNestedStructuredDispatch")) {
@@ -340,7 +342,8 @@ final class ProtosI115MCompactLoweringTest {
 
     /**
      * A nonstandard receiver must execute its selected + or < method.
-     * Both sites must retain the standard fast path and ordinary fallback.
+     * Each site is a single fused operation that dispatches the selected
+     * method itself, without a separate guard or fallback send.
      */
     @Test
     void overriddenNumericOperatorsRetainOrdinarySelection()
@@ -370,25 +373,16 @@ final class ProtosI115MCompactLoweringTest {
                     .getInstructionsAsList().stream()
                     .map(ProtosInstructionNames::of).toList();
 
-            for (String required : List.of(
-                    "c.NumberAdd",
-                    "c.IsStandardNumericSelection",
-                    "c.GetMethod",
-                    "c.CallUnaryMethod")) {
-                assertTrue(plusNames.stream()
-                                .anyMatch(op -> op.startsWith(required)),
-                        required + ": " + plusNames);
-            }
-
-            for (String required : List.of(
-                    "c.RichCompareLt",
-                    "c.IsStandardNumericSelection",
-                    "c.GetMethod",
-                    "c.CallUnaryMethod",
-                    "c.RequireCanonicalBooleanResult")) {
-                assertTrue(lessNames.stream()
-                                .anyMatch(op -> op.startsWith(required)),
-                        required + ": " + lessNames);
+            assertTrue(plusNames.stream().anyMatch(op -> op.startsWith("c.NumberAdd")),
+                    "c.NumberAdd: " + plusNames);
+            assertTrue(lessNames.stream().anyMatch(op -> op.startsWith("c.RichCompareLt")),
+                    "c.RichCompareLt: " + lessNames);
+            for (String separate : List.of(
+                    "c.IsStandardNumericSelection", "c.GetMethod", "c.CallUnaryMethod")) {
+                assertTrue(plusNames.stream().noneMatch(op -> op.startsWith(separate)),
+                        separate + " is not emitted beside the fused +: " + plusNames);
+                assertTrue(lessNames.stream().noneMatch(op -> op.startsWith(separate)),
+                        separate + " is not emitted beside the fused <: " + lessNames);
             }
 
             for (int repetition = 0; repetition < 3; repetition++) {
@@ -548,13 +542,9 @@ final class ProtosI115MCompactLoweringTest {
         assertEquals(sites.subtract(), subtract, name + " NumberSubtract");
         assertEquals(sites.less(), less, name + " RichCompareLt");
 
-        int sitesCount = sites.totalNumericSites();
-        assertEquals(sitesCount, guards,
-                name + " must guard every numeric site");
-        assertTrue(selections >= sitesCount,
-                name + " missing selected-method fallbacks");
-        assertTrue(calls >= sitesCount,
-                name + " missing fallback invocations");
+        // Fused numeric sites classify and dispatch internally.
+        assertEquals(0, guards,
+                name + " fused numeric sites keep no separate selection guard");
 
         for (String retired : List.of(
                 "TryPrimitiveNumeric",

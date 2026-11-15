@@ -18,45 +18,55 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
-
 import com.oracle.truffle.api.bytecode.BytecodeNode;
+import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.GenerateCached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * Primitive long and double addition. Signed-64 overflow promotes exactly;
- * selection is guarded by the lowering before this operation executes.
+ * Primitive long and double addition. Every specialization executes only
+ * while the behavior selected for {@code +} on the original
+ * receiver under the caller's Prelude is the standard operator; any other
+ * selection falls to the generic specialization of the proxied subclass.
+ * Signed-64 overflow promotes exactly.
  */
 @GenerateCached(false)
 abstract class ProtosNumberAddFastPathsBase extends Node {
 
-    abstract Object execute(VirtualFrame frame, Object left, Object right);
+    static final String SELECTOR = "+";
 
-    @Specialization(rewriteOn = ArithmeticException.class)
-    static long doLL(long left, long right) {
+    abstract Object execute(VirtualFrame frame, boolean terminal, Object left, Object right);
+
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)",
+            rewriteOn = ArithmeticException.class)
+    static long doLL(VirtualFrame frame, boolean terminal, long left, long right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         return Math.addExact(left, right);
     }
 
-    @Specialization
-    static double doDD(double left, double right) {
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static double doDD(VirtualFrame frame, boolean terminal, double left, double right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         return left + right;
     }
 
-    @Specialization
-    static double doDL(double left, long right) {
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static double doDL(VirtualFrame frame, boolean terminal, double left, long right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         return left + right;
     }
 
-    @Specialization
-    static double doLD(long left, double right) {
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static double doLD(VirtualFrame frame, boolean terminal, long left, double right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         return left + right;
     }
 
     /*
-     * doLLOvf (declared by each proxied subclass, which can bind its root):
-     * the long sum, or on signed-64 overflow the exact large Integer of the
+     * The long sum, or on signed-64 overflow the exact large Integer of the
      * caller's Prelude.
      */
     static Object addOrPromote(VirtualFrame frame, Node node, long left, long right) {
@@ -67,17 +77,11 @@ abstract class ProtosNumberAddFastPathsBase extends Node {
         return ProtosNumberFactory.add(ProtosNumberFactory.prelude(node, frame), left, right);
     }
 
-    /* Signed-64 overflow: the exact large Integer of the caller's Prelude. */
-
     /**
-     * The single generic route of both operations: two semantic Integers
-     * (any representation, long carriers included) are added exactly
-     * without promotion loss. Other admitted standard operand domains use
-     * the existing numeric kernels without sending a message.
-     *
-     * <p>NumberAdd is emitted only behind the {@code IsStandardNumericSelection}
-     * admission; a receiver with any other selected {@code +} is dispatched
-     * by the lowering.
+     * The admitted standard operand domains not covered by a primitive
+     * specialization: two semantic Integers of any representation use the
+     * exact factory of the caller's Prelude; other domains use the existing
+     * standard numeric kernels. Only a standard selection reaches here.
      */
     static Object genericAdd(ProtosBytecodeRootNode root, VirtualFrame frame,
             Node node, Object left, Object right) {
@@ -87,14 +91,13 @@ abstract class ProtosNumberAddFastPathsBase extends Node {
                 && ProtosNumericValueSupport.isCurrentInteger(argument)) {
             return ProtosNumberFactory.add(ProtosNumberFactory.prelude(node, frame), receiver, argument);
         }
-        return ProtosNumericOperationSupport.arithmetic(root, frame, left, "+", right);
+        return ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right);
     }
 
-
     /*
-     * the Protos root executing this operation. In a proxied
-     * node the default root bind is typed Node, so it is resolved from the
-     * enclosing BytecodeNode.
+     * The Protos root executing this operation. In a proxied node the
+     * default root bind is typed Node, so it is resolved from the enclosing
+     * BytecodeNode.
      */
     static ProtosBytecodeRootNode rootOf(Node node) {
         return (ProtosBytecodeRootNode) BytecodeNode.get(node).getBytecodeRootNode();

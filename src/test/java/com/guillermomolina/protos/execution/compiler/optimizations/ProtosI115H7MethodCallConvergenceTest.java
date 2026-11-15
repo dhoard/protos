@@ -111,10 +111,11 @@ final class ProtosI115H7MethodCallConvergenceTest {
         assertEquals(1, count(names, "c.ReadGlobal"), names.toString());
         assertEquals(1, count(names, "c.CallBinaryMethod"), names.toString());
         assertEquals(2, count(names, "c.NumberAdd"), names.toString());
-        assertEquals(3, count(names, "c.IsStandardNumericSelection"), names.toString());
-        assertEquals(1 + count(names, "c.IsStandardNumericSelection"),
-                count(names, "c.GetMethod"),
-                "one send selection plus one guarded fallback per numeric site: " + names);
+        // Numeric operations verify their selection internally: no separate
+        // selection or fallback lookup per numeric site.
+        assertEquals(0, count(names, "c.IsStandardNumericSelection"), names.toString());
+        assertEquals(1, count(names, "c.GetMethod"),
+                "only the ordinary send selects a method: " + names);
         int compare = names.indexOf("c.RichCompareLt");
         int condition = indexAfter(names, "c.CanonicalControlCondition", compare);
         int branch = indexAfter(names, "branch.false", condition);
@@ -392,7 +393,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
             ProtosBytecodeRootNode renamedRoot = root(session, "renamedLoop");
             List<String> renamed = unquickened(names(renamedRoot));
             for (String required : List.of("c.ReadGlobal", "c.GetMethod",
-                    "c.CallUnaryMethod", "c.NumberAdd", "c.RichCompareLt")) {
+                    "c.CallBinaryMethod", "c.NumberAdd", "c.RichCompareLt")) {
                 assertTrue(renamed.contains(required), required + ": " + renamed);
             }
             assertReplacedAbsent("renamedLoop", renamed);
@@ -627,14 +628,14 @@ final class ProtosI115H7MethodCallConvergenceTest {
     @Test
     void doubleOperationsKeepDoublePrecision() throws Exception {
         // 16777217 has no Java float representation.
-        assertEquals(16777217.0, ProtosNumberAddFastPathsBase.doLD(16777216L, 1.0));
-        assertEquals(16777217.0, ProtosNumberAddFastPathsBase.doDL(1.0, 16777216L));
-        assertEquals(0.1 + 0.2, ProtosNumberAddFastPathsBase.doDD(0.1, 0.2));
+        assertEquals(16777217.0, ProtosNumberAddFastPathsBase.doLD(null, false, 16777216L, 1.0, null));
+        assertEquals(16777217.0, ProtosNumberAddFastPathsBase.doDL(null, false, 1.0, 16777216L, null));
+        assertEquals(0.1 + 0.2, ProtosNumberAddFastPathsBase.doDD(null, false, 0.1, 0.2, null));
         // I115: RichCompareLt's double lane yields the primitive boolean that a
         // conditional branch consumes directly;
         // mixed operands and guest results are checked by execution.
-        assertTrue(ProtosRichCompareLtNode.doDD(16777216.0, 16777217.0));
-        assertFalse(ProtosRichCompareLtNode.doDD(16777217.0, 16777216.0));
+        assertTrue(ProtosRichCompareLtNode.doDD(null, 16777216.0, 16777217.0, null));
+        assertFalse(ProtosRichCompareLtNode.doDD(null, 16777217.0, 16777216.0, null));
         try (ProtosStandaloneHostedSession session =
                 open("double-results", LONG_DOUBLE)) {
             /*
@@ -648,8 +649,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
             List<String> mixed = unquickened(names(root(session, "lessMixed")));
             assertEquals(2, count(mixed, "c.RichCompareLt"), mixed.toString());
             assertTrue(count(mixed, "c.CanonicalControlCondition") >= 2, mixed.toString());
-            assertEquals(4, count(mixed, "c.GetMethod"), mixed.toString());
-            assertEquals(3, count(mixed, "c.CallUnaryMethod"), mixed.toString());
+            assertEquals(2, count(mixed, "c.GetMethod"), mixed.toString());
+            assertEquals(1, count(mixed, "c.CallUnaryMethod"), mixed.toString());
             assertEquals(1, count(mixed, "c.CallNilaryMethod"), mixed.toString());
             assertSelectionPrecedesEachCall(mixed);
             assertEquals(0, count(mixed, "c.MaterializeCurrentClosure"), mixed.toString());
@@ -678,12 +679,12 @@ final class ProtosI115H7MethodCallConvergenceTest {
      */
     @Test
     void compactIntegerOperationsReturnLongs() throws Exception {
-        assertEquals(42L, ProtosNumberAddFastPathsBase.doLL(40L, 2L));
-        assertEquals(38L, ProtosNumberSubtractFastPathsBase.doLL(40L, 2L));
-        assertEquals(80L, ProtosNumberMultiplyFastPathsBase.doLL(40L, 2L));
+        assertEquals(42L, ProtosNumberAddFastPathsBase.doLL(null, false, 40L, 2L, null));
+        assertEquals(38L, ProtosNumberSubtractFastPathsBase.doLL(null, false, 40L, 2L, null));
+        assertEquals(80L, ProtosNumberMultiplyFastPathsBase.doLL(null, false, 40L, 2L, null));
         // The primitive lane rewrites on overflow; the generalization promotes.
         assertThrows(ArithmeticException.class,
-                () -> ProtosNumberMultiplyFastPathsBase.doLL(Long.MIN_VALUE, -1L));
+                () -> ProtosNumberMultiplyFastPathsBase.doLL(null, false, Long.MIN_VALUE, -1L, null));
         try (ProtosStandaloneHostedSession session = open("integer-operations", """
                 addWide: () => {
                     a: 2147483647

@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
+import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
@@ -56,6 +57,13 @@ public final class ProtosValueLookup {
      * shadowing property, a removal, or any other structural change of an
      * examined object is a {@code Shape} transition that makes
      * {@link #isValid()} fail, forcing respecialization or the generic path.
+     *
+     * <p>It also exposes the final-value {@link Assumption} of the selected
+     * property's storage location ({@link #finalAssumption()}), obtained when
+     * the selection was made. Object storage invalidates it when that
+     * location is rewritten in place, so while it is valid and
+     * {@link #isValid()} holds, the selected value has not changed. It never
+     * replaces {@link #isValid()}.
      */
     public static final class StructuralSelection {
         @CompilationFinal(dimensions = 1)
@@ -63,14 +71,27 @@ public final class ProtosValueLookup {
         @CompilationFinal(dimensions = 1)
         private final Shape[] shapes;
         private final PropertyGetter getter;
+        private final Assumption finalAssumption;
 
         private StructuralSelection(
                 ProtosObjectValue[] chain,
                 Shape[] shapes,
-                PropertyGetter getter) {
+                PropertyGetter getter,
+                Assumption finalAssumption) {
             this.chain = chain;
             this.shapes = shapes;
             this.getter = getter;
+            this.finalAssumption = finalAssumption;
+        }
+
+        /**
+         * The final-value assumption of the selected property's location, as
+         * obtained when the selection was made. It may already be invalid
+         * when the location had been rewritten before; a valid one stays
+         * valid only until the location is rewritten in place.
+         */
+        public Assumption finalAssumption() {
+            return finalAssumption;
         }
 
         /** The object the lookup started at. */
@@ -109,12 +130,16 @@ public final class ProtosValueLookup {
          * Whether every examined object of the captured chain is FROZEN. Such
          * objects can neither change their slots nor their parents, so while
          * {@link #isValid()} holds the selected value never changes. Inspects
-         * only the chain observed when the selection was made.
+         * only the chain observed when the selection was made: the proof rests
+         * on the captured Shapes, each of which must carry the FROZEN state
+         * and still describe its object. A FROZEN Shape is final, so a chain
+         * proven here keeps its selection for good. Specialization-time only.
          */
         @ExplodeLoop
         public boolean allOwnersFrozen() {
             for (int index = 0; index < chain.length; index++) {
-                if (!chain[index].isFrozen()) {
+                if (!ProtosObjectValue.isFrozenShape(shapes[index])
+                        || !shapes[index].check(chain[index])) {
                     return false;
                 }
             }
@@ -172,14 +197,16 @@ public final class ProtosValueLookup {
             chain.add(object);
             shapes.add(shape);
             if (hasProperty(shape, name)) {
-                PropertyGetter getter = propertyGetterWithFinalAssumption(shape, name);
-                if (getter == null) {
+                PropertyGetter getter = shape.makePropertyGetter(name);
+                Property property = shape.getProperty(name);
+                if (getter == null || property == null) {
                     return null;
                 }
                 return new StructuralSelection(
                         chain.toArray(ProtosObjectValue[]::new),
                         shapes.toArray(Shape[]::new),
-                        getter);
+                        getter,
+                        property.getLocation().getFinalAssumption());
             }
             current = object.directParentForGuardedLookup();
         }

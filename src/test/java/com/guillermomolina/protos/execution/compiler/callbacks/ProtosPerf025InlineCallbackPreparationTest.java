@@ -262,7 +262,6 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                 "2",
                 "RichCompareLt",
                 "CanonicalControlCondition",
-                "IsStandardNumericSelection",
                 "NumberAdd",
                 "branch.backward");
 

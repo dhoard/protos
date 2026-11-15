@@ -74,8 +74,8 @@ final class ProtosI101BArithmeticBuilderOracleTest {
 
     /*
      * I115: a '+' over locals is not propagated as a constant; it is one
-     * NumberAdd behind its guarded standard selection (D237), whose other path
-     * is the ordinary send. The folded handwritten program stays the physical
+     * fused NumberAdd that classifies its standard selection (D237) and
+     * performs the ordinary send itself otherwise. The folded handwritten program stays the physical
      * lower bound of that site.
      */
     @Test
@@ -105,13 +105,16 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                 List<String> emitted = completeSignature(actual);
                 List<String> lowerBound = completeSignature(manual.get());
 
+                assertEquals(1, emitted.stream()
+                                .filter(entry -> entry.split(" ", 2)[0].equals("c.NumberAdd"))
+                                .count(),
+                        () -> "c.NumberAdd in " + emitted);
                 for (String operation : List.of(
-                        "c.IsStandardNumericSelection", "c.NumberAdd",
-                        "c.GetMethod", "c.CallUnaryMethod")) {
-                    assertEquals(1, emitted.stream()
+                        "c.IsStandardNumericSelection", "c.GetMethod", "c.CallUnaryMethod")) {
+                    assertEquals(0, emitted.stream()
                                     .filter(entry -> entry.split(" ", 2)[0].equals(operation))
                                     .count(),
-                            () -> operation + " in " + emitted);
+                            () -> operation + " is not emitted beside the fused + in " + emitted);
                 }
                 assertTrue(lowerBound.size() < emitted.size(), "physical lower bound");
 

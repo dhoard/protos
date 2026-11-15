@@ -20,9 +20,12 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
+import com.oracle.truffle.api.bytecode.ConstantOperand;
 import com.oracle.truffle.api.bytecode.OperationProxy;
+import com.oracle.truffle.api.bytecode.StoreBytecodeIndex;
 import com.oracle.truffle.api.dsl.Bind;
-import com.oracle.truffle.api.dsl.Fallback;
+import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -30,21 +33,28 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * exact synchronous Protos '/'. It never returns a continuation.
- *
- * Remaining standard operand domains use {@link ProtosNumericOperationSupport};
- * dynamic method selection remains in the lowering.
+ * The exact division operation {@code /}. Primitive specializations execute
+ * only while the standard {@code /} is the behavior selected for the
+ * original receiver under the caller's Prelude. The generic specialization
+ * re-checks the selection: a standard selection completes with the existing
+ * numeric kernels; any other selection invokes the selected implementation
+ * through {@link ProtosNumericOverloadNode}, whose result (including a
+ * suspended invocation) is the exact result of this operation.
  */
 @GenerateUncached
 @GenerateInline(false)
+@ConstantOperand(type = boolean.class, name = "terminal")
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
 abstract class ProtosNumberDivideNode extends Node {
-    abstract Object execute(VirtualFrame frame, Object left, Object right);
+    static final String SELECTOR = "/";
 
-    @Specialization
-    static Object doLL(VirtualFrame frame, long left, long right,
+    abstract Object execute(VirtualFrame frame, boolean terminal, Object left, Object right);
+
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static Object doLL(VirtualFrame frame, boolean terminal, long left, long right,
             @Bind Node node,
-            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         if (right != 0L && (left != Long.MIN_VALUE || right != -1L)
                 && left % right == 0L) {
             return left / right;
@@ -53,26 +63,37 @@ abstract class ProtosNumberDivideNode extends Node {
         return divideIntegers(root, frame, node, left, right);
     }
 
-    @Specialization
-    static double doDD(double left, double right) {
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static double doDD(VirtualFrame frame, boolean terminal, double left, double right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
+        return left / right;
+    }
+
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static double doDL(VirtualFrame frame, boolean terminal, double left, long right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
+        return left / right;
+    }
+
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static double doLD(VirtualFrame frame, boolean terminal, long left, double right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         return left / right;
     }
 
     @Specialization
-    static double doDL(double left, long right) {
-        return left / right;
-    }
-
-    @Specialization
-    static double doLD(long left, double right) {
-        return left / right;
-    }
-
-    @Fallback
+    @StoreBytecodeIndex
     @InliningCutoff
-    static Object doGeneric(VirtualFrame frame, Object left, Object right,
-            @Bind Node node,
-            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
+    static Object doGeneric(VirtualFrame frame, boolean terminal, Object left, Object right,
+            @Bind("$node") Node node,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Cached ProtosNumericOverloadNode overload) {
+        if (!selection.execute(frame, SELECTOR, left)) {
+            BytecodeNode bytecode = BytecodeNode.get(node);
+            return overload.execute(frame, terminal, SELECTOR, left, right,
+                    root, bytecode, bytecode.getBytecodeIndex(frame));
+        }
         Object receiver = ProtosNumericValueSupport.guestValue(left);
         Object argument = ProtosNumericValueSupport.guestValue(right);
         if (ProtosNumericValueSupport.isCurrentInteger(receiver)
@@ -84,7 +105,7 @@ abstract class ProtosNumberDivideNode extends Node {
                         || ProtosNumericValueSupport.isCurrentFloat(argument))) {
             return floatValue(receiver) / floatValue(argument);
         }
-        return ProtosNumericOperationSupport.arithmetic(root, frame, left, "/", right);
+        return ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right);
     }
 
     @InliningCutoff

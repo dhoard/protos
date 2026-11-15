@@ -1001,9 +1001,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             /*
              * I115: two Integer literals select the standard '+' of the frozen
              * standard Integer, so the literal sum folds to its constant. The
-             * local operands keep one NumberAdd behind its guarded standard
-             * selection (D237: IsStandardNumericSelection after both operands), whose
-             * other path is the ordinary send.
+             * local operands keep one fused NumberAdd that classifies its
+             * standard selection after both operands (D237) and performs the
+             * ordinary send itself otherwise.
              */
             for (ProtosClosureValue candidate : List.of(direct, locals, aliases)) {
                 DirectEntry prepared =
@@ -1015,7 +1015,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 List<String> names = instructionNames(candidate);
                 int sites = candidate == direct ? 0 : 1;
                 assertEquals(sites, countOf(names, "NumberAdd"), names.toString());
-                assertEquals(sites, countOf(names, "IsStandardNumericSelection"), names.toString());
+                assertEquals(0, countOf(names, "IsStandardNumericSelection"), names.toString());
                 assertNone(names, "ExperimentalInteger");
                 assertNone(names, RETIRED_ARCHITECTURE);
             }
@@ -1077,13 +1077,14 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                             .map(tag -> tag.getSourceSection().getCharacters().toString())
                             .toList());
             assertEquals(statements, collectTags(tree, StandardTags.ExpressionTag.class));
-            // I115-H1-FIX: the shared numeric site is a surviving dynamic send.
+            // I115: the fused numeric site dispatches any selected method
+            // inside the operation, so no separate send carries a CallTag.
             assertEquals(
-                    List.of("left + right"),
+                    List.of(),
                     collectTags(tree, StandardTags.CallTag.class).stream()
                             .map(tag -> tag.getSourceSection().getCharacters().toString())
                             .toList(),
-                    "the dispatched send keeps its CallTag over its source");
+                    "the fused numeric site emits no separate CallTag");
         });
     }
 
@@ -1138,13 +1139,13 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 root.getRootNodes().ensureComplete();
                 var calls = collectTags(root.getBytecodeNode().getTagTree(),
                         StandardTags.CallTag.class);
-                // I115: the literal-only sums fold to their constant and keep no
-                // send; each '+' over locals, the mutated alias included, is one
-                // guarded numeric site whose ordinary-send path keeps its CallTag.
-                int sends = candidate == locals || candidate == aliases ? 1 : 0;
-                assertEquals(sends, calls.size(),
-                        "Only surviving dynamic sends retain CallTag");
-                assertEquals(sends,
+                // I115: the literal-only sums fold to their constant; each '+'
+                // over locals, the mutated alias included, is one fused numeric
+                // site that dispatches internally and emits no separate CallTag.
+                int sites = candidate == locals || candidate == aliases ? 1 : 0;
+                assertEquals(0, calls.size(),
+                        "fused numeric sites emit no separate CallTag");
+                assertEquals(sites,
                         countOf(instructionNames(candidate), "NumberAdd"));
                 assertNone(instructionNames(candidate), "ExperimentalInteger");
             }

@@ -26,8 +26,9 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.frame.VirtualFrame;
 
 /**
- * Domain-complete execution shared by guarded numeric operations. Selection is
- * owned by the lowering; these helpers never send an operator message.
+ * Domain-complete execution shared by the numeric operations once they have
+ * verified that the standard operator is selected; these helpers never send
+ * an operator message.
  */
 final class ProtosNumericOperationSupport {
     private ProtosNumericOperationSupport() {}

@@ -8,6 +8,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.127-SNAPSHOT
+
+- **I115 — Fused numeric operations with internal selection and overloaded dispatch.**
+  - Lowering: every numeric operator send (`+`, `-`, `*`, `/`, `div`, `mod`, `<`, `<=`, `>`, `>=`) is one fused operation. The separate `IsStandardNumericSelection` guard and the `GetMethod`/`CallUnaryMethod` fallback are no longer emitted. The operation selects the behavior once both operands are evaluated (D237), runs the standard behavior internally, and otherwise invokes the selected method. Its result is composed with the shared continuation loop, so a resumption never re-evaluates the operands or repeats the invocation. An ordering result must be a canonical Boolean. A root's final numeric send with direct operands may use the terminal transport.
+  - Numeric nodes: `NumberAdd`, `NumberSubtract`, `NumberMultiply`, `NumberDivide` and `RichCompareLt/Le/Gt/Ge` keep their `long`/`double` primitive specializations. Their generic specialization classifies the selection through the new `ProtosNumericSelectionNode` and dispatches a nonstandard selection through the new `ProtosNumericOverloadNode`. Their `doGeneric` binds its node explicitly (`@Bind("$node")`).
+  - Selection: `ProtosNumericSelectionNode` caches per selector, Prelude identity and selection origin. `long` and `double` receivers have typed entries that resolve the Prelude's FROZEN `SmallInteger`/`Float` binding when the entry is installed. A fully FROZEN chain caches its classification. A mutable chain is guarded by the structural selection and by the selected location's final-value assumption. When the running compact invocation's own Closure captured its Prelude, it is read from the Closure (`ProtosFrameArguments.capturedClosurePreludeOrNull`) without the general Prelude resolution; a published activation or a Closure without a captured Prelude falls back to the general entries, keeping caller inheritance.
+  - Observable change for tooling: with an attached debugger, a numeric operator site no longer carries a `CallTag`, since no separate send is emitted for it.
+  - Gates: `tools/java_bytecode_api_pe_baseline.json` records the eight proven `BytecodeNode.get` sites of the fused `doGeneric` specializations. `tools/java_generated_bytecode_bci_pe_baseline.json` follows the larger encoding of the numeric instructions.
+  - Tests: new `ProtosI115NumericOverloadContinuationTest`, `ProtosI115DirectAdditionStructureExperimentTest` and `ProtosI115Tier1RunGraphTest` (also reports `I115_TIER1_PRELUDE_FIELD_LOADS`), plus `tools/i115_tier1_run_graph.sh`. `ProtosPerf040E1NumericOperationReconciliationTest` and `ProtosI115StringAdditionTest` add Prelude alternation across Closures and operators, retroactive-freezing checks, and exact counts of invocations of a redefined `+`. The structural lowering tests now expect fused numeric sites with no separate guard, fallback send or `CallTag`.
+
 ## 0.4.126-SNAPSHOT
 
 - **I167 — Protos-first module import promoted to production (PLAT075).**

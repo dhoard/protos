@@ -48,7 +48,11 @@ final class ProtosI115Long5GeneralArithmeticTest {
                             name.contains("TryPrimitiveNumeric")
                                     || name.contains("IsPrimitiveNumericSendMiss")
                                     || name.contains("MaterializePrimitiveNumericCarrier")
-                                    || name.startsWith("c.CallBinaryMethod"));
+                                    || name.startsWith("c.CallBinaryMethod")
+                                    || name.startsWith("c.IsStandardNumericSelection")
+                                    || name.startsWith("c.GetMethod")
+                                    || name.startsWith("c.CallUnaryMethod")
+                                    || name.contains("yield"));
                 }), "no direct general-operator root for c." + operation
                         + "; matching roots: "
                         + matches.stream().map(ProtosI115Long5GeneralArithmeticTest::names)

@@ -148,12 +148,12 @@ final class ProtosI107ContinuationEmissionTest {
                 }
                 // The root's own RootTag plus one region per nested control.
                 assertEquals(3, regions, actual::toString);
-                // The '+' behavior is selected after its operands (D237) and keeps its
-                // guarded ordinary-send fallback with the continuation composition.
-                int selection = actual.indexOf(actual.stream()
-                        .filter(entry -> entry.startsWith("c.IsStandardNumericSelection "))
-                        .findFirst().orElse("missing"));
-                assertTrue(selection >= 0 && selection < add, actual::toString);
+                // The fused '+' selects its behavior after its operands (D237) and
+                // performs any ordinary send itself, followed by the continuation
+                // composition; no separate selection guard is emitted.
+                assertTrue(actual.stream()
+                        .noneMatch(entry -> entry.startsWith("c.IsStandardNumericSelection ")),
+                        actual::toString);
                 assertHasContinuation(actual);
                 // Both operands of the arithmetic dispatch are staged before it.
                 assertTrue(add >= 2, actual::toString);

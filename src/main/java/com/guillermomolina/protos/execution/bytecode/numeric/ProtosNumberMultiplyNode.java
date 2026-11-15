@@ -18,9 +18,13 @@
 package com.guillermomolina.protos.execution;
 
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
+import com.oracle.truffle.api.bytecode.BytecodeNode;
+import com.oracle.truffle.api.bytecode.ConstantOperand;
 import com.oracle.truffle.api.bytecode.OperationProxy;
+import com.oracle.truffle.api.bytecode.StoreBytecodeIndex;
 import com.oracle.truffle.api.dsl.Bind;
-import com.oracle.truffle.api.dsl.Fallback;
+import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -28,25 +32,47 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * The guarded standard multiplication operation with exact overflow promotion.
+ * The multiplication operation with exact overflow promotion, executed
+ * directly only while the standard {@code *} is selected.
+ *
+ * <p>The generic specialization never replaces the primitive ones. It
+ * re-checks the selection: a standard selection completes with the existing
+ * numeric kernels; any other selection invokes the selected implementation
+ * through {@link ProtosNumericOverloadNode}, whose result (including a
+ * suspended invocation) is the exact result of this operation. The
+ * {@code terminal} constant states whether the site is the terminal
+ * invocation of its root.
  */
 @GenerateUncached
 @GenerateInline(false)
+@ConstantOperand(type = boolean.class, name = "terminal")
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
-abstract class ProtosNumberMultiplyNode
-        extends ProtosNumberMultiplyFastPathsBase {
+abstract class ProtosNumberMultiplyNode extends ProtosNumberMultiplyFastPathsBase {
 
-    @Specialization(replaces = "doLL")
-    static Object doLLOvf(VirtualFrame frame, long left, long right, @Bind Node node) {
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)", replaces = "doLL")
+    static Object doLLOvf(VirtualFrame frame, boolean terminal, long left, long right,
+            @Bind Node node,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         return multiplyOrPromote(frame, node, left, right);
     }
 
-    @Fallback
+    @Specialization
+    @StoreBytecodeIndex
     @InliningCutoff
     static Object doGeneric(
-            VirtualFrame frame, Object left, Object right,
-            @Bind Node node,
-            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
-        return genericMultiply(root, frame, node, left, right);
+            VirtualFrame frame,
+            boolean terminal,
+            Object left,
+            Object right,
+            @Bind("$node") Node node,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Cached ProtosNumericOverloadNode overload) {
+        if (selection.execute(frame, SELECTOR, left)) {
+            return genericMultiply(root, frame, node, left, right);
+        }
+        BytecodeNode bytecode = BytecodeNode.get(node);
+        return overload.execute(frame, terminal, SELECTOR, left, right,
+                root, bytecode, bytecode.getBytecodeIndex(frame));
     }
 }

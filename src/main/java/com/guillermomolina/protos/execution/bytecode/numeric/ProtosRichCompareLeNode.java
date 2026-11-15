@@ -21,8 +21,10 @@ import com.guillermomolina.protos.execution.ProtosStandardNumberOrderingProtocol
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.OperationProxy;
+import com.oracle.truffle.api.bytecode.StoreBytecodeIndex;
 import com.oracle.truffle.api.dsl.Bind;
-import com.oracle.truffle.api.dsl.Fallback;
+import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -30,34 +32,51 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * direct synchronous comparison for '<='. It never returns a
- * continuation.
- * Remaining standard operand domains use {@link ProtosNumericOperationSupport};
- * dynamic method selection remains in the lowering.
+ * The ordering comparison {@code <=}. Primitive specializations execute
+ * only while the standard {@code <=} is the behavior selected for the
+ * original receiver under the caller's Prelude. The generic specialization
+ * re-checks the selection: a standard selection uses the existing ordering
+ * kernel; any other selection invokes the selected implementation through
+ * {@link ProtosNumericOverloadNode}. Its result, possibly a suspended
+ * invocation, is composed by the enclosing bytecode, which then requires a
+ * canonical Boolean.
  */
 @GenerateUncached
 @GenerateInline(false)
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
 abstract class ProtosRichCompareLeNode extends Node {
+    static final String SELECTOR = "<=";
+
     abstract Object execute(VirtualFrame frame, Object left, Object right);
 
-    @Specialization
-    static boolean doLL(long left, long right) {
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static boolean doLL(VirtualFrame frame, long left, long right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
+        return left <= right;
+    }
+
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static boolean doDD(VirtualFrame frame, double left, double right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         return left <= right;
     }
 
     @Specialization
-    static boolean doDD(double left, double right) {
-        return left <= right;
-    }
-
-    @Fallback
+    @StoreBytecodeIndex
     @InliningCutoff
     static Object doGeneric(
             VirtualFrame frame, Object left, Object right,
-            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
-        return ProtosNumericOperationSupport.compare(
-                root, frame, left, right, Relation.LESS_EQUAL);
+            @Bind("$node") Node node,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Cached ProtosNumericOverloadNode overload) {
+        if (selection.execute(frame, SELECTOR, left)) {
+            return ProtosNumericOperationSupport.compare(
+                    root, frame, left, right, Relation.LESS_EQUAL);
+        }
+        BytecodeNode bytecode = BytecodeNode.get(node);
+        return overload.execute(frame, false, SELECTOR, left, right,
+                root, bytecode, bytecode.getBytecodeIndex(frame));
     }
 
     static ProtosBytecodeRootNode rootOf(Node node) {

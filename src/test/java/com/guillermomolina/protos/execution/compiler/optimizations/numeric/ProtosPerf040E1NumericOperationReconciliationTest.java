@@ -599,6 +599,82 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
     }
 
     /**
+     * The FROZEN classification of a structural selection rests on the
+     * Shapes it captured: the canonical {@code +} selection from SmallInteger
+     * is FROZEN and owned by the real Integer prototype; a mutable child of
+     * SmallInteger inherits that selection yet is not FROZEN until it is
+     * frozen and the selection is captured again, after which its slots can
+     * no longer change.
+     */
+    @Test
+    void frozenSelectionUsesCapturedShapes() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            ProtosObjectValue smallInteger = canonical.smallIntegerPrototype();
+            ProtosValueLookup.StructuralSelection canonicalSelection =
+                    ProtosValueLookup.selectStructural(smallInteger, "+");
+            assertTrue(canonicalSelection != null, "the canonical + is selected");
+            assertTrue(canonicalSelection.isValid());
+            assertTrue(canonicalSelection.allOwnersFrozen(), "the canonical chain is FROZEN");
+            assertSame(canonical.integerPrototype(), canonicalSelection.home(),
+                    "the real owner of the standard + is Integer");
+
+            ProtosObjectValue child = new ProtosObjectValue(smallInteger);
+            child.createLocalSlot("tag", 1L);
+            ProtosValueLookup.StructuralSelection mutableSelection =
+                    ProtosValueLookup.selectStructural(child, "+");
+            assertTrue(mutableSelection != null && mutableSelection.isValid());
+            assertSame(canonical.integerPrototype(), mutableSelection.home());
+            assertFalse(mutableSelection.allOwnersFrozen(),
+                    "a mutable origin is not FROZEN even with FROZEN ancestors");
+
+            child.freeze();
+            assertFalse(mutableSelection.allOwnersFrozen(),
+                    "the Shape captured before freezing is not FROZEN");
+            ProtosValueLookup.StructuralSelection frozenSelection =
+                    ProtosValueLookup.selectStructural(child, "+");
+            assertTrue(frozenSelection != null && frozenSelection.isValid());
+            assertTrue(frozenSelection.allOwnersFrozen(), "the recaptured chain is FROZEN");
+            assertSame(canonical.integerPrototype(), frozenSelection.home());
+
+            assertThrows(IllegalStateException.class, () -> child.assignLocalSlot("tag", 2L));
+            assertThrows(IllegalStateException.class, () -> child.createLocalSlot("+", 3L));
+            assertEquals(1L, child.readLocalSlot("tag").orElseThrow());
+            assertTrue(frozenSelection.isValid(), "a FROZEN chain keeps its selection");
+
+            /*
+             * The four selections side by side: the original FROZEN one, the
+             * one inherited from the still-mutable object, the one recaptured
+             * after freezing it, and the one captured before freezing it.
+             * Freezing grants no retroactive FROZEN status to an older selection.
+             */
+            ProtosObjectValue other = new ProtosObjectValue(smallInteger);
+            other.createLocalSlot("tag", 2L);
+            ProtosValueLookup.StructuralSelection capturedBeforeFreezing =
+                    ProtosValueLookup.selectStructural(other, "+");
+            ProtosValueLookup.StructuralSelection inheritedFromMutable =
+                    ProtosValueLookup.selectStructural(other, "+");
+            assertFalse(inheritedFromMutable.allOwnersFrozen(), "inherited from a mutable object");
+            other.freeze();
+            ProtosValueLookup.StructuralSelection afterFreezing =
+                    ProtosValueLookup.selectStructural(other, "+");
+            assertTrue(canonicalSelection.allOwnersFrozen(), "the original FROZEN selection");
+            assertFalse(inheritedFromMutable.allOwnersFrozen(),
+                    "the inherited selection does not become FROZEN");
+            assertTrue(afterFreezing != null && afterFreezing.isValid()
+                    && afterFreezing.allOwnersFrozen(), "the selection after freezing");
+            assertFalse(capturedBeforeFreezing.allOwnersFrozen(),
+                    "a selection captured before freezing is never FROZEN retroactively");
+            for (ProtosValueLookup.StructuralSelection selection : List.of(
+                    canonicalSelection, inheritedFromMutable, afterFreezing, capturedBeforeFreezing)) {
+                assertSame(canonical.integerPrototype(), selection.home(),
+                        "every selection keeps the real Integer owner");
+            }
+            assertTrue(canonical.integerPrototype().isFrozen(), "no canonical prototype changes");
+        });
+        System.out.println("PERF040_E1_FROZEN_CAPTURED_SHAPES=PASS");
+    }
+
+    /**
      * A mutable Integer prototype keeps every selection observed: assigning
      * a new value to {@code +} keeps the structure valid, yet each call at
      * the same site runs the currently selected behavior, including a return
@@ -668,6 +744,64 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
     }
 
     /**
+     * The Float path at a warmed site of a Prelude whose {@code Float}
+     * binding is a mutable child of the canonical Float prototype, bound
+     * before the bindings object is FROZEN: the inherited standard {@code +},
+     * a shadowing {@code +}, an in-place reassignment that keeps the Shape,
+     * and a removal restoring the inherited selection are each observed.
+     */
+    @Test
+    void floatSelectionObservesPrototypeMutation() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            ProtosObjectValue floatChild = new ProtosObjectValue(canonical.floatPrototype());
+            ProtosObjectValue bindings = new ProtosObjectValue(canonical.contextPrototype());
+            for (Map.Entry<String, Object> binding :
+                    canonical.bindings().localSlotsSnapshot().entrySet()) {
+                bindings.createLocalSlot(
+                        binding.getKey(),
+                        binding.getKey().equals("Float") ? floatChild : binding.getValue());
+            }
+            bindings.freeze();
+            ProtosActivation module =
+                    new ProtosPrelude(bindings, canonical.contextPrototype()).newModuleActivation();
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+
+            for (int i = 0; i < 200; i++) {
+                assertEquals(i + 0.5d, call(add, module, (double) i, 0.5d),
+                        "the inherited standard + adds");
+            }
+
+            floatChild.createLocalSlot("+", answering(5L));
+            assertEquals(5L, normalized(call(add, module, 1.5d, 1.0d)),
+                    "a shadowing + is selected");
+            floatChild.assignLocalSlot("+", answering(6L));
+            assertEquals(6L, normalized(call(add, module, 1.5d, 1.0d)),
+                    "an in-place reassignment is selected");
+            floatChild.removeLocalSlot("+");
+            for (int i = 0; i < 200; i++) {
+                assertEquals(i + 0.25d, call(add, module, (double) i, 0.25d),
+                        "removal restores the inherited selection");
+            }
+
+            for (int round = 1; round <= 2; round++) {
+                floatChild.createLocalSlot("+", answering(5L + 10L * round));
+                assertEquals(5L + 10L * round, normalized(call(add, module, 1.5d, 1.0d)),
+                        "a shadowing + is selected again in round " + round);
+                floatChild.assignLocalSlot("+", answering(6L + 10L * round));
+                assertEquals(6L + 10L * round, normalized(call(add, module, 1.5d, 1.0d)),
+                        "an in-place reassignment is selected again in round " + round);
+                floatChild.removeLocalSlot("+");
+                for (int i = 0; i < 50; i++) {
+                    assertEquals(i + 0.75d, call(add, module, (double) i, 0.75d),
+                            "removal restores the inherited + again in round " + round);
+                }
+            }
+            assertEquals(4L, normalized(call(add, module, 1L, 3L)), "Integer + is untouched");
+        });
+        System.out.println("PERF040_E1_FLOAT_PROTOTYPE_MUTATION=PASS");
+    }
+
+    /**
      * Two Preludes in one Context, each with its own {@code +}, interleaved
      * on sites with the same source: neither cached selection leaks into
      * the other Prelude.
@@ -692,6 +826,74 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             assertEquals(ALTERNATIVE_PLUS_RESULT,
                     normalized(call(alternativeAdd, alternativeModule, Long.MAX_VALUE, 1L)));
             assertEquals(5L, normalized(call(standardAdd, standardModule, 2L, 3L)));
+
+            for (int round = 0; round < 3; round++) {
+                for (long i = 0; i < 50; i++) {
+                    assertEquals(i + 2, normalized(call(standardAdd, standardModule, i, 2L)),
+                            "canonical standard + in round " + round);
+                }
+                assertEquals(ALTERNATIVE_PLUS_RESULT,
+                        normalized(call(alternativeAdd, alternativeModule, 4L, 5L)),
+                        "alternative redefined + in round " + round);
+                assertEquals(9L, normalized(call(standardAdd, standardModule, 4L, 5L)),
+                        "return to the canonical + in round " + round);
+                Object promoted = call(standardAdd, standardModule, Long.MAX_VALUE, 1L);
+                assertTrue(ProtosNumericValueSupport.isLargeInteger(promoted),
+                        "canonical overflow promotes in round " + round);
+                assertEquals(ALTERNATIVE_PLUS_RESULT,
+                        normalized(call(alternativeAdd, alternativeModule, Long.MAX_VALUE, 1L)),
+                        "alternative overflow runs the redefined + in round " + round);
+                assertEquals(-1L, normalized(call(standardAdd, standardModule, 2L, -3L)),
+                        "canonical + after the alternative overflow in round " + round);
+            }
+
+            /*
+             * Each Closure captures its own module's Prelude: a second Closure
+             * instance of the same Prelude shares its selection, while a
+             * Closure of the other Prelude never reuses it, for every operator.
+             */
+            ProtosClosureValue secondStandardAdd = closure("(x, y) => x + y", standardModule);
+            assertNotSame(standardAdd, secondStandardAdd);
+            Map<String, ProtosClosureValue> standardSites = new java.util.LinkedHashMap<>();
+            Map<String, ProtosClosureValue> alternativeSites = new java.util.LinkedHashMap<>();
+            for (String selector : List.of("-", "*", "/", "<")) {
+                standardSites.put(selector, closure("(x, y) => x " + selector + " y", standardModule));
+                alternativeSites.put(selector,
+                        closure("(x, y) => x " + selector + " y", alternativeModule));
+            }
+            for (int round = 0; round < 3; round++) {
+                String label = " in captured round " + round;
+                assertEquals(7L, normalized(call(standardAdd, standardModule, 3L, 4L)),
+                        "1. canonical standard +" + label);
+                assertEquals(ALTERNATIVE_PLUS_RESULT,
+                        normalized(call(alternativeAdd, alternativeModule, 3L, 4L)),
+                        "2. alternative redefined +" + label);
+                assertEquals(11L, normalized(call(standardAdd, standardModule, 5L, 6L)),
+                        "3. return to the canonical +" + label);
+                assertEquals(13L, normalized(call(secondStandardAdd, standardModule, 6L, 7L)),
+                        "4. canonical + from another Closure instance" + label);
+                assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                        call(secondStandardAdd, standardModule, Long.MAX_VALUE, 1L)),
+                        "4. canonical overflow from another Closure instance" + label);
+                assertEquals(ALTERNATIVE_PLUS_RESULT,
+                        normalized(call(alternativeAdd, alternativeModule, 1L, 1L)),
+                        "5. alternative redefined + again" + label);
+                assertEquals(3L, normalized(call(standardAdd, standardModule, 1L, 2L)),
+                        "6. canonical + again" + label);
+
+                for (ProtosActivation module : List.of(standardModule, alternativeModule)) {
+                    Map<String, ProtosClosureValue> sites =
+                            module == standardModule ? standardSites : alternativeSites;
+                    String where = (module == standardModule ? "canonical " : "alternative ") + label;
+                    assertEquals(-1L, normalized(call(sites.get("-"), module, 2L, 3L)), "-" + where);
+                    assertEquals(6L, normalized(call(sites.get("*"), module, 2L, 3L)), "*" + where);
+                    assertEquals(2L, normalized(call(sites.get("/"), module, 6L, 3L)), "/" + where);
+                    assertTrue(ProtosNumericValueSupport.isFraction(
+                            call(sites.get("/"), module, 5L, 2L)), "/ Fraction" + where);
+                    assertSame(Boolean.TRUE, call(sites.get("<"), module, 1L, 2L), "<" + where);
+                    assertSame(Boolean.FALSE, call(sites.get("<"), module, 2L, 1L), "<" + where);
+                }
+            }
         });
         System.out.println("PERF040_E1_PRELUDE_ISOLATION=PASS");
     }
@@ -782,6 +984,120 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
     }
 
     /**
+     * A FROZEN noncanonical Prelude whose Integer {@code +} is not standard:
+     * the frozen classification is cached, yet every call (warm, cold and at
+     * signed-64 overflow) runs the selected method and never the standard
+     * primitive addition.
+     */
+    @Test
+    void frozenNonstandardSelectionNeverRunsThePrimitiveAddition() throws Exception {
+        withAlternativeIntegerPlus(module -> {
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            for (long i = 0; i < 500; i++) {
+                assertEquals(ALTERNATIVE_PLUS_RESULT, normalized(call(add, module, i, 1L)));
+            }
+            assertEquals(ALTERNATIVE_PLUS_RESULT,
+                    normalized(call(add, module, Long.MAX_VALUE, 1L)),
+                    "overflow after the redefinition runs the selected method");
+            assertEquals(2.5d, call(add, module, 1.5d, 1.0d), "Float + is untouched");
+        });
+        System.out.println("PERF040_E1_FROZEN_NONSTANDARD=PASS");
+    }
+
+    /**
+     * One site alternating between the standard and a redefined {@code +}
+     * in a mutable Prelude: each call observes the selection current at
+     * that call, and the standard primitive results stay exact.
+     */
+    @Test
+    void oneSiteAlternatesBetweenStandardAndRedefinedSelection() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = alternative.prelude().newModuleActivation();
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            for (long round = 0; round < 50; round++) {
+                alternative.integer().assignLocalSlot("+", standardPlus);
+                assertEquals(round + 1, normalized(call(add, module, round, 1L)));
+                assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                        call(add, module, Long.MAX_VALUE, 1L)));
+                alternative.integer().assignLocalSlot("+", answering(round));
+                assertEquals(round, normalized(call(add, module, 1L, 2L)));
+                assertEquals(round, normalized(call(add, module, Long.MAX_VALUE, 1L)),
+                        "overflow does not bypass the redefined method");
+            }
+        });
+        System.out.println("PERF040_E1_STANDARD_REDEFINED_ALTERNATION=PASS");
+    }
+
+    /**
+     * Selectors are independent: redefining {@code +} on a mutable Integer
+     * prototype leaves {@code -}, {@code *} and {@code <} standard at their
+     * own warmed sites, before and after the change.
+     */
+    @Test
+    void redefiningPlusLeavesOtherSelectorsStandard() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = alternative.prelude().newModuleActivation();
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            ProtosClosureValue subtract = closure("(x, y) => x - y", module);
+            ProtosClosureValue multiply = closure("(x, y) => x * y", module);
+            ProtosClosureValue less = closure("(x, y) => x < y", module);
+            for (long i = 0; i < 100; i++) {
+                assertEquals(i + 1, normalized(call(add, module, i, 1L)));
+                assertEquals(i - 1, normalized(call(subtract, module, i, 1L)));
+            }
+            alternative.integer().assignLocalSlot("+", answering(5L));
+            assertEquals(5L, normalized(call(add, module, 1L, 2L)));
+            assertEquals(-1L, normalized(call(subtract, module, 1L, 2L)));
+            assertEquals(6L, normalized(call(multiply, module, 2L, 3L)));
+            assertSame(Boolean.TRUE, call(less, module, 1L, 2L));
+        });
+        System.out.println("PERF040_E1_SELECTOR_INDEPENDENCE=PASS");
+    }
+
+    /**
+     * A redefined ordering selector runs at its site; a canonical Boolean
+     * result is its value, any other result signals after the selected
+     * method completed, and Float receivers keep the standard ordering.
+     */
+    @Test
+    void redefinedComparisonRunsAndRequiresACanonicalBoolean() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = alternative.prelude().newModuleActivation();
+            for (String selector : List.of("<", "<=", ">", ">=")) {
+                ProtosClosureValue site = closure("(x, y) => x " + selector + " y", module);
+                Object standard = call(site, module, 1L, 2L);
+                // The ordering selectors are inherited from Number: the
+                // override is a structural change of Integer.
+                alternative.integer().createLocalSlot(selector, answeringFalse());
+                assertSame(Boolean.FALSE, call(site, module, 1L, 2L), selector);
+                alternative.integer().assignLocalSlot(selector, answering(1L));
+                assertThrows(ProtosSignalException.class,
+                        () -> call(site, module, 1L, 2L), selector);
+                assertSame(Boolean.valueOf(selector.startsWith("<")),
+                        call(site, module, 1.0d, 2.0d), selector + " on Float");
+                alternative.integer().removeLocalSlot(selector);
+                assertSame(standard, call(site, module, 1L, 2L),
+                        selector + ": the inherited standard Number selection is observed");
+                assertSame(Boolean.valueOf(!selector.startsWith("<")),
+                        call(site, module, 2L, 1L), selector + " after removal");
+            }
+        });
+        System.out.println("PERF040_E1_REDEFINED_COMPARISON=PASS");
+    }
+
+    /**
      * Structural evidence over the surviving DSL operations: the only
      * rewriteOn / replaces are the doLL -> doLLOvf overflow generalizations
      * of '+', '-' and '*': a long-returning primitive rewritten on
@@ -845,18 +1161,13 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                 .filter(candidate -> candidate.getName().equals("doLL"))
                 .findFirst()
                 .orElseThrow();
-        // The generalization accepts exactly the replaced operand domain; it
-        // may additionally bind its node to reach the caller's numeric factory.
-        // Execution-frame and node bindings are not dynamic operands.
-        List<Class<?>> replacedOperands = Arrays.asList(primitive.getParameterTypes());
-        List<Class<?>> signature = Arrays.asList(method.getParameterTypes());
-        int offset = signature.get(0) == com.oracle.truffle.api.frame.VirtualFrame.class
-                ? 1 : 0;
-        assertEquals(offset + replacedOperands.size() + 1, signature.size(), where);
-        assertEquals(replacedOperands,
-                signature.subList(offset, offset + replacedOperands.size()), where);
-        assertSame(com.oracle.truffle.api.nodes.Node.class,
-                signature.get(signature.size() - 1), where);
+        // The generalization accepts exactly the replaced signature (frame,
+        // terminal constant, operands and the shared selection guard node);
+        // it additionally binds its node to reach the caller's numeric factory.
+        List<Class<?>> replaced = Arrays.asList(primitive.getParameterTypes());
+        List<Class<?>> signature = new ArrayList<>(Arrays.asList(method.getParameterTypes()));
+        assertTrue(signature.remove(com.oracle.truffle.api.nodes.Node.class), where);
+        assertEquals(replaced, signature, where);
         assertSame(Object.class, method.getReturnType(), where);
     }
 
@@ -869,14 +1180,19 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
      */
     @Test
     void sourcesDeclareOneGenericRouteAndRegisterEveryOperation() throws Exception {
-        // PRUIBA DE I115, en algún momento esto volverá a funcionar
-        // Ignore source-preserved obsolete specializations: they are comments, not DSL code.
         for (Class<?> node : NODES.values()) {
             String activeSource = activeSource(
                     EXECUTION_SOURCES.resolve("bytecode/numeric")
                             .resolve(node.getSimpleName() + ".java"));
-            assertEquals(1, occurrences(activeSource, "@Fallback"), node.getSimpleName());
-            assertTrue(activeSource.contains("doGeneric("), node.getSimpleName());
+            // One unguarded generic specialization, ordered last and never
+            // replacing the primitive ones, re-checks the selection and
+            // separates the selected-implementation dispatch.
+            assertEquals(1, occurrences(activeSource, "doGeneric("), node.getSimpleName());
+            assertTrue(activeSource.contains("@InliningCutoff"), node.getSimpleName());
+            assertTrue(activeSource.contains("ProtosNumericOverloadNode overload"),
+                    node.getSimpleName());
+            assertTrue(activeSource.contains("selection.execute(frame, SELECTOR, left)"),
+                    node.getSimpleName());
             assertFalse(activeSource.contains("MISS"), node.getSimpleName());
             String remaining = activeSource.replace("replaces = \"doLL\"", "");
             assertFalse(remaining.contains("replaces ="), node.getSimpleName());

@@ -363,15 +363,17 @@ final class ProtosI115UnaryPICConvergenceTest {
             // unary call site and no separate callee-context path.
             assertSharedUnaryCallRoot(rootOf("earlyTerminal\n", module), 1);
             assertSharedUnaryCallRoot(rootOf("earlyInner\n", module), 1);
-            // `identity(1) + 1`: one unary call site plus the `+` message
-            // fallback, entered only when IsStandardNumericSelection rejects the
-            // standard addition (the standard path is the internal NumberAdd).
+            // `identity(1) + 1`: one unary call site; the fused NumberAdd
+            // dispatches a redefined `+` itself, without a separate guard or send.
             ProtosBytecodeRootNode nonTerminalRoot = rootOf("nonTerminal\n", module);
-            assertSharedUnaryCallRoot(nonTerminalRoot, 2);
+            assertSharedUnaryCallRoot(nonTerminalRoot, 1);
             List<String> nonTerminalNames = nonTerminalRoot.getBytecodeNode()
                     .getInstructionsAsList().stream().map(Instruction::getName).toList();
             assertTrue(nonTerminalNames.stream()
-                            .anyMatch(name -> isInstruction(name, "c.IsStandardNumericSelection")),
+                            .noneMatch(name -> isInstruction(name, "c.IsStandardNumericSelection")),
+                    nonTerminalNames::toString);
+            assertTrue(nonTerminalNames.stream()
+                            .anyMatch(name -> isInstruction(name, "c.NumberAdd")),
                     nonTerminalNames::toString);
             assertTrue(nonTerminalNames.stream()
                             .anyMatch(name -> isInstruction(name, "c.NumberAdd")),

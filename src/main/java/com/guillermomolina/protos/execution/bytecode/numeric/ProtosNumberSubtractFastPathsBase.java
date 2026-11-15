@@ -19,37 +19,49 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
+import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.GenerateCached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
- * Primitive long and double subtraction, with exact promotion on signed-64
- * overflow. Only an admitted standard selection reaches these specializations.
+ * Primitive long and double subtraction. Every specialization executes only
+ * while the behavior selected for {@code -} on the original
+ * receiver under the caller's Prelude is the standard operator; any other
+ * selection falls to the generic specialization of the proxied subclass.
+ * Signed-64 overflow promotes exactly.
  */
 @GenerateCached(false)
 abstract class ProtosNumberSubtractFastPathsBase extends Node {
 
-    abstract Object execute(VirtualFrame frame, Object left, Object right);
+    static final String SELECTOR = "-";
 
-    @Specialization(rewriteOn = ArithmeticException.class)
-    static long doLL(long left, long right) {
+    abstract Object execute(VirtualFrame frame, boolean terminal, Object left, Object right);
+
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)",
+            rewriteOn = ArithmeticException.class)
+    static long doLL(VirtualFrame frame, boolean terminal, long left, long right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         return Math.subtractExact(left, right);
     }
 
-    @Specialization
-    static double doDD(double left, double right) {
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static double doDD(VirtualFrame frame, boolean terminal, double left, double right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         return left - right;
     }
 
-    @Specialization
-    static double doDL(double left, long right) {
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static double doDL(VirtualFrame frame, boolean terminal, double left, long right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         return left - right;
     }
 
-    @Specialization
-    static double doLD(long left, double right) {
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static double doLD(VirtualFrame frame, boolean terminal, long left, double right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         return left - right;
     }
 
@@ -61,7 +73,12 @@ abstract class ProtosNumberSubtractFastPathsBase extends Node {
         return result;
     }
 
-    /** Complete the admitted standard operand domains using exact numeric kernels. */
+    /**
+     * The admitted standard operand domains not covered by a primitive
+     * specialization: two semantic Integers of any representation use the
+     * exact factory of the caller's Prelude; other domains use the existing
+     * standard numeric kernels. Only a standard selection reaches here.
+     */
     static Object genericSubtract(ProtosBytecodeRootNode root, VirtualFrame frame,
             Node node, Object left, Object right) {
         Object receiver = ProtosNumericValueSupport.guestValue(left);
@@ -70,10 +87,14 @@ abstract class ProtosNumberSubtractFastPathsBase extends Node {
                 && ProtosNumericValueSupport.isCurrentInteger(argument)) {
             return ProtosNumberFactory.subtract(ProtosNumberFactory.prelude(node, frame), receiver, argument);
         }
-        return ProtosNumericOperationSupport.arithmetic(root, frame, left, "-", right);
+        return ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right);
     }
 
-
+    /*
+     * The Protos root executing this operation. In a proxied node the
+     * default root bind is typed Node, so it is resolved from the enclosing
+     * BytecodeNode.
+     */
     static ProtosBytecodeRootNode rootOf(Node node) {
         return (ProtosBytecodeRootNode) BytecodeNode.get(node).getBytecodeRootNode();
     }

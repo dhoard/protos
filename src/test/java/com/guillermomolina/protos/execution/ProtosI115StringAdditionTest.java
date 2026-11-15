@@ -27,14 +27,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.PolyglotException;
 import org.junit.jupiter.api.Test;
 
 /**
  * I115: binary {@code +} over the Bytecode DSL operations.
- * A numeric receiver, or a String receiver whose selected {@code +} is the
- * standard String concatenation, executes the native NumberAdd behind
- * IsStandardNumericSelection; every other receiver uses GetMethod and
- * CallUnaryMethod with composed continuations.
+ * Every {@code +} site is a NumberAdd operation that verifies the selected
+ * behavior itself: a numeric receiver, or a String receiver whose selected
+ * {@code +} is the standard String concatenation, executes natively; every
+ * other receiver invokes its selected implementation through the shared
+ * dispatcher, and a non-terminal site composes a suspended invocation with
+ * Yield.
  */
 final class ProtosI115StringAdditionTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -145,6 +148,94 @@ final class ProtosI115StringAdditionTest {
                 + "custom: (String) { ...behavior.alias(\"plus\", \"+\") }\n"
                 + "plain: (String) {}\n"
                 + "add: (x, y) => { x + y }\n";
+        // Individual steps first, so a failure names the exact send.
+        assertTrue(evalBoolean(source + "add(custom, \"x\") == \"custom\""),
+                "add(custom, \"x\")");
+        assertTrue(evalBoolean(source + "add(\"a\", \"b\") == \"ab\""),
+                "add(\"a\", \"b\")");
+        assertTrue(evalBoolean(source + "add(1, 2) == 3"), "add(1, 2)");
+        assertTrue(evalBoolean(source + "add(custom, \"y\") == \"custom\""),
+                "add(custom, \"y\")");
+        // Progressive prefixes on one physical '+' site: each transition
+        // between the delegating object, String, long and the object again.
+        assertTrue(evalBoolean(source
+                + "r1: add(custom, \"x\")\n"
+                + "(r1 == \"custom\") && (log.receiver === custom) && (log.calls == 1)"),
+                "prefix 1");
+        assertTrue(evalBoolean(source
+                + "r1: add(custom, \"x\")\n"
+                + "r2: add(\"a\", \"b\")\n"
+                + "(r1 == \"custom\") && (r2 == \"ab\") && (log.calls == 1)"),
+                "prefix 2");
+        assertTrue(evalBoolean(source
+                + "r1: add(custom, \"x\")\n"
+                + "r2: add(\"a\", \"b\")\n"
+                + "r3: add(1, 2)\n"
+                + "(r1 == \"custom\") && (r2 == \"ab\") && (r3 == 3) && (log.calls == 1)"),
+                "prefix 3");
+        assertTrue(evalBoolean(source
+                + "r1: add(custom, \"x\")\n"
+                + "r2: add(\"a\", \"b\")\n"
+                + "r3: add(1, 2)\n"
+                + "r4: add(custom, \"y\")\n"
+                + "(r1 == \"custom\") && (r2 == \"ab\") && (r3 == 3)"
+                + " && (r4 == \"custom\") && (log.receiver === custom)"
+                + " && (log.argument == \"y\") && (log.calls == 2)"),
+                "prefix 4");
+        // Reverse order on one site: standard String, redefined, String again.
+        assertTrue(evalBoolean(source
+                + "s1: add(\"a\", \"b\")\n"
+                + "s2: add(custom, \"z\")\n"
+                + "s3: add(\"c\", \"d\")\n"
+                + "(s1 == \"ab\") && (s2 == \"custom\") && (s3 == \"cd\")"
+                + " && (log.receiver === custom) && (log.calls == 1)"),
+                "reverse sequence");
+        // Repeated alternation on the same warmed site: each round runs the
+        // standard concatenation, the redefined '+', and the restored
+        // standard selection, whose String result concatenates again.
+        StringBuilder rounds = new StringBuilder(source);
+        StringBuilder checks = new StringBuilder("true");
+        for (int round = 0; round < 4; round++) {
+            rounds.append("w").append(round).append(": add(\"w\", \"").append(round).append("\")\n");
+            rounds.append("c").append(round).append(": add(custom, \"").append(round).append("\")\n");
+            rounds.append("t").append(round).append(": add(\"t\", \"").append(round).append("\")\n");
+            rounds.append("u").append(round).append(": add(t").append(round).append(", \"!\")\n");
+            checks.append(" && (w").append(round).append(" == \"w").append(round).append("\")");
+            checks.append(" && (c").append(round).append(" == \"custom\")");
+            checks.append(" && (t").append(round).append(" == \"t").append(round).append("\")");
+            checks.append(" && (u").append(round).append(" == \"t").append(round).append("!\")");
+        }
+        assertTrue(evalBoolean(rounds + checks.toString()
+                + " && (log.receiver === custom) && (log.argument == \"3\")"
+                + " && (log.calls == 4)"),
+                "repeated alternation after warm-up");
+        // The same alternation through two Closures of one Prelude: standard
+        // concatenation, the redefined '+', the standard selection restored,
+        // concatenation again, then the other Closure's own '+' site. Only
+        // the redefined sends reach the logging method.
+        StringBuilder twoSites = new StringBuilder(source)
+                .append("other: (x, y) => { x + y }\n");
+        StringBuilder twoChecks = new StringBuilder("true");
+        for (int round = 0; round < 4; round++) {
+            twoSites.append("a").append(round).append(": add(\"a\", \"").append(round).append("\")\n");
+            twoSites.append("b").append(round).append(": add(custom, \"b").append(round).append("\")\n");
+            twoSites.append("d").append(round).append(": add(\"d\", \"").append(round).append("\")\n");
+            twoSites.append("e").append(round).append(": add(d").append(round).append(", \"e\")\n");
+            twoSites.append("f").append(round).append(": other(\"f\", \"").append(round).append("\")\n");
+            twoSites.append("g").append(round).append(": other(custom, \"g").append(round).append("\")\n");
+            twoSites.append("n").append(round).append(": log.calls\n");
+            twoChecks.append(" && (a").append(round).append(" == \"a").append(round).append("\")");
+            twoChecks.append(" && (b").append(round).append(" == \"custom\")");
+            twoChecks.append(" && (d").append(round).append(" == \"d").append(round).append("\")");
+            twoChecks.append(" && (e").append(round).append(" == \"d").append(round).append("e\")");
+            twoChecks.append(" && (f").append(round).append(" == \"f").append(round).append("\")");
+            twoChecks.append(" && (g").append(round).append(" == \"custom\")");
+            twoChecks.append(" && (n").append(round).append(" == ").append(2 * (round + 1)).append(")");
+        }
+        assertTrue(evalBoolean(twoSites + twoChecks.toString()
+                + " && (log.receiver === custom) && (log.argument == \"g3\")"
+                + " && (log.calls == 8)"),
+                "alternation through two Closures of one Prelude");
         // A String-delegating object selects its own '+'.
         assertTrue(evalBoolean(source
                 + "(add(custom, \"x\") == \"custom\") && (log.receiver === custom)"
@@ -170,6 +261,24 @@ final class ProtosI115StringAdditionTest {
     }
 
     @Test
+    void suspendingCustomPlusCompletesBeforeLaterWork() {
+        String box = TRACE
+                + "gate: (() => 5).future()\n"
+                + "behavior: { plus: (other) => { gate.value() + other } }\n"
+                + "box: { ...behavior.alias(\"plus\", \"+\") }\n";
+        // Non-terminal: the suspended '+' completes, then the next statement runs.
+        assertEquals(12L, evalLong(box + "f: () => {\n    r: box + 1\n    r * 2\n}\nf()"));
+        // Terminal over arguments: the suspension leaves through the terminal transport.
+        assertEquals(6L, evalLong(box + "g: (b, n) => { b + n }\ng(box, 1)"));
+        // As an argument of another send and as a discarded expression.
+        assertEquals(7L, evalLong(box + "h: (v) => { v + 1 }\nk: () => { h(box + 1) }\nk()"));
+        assertEquals(3L, evalLong(box + "d: () => {\n    box + 1\n    3\n}\nd()"));
+        // Receiver and argument are evaluated once across the suspension.
+        assertEquals(1215L, evalLong(box
+                + "m: () => {\n    r: step(1, box) + step(2, 10)\n    trace.value * 100 + r\n}\nm()"));
+    }
+
+    @Test
     void customPlusErrorsPropagate() {
         assertTrue(signals(
                 "behavior: { plus: (other) => { Error().signal() } }\n"
@@ -192,18 +301,11 @@ final class ProtosI115StringAdditionTest {
                     session.prepareTopLevel("run").hostExecutableForTesting()
                             .target.getRootNode();
             List<String> names = names(run);
-            for (String operation : List.of(
-                    "c.IsStandardNumericSelection",
-                    "c.NumberAdd",
-                    "c.GetMethod",
-                    "c.CallUnaryMethod")) {
-                assertTrue(names.stream().anyMatch(name -> name.startsWith(operation)),
-                        "missing " + operation + " in " + names);
-            }
-            assertTrue(names.contains("yield"), "dynamic path is not composed: " + names);
-            assertTrue(names.stream().noneMatch(name ->
-                            name.startsWith("c.CallBinaryMethod")),
-                    "'+' must not use a fused direct send: " + names);
+            assertTrue(names.stream().anyMatch(name -> name.startsWith("c.NumberAdd")),
+                    "missing c.NumberAdd in " + names);
+            assertNoSeparateSelection(names);
+            assertFalse(names.contains("yield"),
+                    "a terminal '+' uses the terminal transport: " + names);
             for (int iteration = 0; iteration < 10; iteration++) {
                 assertEquals("hello", session.prepareTopLevel("run")
                         .executable().execute().asString());
@@ -243,14 +345,9 @@ final class ProtosI115StringAdditionTest {
             assertFalse(inc.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE),
                     "a number-literal receiver needs no caller Prelude");
             List<String> addNames = names(add);
-            for (String operation : List.of(
-                    "c.IsStandardNumericSelection",
-                    "c.NumberAdd",
-                    "c.GetMethod",
-                    "c.CallUnaryMethod")) {
-                assertTrue(addNames.stream().anyMatch(name -> name.startsWith(operation)),
-                        "missing " + operation + " in " + addNames);
-            }
+            assertTrue(addNames.stream().anyMatch(name -> name.startsWith("c.NumberAdd")),
+                    "missing c.NumberAdd in " + addNames);
+            assertNoSeparateSelection(addNames);
 
             assertEquals("ab", execute(session, "runAdd").asString());
             assertEquals("<xy>", execute(session, "runNested").asString());
@@ -388,6 +485,18 @@ final class ProtosI115StringAdditionTest {
         }
     }
 
+    /* No separate selection, lookup or dispatched call precedes NumberAdd. */
+    private static void assertNoSeparateSelection(List<String> names) {
+        for (String operation : List.of(
+                "c.IsStandardNumericSelection",
+                "c.GetMethod",
+                "c.CallUnaryMethod",
+                "c.CallBinaryMethod")) {
+            assertTrue(names.stream().noneMatch(name -> name.startsWith(operation)),
+                    "unexpected " + operation + " in " + names);
+        }
+    }
+
     private static ProtosBytecodeRootNode root(
             ProtosStandaloneHostedSession session, String name) throws Exception {
         return (ProtosBytecodeRootNode) session.prepareTopLevel(name)
@@ -442,6 +551,19 @@ final class ProtosI115StringAdditionTest {
     private static boolean evalBoolean(String source) {
         try (Context context = context()) {
             return context.eval(ProtosLanguage.ID, source).asBoolean();
+        } catch (PolyglotException failure) {
+            StringBuilder diagnostic = new StringBuilder("Protos evaluation failed\n")
+                    .append("source:\n").append(source).append('\n')
+                    .append("guest exception: ").append(failure.isGuestException()).append('\n')
+                    .append("message: ").append(failure.getMessage()).append('\n');
+            if (failure.getSourceLocation() != null) {
+                diagnostic.append("location: ").append(failure.getSourceLocation()).append('\n');
+            }
+            diagnostic.append("polyglot stack:\n");
+            for (PolyglotException.StackFrame frame : failure.getPolyglotStackTrace()) {
+                diagnostic.append("  ").append(frame).append('\n');
+            }
+            throw new AssertionError(diagnostic.toString(), failure);
         }
     }
 

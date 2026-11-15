@@ -219,6 +219,30 @@
       "pe_reachability": "NOT_PE_REACHABLE"
     },
     {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosNumberAddNode.java",
+      "class": "ProtosNumberAddNode",
+      "method": "doGeneric(VirtualFrame,boolean,Object,Object,Node,ProtosBytecodeRootNode,ProtosNumericSelectionNode,ProtosNumericOverloadNode)",
+      "family": "BytecodeNode",
+      "operation": "get",
+      "arity": 1,
+      "arguments": "NODE_ARGUMENT=node",
+      "occurrence": 0,
+      "provenance": "NODE_ARGUMENT=BOUND_NODE",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosNumberDivideNode.java",
+      "class": "ProtosNumberDivideNode",
+      "method": "doGeneric(VirtualFrame,boolean,Object,Object,Node,ProtosBytecodeRootNode,ProtosNumericSelectionNode,ProtosNumericOverloadNode)",
+      "family": "BytecodeNode",
+      "operation": "get",
+      "arity": 1,
+      "arguments": "NODE_ARGUMENT=node",
+      "occurrence": 0,
+      "provenance": "NODE_ARGUMENT=BOUND_NODE",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
+    },
+    {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosNumberDivideNode.java",
       "class": "ProtosNumberDivideNode",
       "method": "rootOf(Node)",
@@ -255,6 +279,18 @@
       "pe_reachability": "NOT_PE_REACHABLE"
     },
     {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosNumberMultiplyNode.java",
+      "class": "ProtosNumberMultiplyNode",
+      "method": "doGeneric(VirtualFrame,boolean,Object,Object,Node,ProtosBytecodeRootNode,ProtosNumericSelectionNode,ProtosNumericOverloadNode)",
+      "family": "BytecodeNode",
+      "operation": "get",
+      "arity": 1,
+      "arguments": "NODE_ARGUMENT=node",
+      "occurrence": 0,
+      "provenance": "NODE_ARGUMENT=BOUND_NODE",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
+    },
+    {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosNumberSubtractFastPathsBase.java",
       "class": "ProtosNumberSubtractFastPathsBase",
       "method": "rootOf(Node)",
@@ -265,6 +301,30 @@
       "occurrence": 0,
       "provenance": "NODE_ARGUMENT=HELPER_PARAMETER",
       "pe_reachability": "NOT_PE_REACHABLE"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosNumberSubtractNode.java",
+      "class": "ProtosNumberSubtractNode",
+      "method": "doGeneric(VirtualFrame,boolean,Object,Object,Node,ProtosBytecodeRootNode,ProtosNumericSelectionNode,ProtosNumericOverloadNode)",
+      "family": "BytecodeNode",
+      "operation": "get",
+      "arity": 1,
+      "arguments": "NODE_ARGUMENT=node",
+      "occurrence": 0,
+      "provenance": "NODE_ARGUMENT=BOUND_NODE",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosRichCompareGeNode.java",
+      "class": "ProtosRichCompareGeNode",
+      "method": "doGeneric(VirtualFrame,Object,Object,Node,ProtosBytecodeRootNode,ProtosNumericSelectionNode,ProtosNumericOverloadNode)",
+      "family": "BytecodeNode",
+      "operation": "get",
+      "arity": 1,
+      "arguments": "NODE_ARGUMENT=node",
+      "occurrence": 0,
+      "provenance": "NODE_ARGUMENT=BOUND_NODE",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosRichCompareGeNode.java",
@@ -281,6 +341,18 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosRichCompareGtNode.java",
       "class": "ProtosRichCompareGtNode",
+      "method": "doGeneric(VirtualFrame,Object,Object,Node,ProtosBytecodeRootNode,ProtosNumericSelectionNode,ProtosNumericOverloadNode)",
+      "family": "BytecodeNode",
+      "operation": "get",
+      "arity": 1,
+      "arguments": "NODE_ARGUMENT=node",
+      "occurrence": 0,
+      "provenance": "NODE_ARGUMENT=BOUND_NODE",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosRichCompareGtNode.java",
+      "class": "ProtosRichCompareGtNode",
       "method": "rootOf(Node)",
       "family": "BytecodeNode",
       "operation": "get",
@@ -293,6 +365,18 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosRichCompareLeNode.java",
       "class": "ProtosRichCompareLeNode",
+      "method": "doGeneric(VirtualFrame,Object,Object,Node,ProtosBytecodeRootNode,ProtosNumericSelectionNode,ProtosNumericOverloadNode)",
+      "family": "BytecodeNode",
+      "operation": "get",
+      "arity": 1,
+      "arguments": "NODE_ARGUMENT=node",
+      "occurrence": 0,
+      "provenance": "NODE_ARGUMENT=BOUND_NODE",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosRichCompareLeNode.java",
+      "class": "ProtosRichCompareLeNode",
       "method": "rootOf(Node)",
       "family": "BytecodeNode",
       "operation": "get",
@@ -301,6 +385,18 @@
       "occurrence": 0,
       "provenance": "NODE_ARGUMENT=HELPER_PARAMETER",
       "pe_reachability": "NOT_PE_REACHABLE"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosRichCompareLtNode.java",
+      "class": "ProtosRichCompareLtNode",
+      "method": "doGeneric(VirtualFrame,Object,Object,Node,ProtosBytecodeRootNode,ProtosNumericSelectionNode,ProtosNumericOverloadNode)",
+      "family": "BytecodeNode",
+      "operation": "get",
+      "arity": 1,
+      "arguments": "NODE_ARGUMENT=node",
+      "occurrence": 0,
+      "provenance": "NODE_ARGUMENT=BOUND_NODE",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosRichCompareLtNode.java",

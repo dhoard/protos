@@ -1214,7 +1214,11 @@ final class ProtosI101ProfileSpecializedLoweringTest {
             return false;
         }
         String epilogue = before.get(size - 3);
-        boolean shape = before.get(size - 4).startsWith("load.local ")
+        // The returned value is a local, or a terminal numeric operation
+        // that leaves its result directly on the stack.
+        String returned = before.get(size - 4);
+        boolean shape = (returned.startsWith("load.local ")
+                        || returned.startsWith("c.Number"))
                 && epilogue.startsWith("c.EpilogForReturn")
                 && before.get(size - 2).equals("return")
                 && before.get(size - 1).equals("return");

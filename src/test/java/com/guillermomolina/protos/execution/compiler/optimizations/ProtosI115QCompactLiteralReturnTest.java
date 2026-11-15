@@ -245,7 +245,8 @@ final class ProtosI115QCompactLiteralReturnTest {
                 }
                 """, result -> assertEquals(1L, result.asLong()));
         /*
-         * Both numeric sites guard standard selection. RichCompareLt produces
+         * Both numeric sites are fused operations that classify their
+         * standard selection internally. RichCompareLt produces
          * a canonical Boolean, and a custom comparison result is validated
          * before CanonicalControlCondition feeds the branch.
          */
@@ -261,7 +262,7 @@ final class ProtosI115QCompactLiteralReturnTest {
         assertFalse(census.has("TryPrimitiveNumeric"));
         assertFalse(census.has("ExperimentalInteger"));
         assertEquals(1, names.stream().filter(name -> name.startsWith("c.NumberAdd")).count());
-        assertTrue(census.has("c.IsStandardNumericSelection"));
+        assertFalse(census.has("c.IsStandardNumericSelection"));
         assertNoGenericDispatch(census);
         assertFalse(census.has("PromoteFrameLexicalAuthority"));
     }

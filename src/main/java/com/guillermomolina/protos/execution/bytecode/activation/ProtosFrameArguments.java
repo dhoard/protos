@@ -1147,6 +1147,26 @@ final class ProtosFrameArguments {
     }
 
     /**
+     * The Prelude captured by the running compact invocation's own Closure,
+     * or {@code null} when the arguments are not a B5 header, the invocation
+     * already published its activation, or the Closure captured no Prelude.
+     * A non-null answer is exactly what {@link #admittedPreludeOrNull} answers
+     * for the same arguments; a null answer leaves the Prelude to that general
+     * resolution, which keeps caller inheritance. Reads only the Closure's
+     * final field: nothing is published, materialized or sent.
+     */
+    static ProtosPrelude capturedClosurePreludeOrNull(Object[] arguments) {
+        if (arguments.length < HEADER_LENGTH) {
+            return null;
+        }
+        Object first = arguments[CLOSURE_INDEX];
+        if (first instanceof ProtosClosureValue closure) {
+            return closure.preludeOrNullForRuntime();
+        }
+        return null;
+    }
+
+    /**
      * The Prelude of the nearest calling Protos frame that observes one, read
      * by walking the stack. Only the first invocation of a root whose caller
      * did not yet transport its inherited Prelude takes this path.

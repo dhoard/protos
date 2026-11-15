@@ -1653,133 +1653,97 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /** Guard the actual numeric selection after all operands have been evaluated. */
+    /**
+     * Whether the behavior selected for {@code selector} on the evaluated
+     * receiver under the caller's Prelude is the standard numeric or String
+     * operator. The classification and its structural caches are owned by
+     * {@link ProtosNumericSelectionNode}.
+     */
     @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = String.class, name = "selector")
     public static final class IsStandardNumericSelection {
-        @Specialization(
-                guards = {"prototype != null", "prelude == cachedPrelude",
-                    "prototype == cachedPrototype", "selection != null", "selection.isValid()"},
-                limit = "3")
-        public static boolean cached(
+        @Specialization
+        public static boolean perform(
                 String selector, Object receiver,
                 @Bind VirtualFrame frame,
-                @Bind("prelude(frame)") ProtosPrelude prelude,
-                @Bind("prototype(receiver, prelude)") ProtosObjectValue prototype,
-                @Cached("prelude") ProtosPrelude cachedPrelude,
-                @Cached("prototype") ProtosObjectValue cachedPrototype,
-                @Cached("selectNumeric(cachedPrototype, selector)")
-                        ProtosValueLookup.StructuralSelection selection,
-                @Cached(value = "allOwnersFrozen(selection)", neverDefault = false) boolean frozen,
-                @Cached(value = "frozenStandard(frozen, selector, receiver, selection, cachedPrelude)",
-                        neverDefault = false) boolean frozenStandard) {
-            if (frozen) {
-                // A FROZEN chain cannot change the selected behavior while the
-                // shapes stay valid, so its classification is cached.
-                return frozenStandard;
-            }
-            return standard(selector, receiver, selection.read(), selection.home(), cachedPrelude);
-        }
-
-        /* Specialization time only: whether the whole selected chain is FROZEN. */
-        static boolean allOwnersFrozen(ProtosValueLookup.StructuralSelection selection) {
-            return selection != null && selection.allOwnersFrozen();
-        }
-
-        /*
-         * Specialization time only: the standard classification of a FROZEN
-         * selection; never computed for a chain that may still change.
-         */
-        static boolean frozenStandard(boolean frozen, String selector, Object receiver,
-                ProtosValueLookup.StructuralSelection selection, ProtosPrelude prelude) {
-            return frozen && selection.isValid()
-                    && standard(selector, receiver, selection.read(), selection.home(), prelude);
-        }
-
-        @Specialization(replaces = "cached")
-        public static boolean uncached(String selector, Object receiver, @Bind VirtualFrame frame) {
-            ProtosPrelude prelude = prelude(frame);
-            if (prototype(receiver, prelude) == null) return false;
-            return selectStandard(selector, receiver, prelude);
-        }
-
-        @NonIdempotent
-        static ProtosPrelude prelude(VirtualFrame frame) {
-            return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
-        }
-
-        static ProtosObjectValue prototype(Object receiver, ProtosPrelude prelude) {
-            if (prelude == null || !(receiver instanceof ProtosStringValue
-                    || ProtosNumericValueSupport.isCurrentRealNumber(receiver))) return null;
-            if (receiver instanceof ProtosObjectValue object) return object;
-            return (ProtosObjectValue) ProtosValueLookup.delegationParent(receiver, prelude)
-                    .orElse(null);
-        }
-
-        @TruffleBoundary
-        static ProtosValueLookup.StructuralSelection selectNumeric(ProtosObjectValue prototype, String selector) {
-            return ProtosValueLookup.selectStructural(prototype, selector);
-        }
-
-        static boolean standard(String selector, Object receiver, Object behavior,
-                ProtosObjectValue home, ProtosPrelude prelude) {
-            if (receiver instanceof ProtosStringValue) {
-                return "+".equals(selector)
-                        && ProtosStandardStringProtocol.isStandardConcatenationBehavior(behavior);
-            }
-            if (!(behavior instanceof ProtosClosureValue closure)) return false;
-            if (ProtosStandardNumberOrderingProtocol.canonicalRelationForSelection(
-                    closure, home, selector, prelude) != null) return true;
-            if (ProtosNumericValueSupport.isCurrentInteger(receiver)) {
-                return ProtosStandardIntegerProtocol.canonicalOperationForSelection(
-                        closure, home, selector, prelude)
-                        != null;
-            }
-            return ProtosNumericValueSupport.isCurrentFloat(receiver)
-                    && ProtosStandardFloatProtocol.canonicalOperationForSelection(
-                            closure, home, selector, prelude)
-                            != null;
-        }
-
-        @TruffleBoundary
-        static boolean selectStandard(String selector, Object receiver, ProtosPrelude prelude) {
-            return ProtosValueLookup.lookup(receiver, selector, prelude)
-                    .map(found -> standard(selector, receiver, found.value(), found.home(), prelude))
-                    .orElse(false);
+                @Cached ProtosNumericSelectionNode selection) {
+            return selection.execute(frame, selector, receiver);
         }
     }
 
-    /** Exact truncating Integer quotient, admitted by numeric selection. */
+    /**
+     * Exact truncating Integer quotient {@code div}. The primitive
+     * specialization executes only while the standard {@code div} is the
+     * behavior selected for the original receiver; the generic
+     * specialization completes a standard selection with the existing
+     * kernel and invokes any other selected implementation through
+     * {@link ProtosNumericOverloadNode}.
+     */
     @Operation
+    @ConstantOperand(type = boolean.class, name = "terminal")
     public static final class NumberQuotient {
+        static final String SELECTOR = "div";
+
         static boolean fitsLong(long left, long right) {
             return right != 0L && (left != Long.MIN_VALUE || right != -1L);
         }
 
-        @Specialization(guards = "fitsLong(left, right)")
-        public static long small(long left, long right) {
+        @Specialization(guards = {"fitsLong(left, right)",
+                "selection.execute(frame, SELECTOR, left)"})
+        public static long small(boolean terminal, long left, long right,
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
             return left / right;
         }
 
-        @Fallback
-        public static Object exact(Object left, Object right,
-                @Bind VirtualFrame frame, @Bind ProtosBytecodeRootNode root) {
-            return ProtosNumericOperationSupport.arithmetic(root, frame, left, "div", right);
+        @Specialization
+        @InliningCutoff
+        public static Object exact(boolean terminal, Object left, Object right,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+                @Cached ProtosNumericOverloadNode overload) {
+            if (selection.execute(frame, SELECTOR, left)) {
+                return ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right);
+            }
+            return overload.execute(frame, terminal, SELECTOR, left, right,
+                    root, bytecode, bytecodeIndex);
         }
     }
 
-    /** Exact truncating Integer remainder, admitted by numeric selection. */
+    /**
+     * Exact truncating Integer remainder {@code mod}, with the same
+     * selection discipline as {@link NumberQuotient}.
+     */
     @Operation
+    @ConstantOperand(type = boolean.class, name = "terminal")
     public static final class NumberRemainder {
-        @Specialization(guards = "right != 0")
-        public static long small(long left, long right) {
+        static final String SELECTOR = "mod";
+
+        @Specialization(guards = {"right != 0",
+                "selection.execute(frame, SELECTOR, left)"})
+        public static long small(boolean terminal, long left, long right,
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
             return left % right;
         }
 
-        @Fallback
-        public static Object exact(Object left, Object right,
-                @Bind VirtualFrame frame, @Bind ProtosBytecodeRootNode root) {
-            return ProtosNumericOperationSupport.arithmetic(root, frame, left, "mod", right);
+        @Specialization
+        @InliningCutoff
+        public static Object exact(boolean terminal, Object left, Object right,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+                @Cached ProtosNumericOverloadNode overload) {
+            if (selection.execute(frame, SELECTOR, left)) {
+                return ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right);
+            }
+            return overload.execute(frame, terminal, SELECTOR, left, right,
+                    root, bytecode, bytecodeIndex);
         }
     }
 

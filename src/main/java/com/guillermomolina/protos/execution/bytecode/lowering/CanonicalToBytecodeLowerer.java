@@ -1225,11 +1225,8 @@ final class CanonicalToBytecodeLowerer {
             boolean numericTerminal =
                     last instanceof CanonicalSend numericSend
                             && primitiveNumericSendCandidate(numericSend)
-                            && !requiresContinuationScratch(numericSend)
-                            && (i115DirectUnaryOperand(numericSend.receiver())
-                                    || i115DirectUnaryCall(numericSend.receiver()))
-                            && (i115DirectUnaryOperand(numericSend.arguments().get(0))
-                                    || i115DirectUnaryCall(numericSend.arguments().get(0)));
+                            && terminalNumericOperand(numericSend.receiver())
+                            && terminalNumericOperand(numericSend.arguments().get(0));
             boolean emptyControlTerminal = isI115EliminableControl(last);
 
             if (numericTerminal || emptyControlTerminal) {
@@ -1241,6 +1238,8 @@ final class CanonicalToBytecodeLowerer {
                 beginStatement(builder, last);
                 if (emptyControlTerminal) {
                     builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                } else if (admitsTerminalNumericSend((CanonicalSend) last)) {
+                    emitTerminalNumericOperation(builder, (CanonicalSend) last);
                 } else {
                     emitDirectNumericSendValue(
                             builder, (CanonicalSend) last, null, null, null, true);
@@ -3130,7 +3129,6 @@ final class CanonicalToBytecodeLowerer {
                 || send.arguments().size() != 1
                 || hasVectorArgument(send.arguments())
                 || primitiveNumericSendCandidate(send)
-                || isAdditionSend(send)
                 || indexedProtocolSend(send)
                 || ControlSelector.of(send.message(), send.arguments()) != null
                 || nativeBooleanControl(
@@ -3757,7 +3755,8 @@ final class CanonicalToBytecodeLowerer {
      * <p>The switch is exhaustive over the sealed canonical expression
      * family. A node is scratch-free only when it is itself synchronous and
      * every executable subexpression (targets, values, receivers, operands)
-     * is scratch-free; a numeric selector alone never proves it. Every node
+     * is scratch-free; a numeric operator send is never scratch-free, since a
+     * non-standard selected operator may suspend. Every node
      * whose synchronous execution is not proven here (calls, dispatched
      * sends, super sends, derived inequalities, indexed assignments,
      * compositions, objects, map constructions, returns, sequences and
@@ -3791,6 +3790,8 @@ final class CanonicalToBytecodeLowerer {
                     yield callback.body().expressions().stream()
                             .anyMatch(this::requiresContinuationScratch);
                 }
+                // A numeric operator executes the selected behavior, and a
+                // selection other than the standard operator may suspend.
                 yield true;
             }
             case CanonicalCreate create ->
@@ -8431,26 +8432,16 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * Numeric carriers are private to the guarded arithmetic expression chain.
+     * Numeric carriers are private to the direct arithmetic expression chain.
      * Ordering consumes carriers and always yields a guest Boolean.
      */
     /*
-     * '+' is excluded. Its receiver may select a program-defined or
-     * String behavior that can suspend, so it is never a stack-only
-     * operand; every '+' send is lowered by emitGuardedNumericSend.
+     * A one-argument numeric selector, including '+', lowered as a direct
+     * numeric operation whose operands stay on the operand stack.
      */
     private static boolean primitiveNumericSendCandidate(CanonicalSend send) {
         return send.arguments().size() == 1
                 && primitiveNumericSelector(send.message())
-                && !"+".equals(send.message())
-                && !hasVectorArgument(send.arguments());
-    }
-
-    /* a positional binary '+' send, lowered by emitGuardedNumericSend. */
-    private static boolean isAdditionSend(CanonicalSend send) {
-        return "+".equals(send.message())
-                && !send.contextual()
-                && send.arguments().size() == 1
                 && !hasVectorArgument(send.arguments());
     }
 
@@ -8565,8 +8556,11 @@ final class CanonicalToBytecodeLowerer {
             Object carrier = primitiveNumberLiteralOrNull(literal);
             if (carrier != null) {
                 builder.emitLoadConstant(carrier);
-                return;
+            } else {
+                // String and other literals load their guest constant directly.
+                emitLiteral(builder, literal);
             }
+            return;
         }
         if (expression instanceof CanonicalLookup lookup) {
             if (isScalarLocalRead(lookup)) {
@@ -8638,9 +8632,18 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * Leave the result of one guarded numeric send on the operand stack.
-     * The standard branch retains its independent primitive operation; an override
-     * uses the shared callable dispatcher and continuation locals.
+     * Leave the completed result of one non-terminal numeric send on the
+     * operand stack. The receiver and the argument are evaluated once onto
+     * the stack and consumed by the numeric operation, which verifies the
+     * selected behavior itself: a standard selection executes internally, any
+     * other selection invokes the selected implementation. Its result may be
+     * a suspended invocation, so it is composed with the shared continuation
+     * loop before the enclosing expression consumes it; a resumption
+     * continues the selected invocation and never re-evaluates the operands
+     * or the operation. An ordering result must then be a canonical Boolean.
+     *
+     * <p>The site reuses the caller's continuation locals when it has them
+     * and otherwise creates its own.
      */
     private void emitDirectNumericOperation(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -8648,23 +8651,97 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        BytecodeLocal value = builder.createLocal("numericResult", null);
+        noteDynamicInvocation();
+        BytecodeLocal numericResult = childResult != null
+                ? childResult
+                : builder.createLocal("numericResult", null);
+        BytecodeLocal numericResume = resumeValue != null
+                ? resumeValue
+                : builder.createLocal("numericResume", null);
+
         builder.beginBlock();
-        emitGuardedNumericSend(builder, send, value,
-                preparedCall, childResult, resumeValue, true);
-        builder.emitLoadLocal(value);
+
+        builder.beginStoreLocal(numericResult);
+        beginNumericOperation(builder, send.message(), false);
+        emitPrimitiveNumericOperandValue(
+                builder, send.receiver(), preparedCall, childResult, resumeValue);
+        emitPrimitiveNumericOperandValue(
+                builder, send.arguments().get(0), preparedCall, childResult, resumeValue);
+        endNumericOperation(builder, send.message());
+        builder.endStoreLocal();
+
+        emitDispatchedContinuationComposition(builder, numericResult, numericResume);
+
+        if (isOrderingSelector(send.message())) {
+            builder.beginRequireCanonicalBooleanResult();
+            builder.emitLoadLocal(numericResult);
+            builder.endRequireCanonicalBooleanResult();
+        } else {
+            builder.emitLoadLocal(numericResult);
+        }
+
         builder.endBlock();
     }
 
+    /**
+     * The terminal arithmetic send of a root: no guest work follows it, so a
+     * suspended selected implementation leaves the root in the terminal
+     * transport of the operation, which carries this call location, instead
+     * of being composed here.
+     */
+    private void emitTerminalNumericOperation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send) {
+        currentRootEmittedTerminalInvocation = true;
+        noteDynamicInvocation();
+        beginNumericOperation(builder, send.message(), true);
+        emitPrimitiveNumericOperandValue(
+                builder, send.receiver(), null, null, null);
+        emitPrimitiveNumericOperandValue(
+                builder, send.arguments().get(0), null, null, null);
+        endNumericOperation(builder, send.message());
+    }
+
+    /*
+     * Whether an operand of a root's final numeric send is a value emitted
+     * directly onto the operand stack that can never suspend: a Long, Double
+     * or String literal, a lookup admitted by the binding analysis, or an
+     * admitted member read. Calls and every subexpression that must be
+     * composed before delivering its value are rejected.
+     */
+    private boolean terminalNumericOperand(CanonicalExpression expression) {
+        if (expression instanceof CanonicalLiteral literal) {
+            return literal.kind() == CanonicalLiteral.Kind.STRING
+                    || primitiveNumberLiteralOrNull(literal) != null;
+        }
+        if (expression instanceof CanonicalLookup lookup) {
+            return i115DirectLookup(lookup);
+        }
+        return expression instanceof CanonicalMember member
+                && i115DirectUnaryOperand(member);
+    }
+
+    /*
+     * Whether the final numeric send of a root may use the terminal
+     * transport: an arithmetic selector (an ordering result is checked after
+     * completion) in a genuine source root body with direct operands.
+     */
+    private boolean admitsTerminalNumericSend(CanonicalSend send) {
+        return !isOrderingSelector(send.message())
+                && currentActivationLocal == null
+                && !currentInlineClosureCallBody
+                && currentNormalCallbackScalarLocals.isEmpty();
+    }
+
     private static void beginNumericOperation(
-            ProtosBytecodeRootNodeGen.Builder builder, String selector) {
+            ProtosBytecodeRootNodeGen.Builder builder, String selector, boolean terminal) {
         switch (selector) {
-            case "+" -> builder.beginNumberAdd();
-            case "-" -> builder.beginNumberSubtract();
-            case "*" -> builder.beginNumberMultiply();
-            case "/" -> builder.beginNumberDivide();
-            case "div" -> builder.beginNumberQuotient();
-            case "mod" -> builder.beginNumberRemainder();
+            case "+" -> builder.beginNumberAdd(terminal);
+            case "-" -> builder.beginNumberSubtract(terminal);
+            case "*" -> builder.beginNumberMultiply(terminal);
+            case "/" -> builder.beginNumberDivide(terminal);
+            case "div" -> builder.beginNumberQuotient(terminal);
+            case "mod" -> builder.beginNumberRemainder(terminal);
             case "<" -> builder.beginRichCompareLt();
             case "<=" -> builder.beginRichCompareLe();
             case ">" -> builder.beginRichCompareGt();
@@ -9132,7 +9209,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * A guarded numeric send, including continuation composition for a selected override.
+     * Store the result of one direct numeric send.
      */
     private void emitNumericSend(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -9164,7 +9241,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * Store one guarded arithmetic result without changing its semantic representation.
+     * Store one direct arithmetic result without changing its semantic representation.
      */
     private void emitArithmeticSend(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -9176,97 +9253,6 @@ final class CanonicalToBytecodeLowerer {
         builder.beginStoreLocal(result);
         emitDirectNumericOperation(builder, send, scratch, childResult, resumeValue);
         builder.endStoreLocal();
-    }
-
-    /**
-     * Evaluate receiver and operand once, then guard the actual selected behavior.
-     * Standard arithmetic and ordering execute their independent Bytecode operations.
-     * Other selections use GetMethod and CallUnaryMethod with continuation composition.
-     * Both branches consume the same prepared operands and preserve their exact result.
-     */
-    private void emitGuardedNumericSend(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalSend send,
-            BytecodeLocal result,
-            BytecodeLocal scratch,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue,
-            boolean primitiveCarrierResult) {
-        // Both branches yield guest values; no carrier materialization.
-        if (scratch == null || childResult == null || resumeValue == null) {
-            throw new AssertionError(
-                    "numeric send scratch locals were not allocated");
-        }
-        OperandStager stager = this::emitBodyExpressionToLocal;
-        // Numeric and String admission both observe the invocation's Core.
-        currentRootMayRequirePrelude = true;
-        builder.beginSourceSection(
-                send.span().startOffset(), send.span().length());
-        builder.beginBlock();
-
-        BytecodeLocal receiver = builder.createLocal("numericReceiver", null);
-        stageOperand(
-                builder, send.receiver(), receiver,
-                scratch, childResult, resumeValue, stager);
-
-        BytecodeLocal operand = builder.createLocal("numericOperand", null);
-        stageOperand(
-                builder, send.arguments().get(0), operand,
-                scratch, childResult, resumeValue, stager);
-
-        // D237: the behavior is selected once both operands are evaluated.
-        BytecodeLocal standard = builder.createLocal("numericStandard", null);
-        builder.beginStoreLocal(standard);
-        builder.beginIsStandardNumericSelection(send.message());
-        builder.emitLoadLocal(receiver);
-        builder.endIsStandardNumericSelection();
-        builder.endStoreLocal();
-
-        BytecodeLocal callable = builder.createLocal("numericMethod", null);
-        builder.beginIfThenElse();
-        builder.emitLoadLocal(standard);
-        builder.beginBlock();
-        builder.endBlock();
-        emitGetMethod(builder, send.message(), receiver, callable);
-        builder.endIfThenElse();
-
-        builder.beginIfThenElse();
-        builder.emitLoadLocal(standard);
-
-        beginMutationResult(builder, result);
-        beginNumericOperation(builder, send.message());
-        builder.emitLoadLocal(receiver);
-        builder.emitLoadLocal(operand);
-        endNumericOperation(builder, send.message());
-        endMutationResult(builder, result);
-
-        /*
-         * Like the NumberAdd branch, whose long/double result is already
-         * the guest Integer/Float representation, the dispatched result is
-         * stored as is: a Call*Method result is a guest value.
-         */
-        builder.beginTag(StandardTags.CallTag.class);
-        builder.beginBlock();
-        boolean ordering = isOrderingSelector(send.message());
-        BytecodeLocal dispatchedResult = ordering && result == null
-                ? builder.createLocal("comparisonResult", null) : result;
-        emitDispatchedCall(
-                builder, callable, java.util.List.of(operand), null,
-                childResult, dispatchedResult, resumeValue, true);
-        if (ordering) {
-            beginMutationResult(builder, result);
-            builder.beginRequireCanonicalBooleanResult();
-            builder.emitLoadLocal(dispatchedResult);
-            builder.endRequireCanonicalBooleanResult();
-            endMutationResult(builder, result);
-        }
-        builder.endBlock();
-        builder.endTag(StandardTags.CallTag.class);
-
-        builder.endIfThenElse();
-
-        builder.endBlock();
-        builder.endSourceSection();
     }
 
     /**
@@ -9294,15 +9280,9 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
 
-        if (isAdditionSend(send)) {
-            emitGuardedNumericSend(
-                    builder, send, result, scratch, childResult, resumeValue,
-                    primitiveCarrierResult);
-            return;
-        }
         if (primitiveNumericSendCandidate(send)) {
             switch (send.message()) {
-                case "-", "*" -> emitArithmeticSend(
+                case "+", "-", "*" -> emitArithmeticSend(
                         builder, send, result, scratch, childResult, resumeValue);
                 default -> emitNumericSend(
                         builder, send, result, scratch, childResult, resumeValue,

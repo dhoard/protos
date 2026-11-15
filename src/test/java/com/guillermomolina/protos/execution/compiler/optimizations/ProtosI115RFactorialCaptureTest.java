@@ -1233,28 +1233,18 @@ final class ProtosI115RFactorialCaptureTest {
         assertTrue(global > branch && multiply > global,
                 "recursive function and its product must be inside the inline body: " + names);
         int subtract = indexStartingWith(names, "c.NumberSubtract");
-        int multiplicationSelection = -1;
-        for (int index = subtract + 1; index < multiply; index++) {
-            if (names.get(index).startsWith("c.IsStandardNumericSelection")) {
-                multiplicationSelection = index;
-                break;
-            }
-        }
-        assertTrue(
-                subtract > global
-                        && multiplicationSelection > subtract
-                        && multiplicationSelection < multiply,
+        assertTrue(subtract > global && multiply > subtract,
                 "recursive arithmetic order: " + names);
+        assertEquals(0, countStartingWith(names, "c.IsStandardNumericSelection"),
+                "fused numeric sites keep no separate selection guard: " + names);
 
-        // The subtraction fallback has one GetMethod/CallUnaryMethod
-        // pair. Exactly one further CallUnaryMethod is the recursion.
-        // The multiplication fallback belongs to the next region.
-        List<String> recursiveRegion =
-                names.subList(global, multiplicationSelection);
-        assertEquals(
-                1 + countStartingWith(recursiveRegion, "c.GetMethod"),
-                countStartingWith(recursiveRegion, "c.CallUnaryMethod"),
-                "exactly one recursive call beyond numeric fallbacks: " + names);
+        // The fused subtraction dispatches any redefined '-' itself, so the
+        // only CallUnaryMethod before the product is the recursion.
+        List<String> recursiveRegion = names.subList(global, multiply);
+        assertEquals(1, countStartingWith(recursiveRegion, "c.CallUnaryMethod"),
+                "exactly one recursive call before the product: " + names);
+        assertEquals(0, countStartingWith(recursiveRegion, "c.GetMethod"),
+                "no separate numeric fallback before the product: " + names);
 
         // Native control flow: no second callable invocation. GetMethod only
         // appears as a guarded message fallback of an internal operation.
